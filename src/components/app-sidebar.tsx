@@ -38,16 +38,6 @@ import { useRouter } from "next/navigation"
 
 const navItems = [
     {
-        title: "Map View",
-        url: "/",
-        icon: Map,
-    },
-    {
-        title: "Sites / List",
-        url: "/stores",
-        icon: Building2,
-    },
-    {
         title: "Analysis",
         url: "/analysis",
         icon: BarChart3,
