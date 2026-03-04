@@ -28,9 +28,10 @@ export default function MaintenanceDashboard() {
 
     async function fetchDueSchedules() {
         setLoading(true)
-        // Fetch all schedules where next_due_at is today or in the past
-        // Joined with stores and assets for context
-        const { data } = await supabase
+        const now = new Date()
+
+        // 1. Fetch Explicit Maintenance Schedules
+        const { data: schedulesData } = await supabase
             .from('maintenance_schedules')
             .select(`
                 *,
@@ -43,45 +44,102 @@ export default function MaintenanceDashboard() {
                     )
                 )
             `)
-            .lte('next_due_at', new Date().toISOString())
+            .lte('next_due_at', now.toISOString())
             .order('next_due_at', { ascending: true })
 
-        setDueSchedules(data || [])
+        // 2. Fetch Assets with intervals (Fallback/Base Maintenance)
+        const { data: assetsData } = await supabase
+            .from('assets')
+            .select(`
+                *,
+                stores (
+                    name,
+                    id
+                )
+            `)
+            .not('service_interval_days', 'is', null)
+
+        // Filter and map overdue assets
+        const overdueAssets = (assetsData || []).filter((asset: any) => {
+            const referenceDate = asset.last_service_date || asset.install_date
+            if (!referenceDate || !asset.service_interval_days) return false
+
+            const nextDue = new Date(referenceDate)
+            nextDue.setDate(nextDue.getDate() + asset.service_interval_days)
+            return nextDue <= now
+        }).map((asset: any) => {
+            const referenceDate = asset.last_service_date || asset.install_date
+            const nextDue = new Date(referenceDate!)
+            nextDue.setDate(nextDue.getDate() + asset.service_interval_days!)
+
+            return {
+                id: `asset-main-${asset.id}`,
+                asset_id: asset.id,
+                task_name: 'General Service',
+                next_due_at: nextDue.toISOString(),
+                assets: {
+                    name: asset.name,
+                    id: asset.id,
+                    stores: asset.stores
+                },
+                isAssetLevel: true,
+                frequency_days: asset.service_interval_days
+            }
+        })
+
+        const combined = [...(schedulesData || []), ...overdueAssets].sort((a, b) =>
+            new Date(a.next_due_at).getTime() - new Date(b.next_due_at).getTime()
+        )
+
+        setDueSchedules(combined)
         setLoading(false)
     }
 
-    async function createJobFromMaintenance(schedule: any) {
-        const { error } = await supabase
+    async function createJobFromMaintenance(item: any) {
+        const { error: jobError } = await supabase
             .from('jobs')
             .insert({
-                store_id: schedule.assets.stores.id,
-                asset_id: schedule.asset_id,
-                title: `Maintenance: ${schedule.task_name}`,
-                description: `Recurring maintenance task: ${schedule.task_name}\nPorted from Maintenance Schedule.`,
+                store_id: item.assets.stores.id,
+                asset_id: item.asset_id,
+                title: `Maintenance: ${item.task_name}`,
+                description: `Recurring maintenance task: ${item.task_name}\nPorted from Maintenance Dashboard.`,
                 job_type: 'maintenance',
                 severity: 'medium',
                 status: 'open',
                 reported_by: (await supabase.auth.getUser()).data.user?.id
             })
 
-        if (error) {
+        if (jobError) {
             toast.error("Failed to generate job")
+            return
+        }
+
+        if (item.isAssetLevel) {
+            // Update Asset last_service_date
+            const { error } = await supabase
+                .from('assets')
+                .update({ last_service_date: new Date().toISOString() })
+                .eq('id', item.asset_id)
+
+            if (error) toast.error("Job created but failed to update asset date")
         } else {
             // Update the schedule's next_due_at and last_completed_at
             const nextDue = new Date()
-            nextDue.setDate(nextDue.getDate() + schedule.frequency_days)
+            nextDue.setDate(nextDue.getDate() + item.frequency_days)
 
-            await supabase
+            const { error } = await supabase
                 .from('maintenance_schedules')
                 .update({
                     last_completed_at: new Date().toISOString(),
                     next_due_at: nextDue.toISOString()
                 })
-                .eq('id', schedule.id)
+                .eq('id', item.id)
 
-            toast.success("Maintenance Job Created!")
-            fetchDueSchedules()
+            if (error) toast.error("Job created but failed to update schedule")
         }
+
+        toast.success("Maintenance Job Created!")
+        fetchDueSchedules()
     }
 
     return (
