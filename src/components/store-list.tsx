@@ -84,6 +84,9 @@ export function StoreList({ stores, onStoreClick, selectedStoreId }: StoreListPr
                                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                                     <MapPin className="size-3 shrink-0" />
                                     <span className="truncate">{store.address}</span>
+                                    {store.lat && store.lng && (
+                                        <div className="ml-auto size-1.5 rounded-full bg-green-500 shrink-0" title="Verified Location" />
+                                    )}
                                 </div>
                             </div>
 

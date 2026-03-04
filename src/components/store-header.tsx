@@ -14,6 +14,8 @@ interface StoreHeaderProps {
         brand_st_pierres?: boolean
         brand_bento_bowl?: boolean
         brand_k10?: boolean
+        lat?: number
+        lng?: number
     }
 }
 
@@ -62,7 +64,12 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                 <div className="flex flex-col gap-2 text-muted-foreground">
                     <div className="flex items-center gap-2">
                         <MapPin className="size-4" />
-                        <span>{store.address}, {store.region}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span>{store.address}, {store.region}</span>
+                            {store.lat && store.lng && (
+                                <Badge variant="outline" className="h-4 py-0 text-[8px] bg-green-50 text-green-700 border-green-200 whitespace-nowrap">VERIFIED LOCATION</Badge>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
