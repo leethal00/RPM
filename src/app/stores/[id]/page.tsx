@@ -7,8 +7,16 @@ import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AssetForm } from "@/components/asset-form"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, Plus } from "lucide-react"
+import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,41 +25,42 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
     const [assets, setAssets] = useState<any[]>([])
     const [jobs, setJobs] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const supabase = createClient()
 
+    const fetchData = async () => {
+        // Fetch Store
+        const { data: storeData } = await supabase
+            .from('stores')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+        // Fetch Assets
+        const { data: assetData } = await supabase
+            .from('assets')
+            .select(`
+      *,
+      asset_types (
+        label
+      )
+    `)
+            .eq('store_id', id)
+
+        // Fetch Jobs
+        const { data: jobData } = await supabase
+            .from('jobs')
+            .select('*')
+            .eq('store_id', id)
+            .order('created_at', { ascending: false })
+
+        setStore(storeData)
+        setAssets(assetData || [])
+        setJobs(jobData || [])
+        setLoading(false)
+    }
+
     useEffect(() => {
-        async function fetchData() {
-            // Fetch Store
-            const { data: storeData } = await supabase
-                .from('stores')
-                .select('*')
-                .eq('id', id)
-                .single()
-
-            // Fetch Assets
-            const { data: assetData } = await supabase
-                .from('assets')
-                .select(`
-          *,
-          asset_types (
-            label
-          )
-        `)
-                .eq('store_id', id)
-
-            // Fetch Jobs
-            const { data: jobData } = await supabase
-                .from('jobs')
-                .select('*')
-                .eq('store_id', id)
-                .order('created_at', { ascending: false })
-
-            setStore(storeData)
-            setAssets(assetData || [])
-            setJobs(jobData || [])
-            setLoading(false)
-        }
-
         fetchData()
     }, [id, supabase])
 
@@ -112,6 +121,28 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                         </TabsList>
 
                         <div className="flex items-center gap-2 pb-2">
+                            <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-8 gap-1">
+                                        <PackagePlus className="size-3.5" />
+                                        Add Asset
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Add New Asset</DialogTitle>
+                                    </DialogHeader>
+                                    <AssetForm
+                                        storeId={id}
+                                        onSuccess={() => {
+                                            setAssetDialogOpen(false)
+                                            fetchData()
+                                        }}
+                                        onCancel={() => setAssetDialogOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
+
                             <Button size="sm" className="h-8 gap-1" asChild>
                                 <Link href={`/stores/${id}/jobs/new`}>
                                     <Plus className="size-3.5" />
