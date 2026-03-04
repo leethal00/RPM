@@ -43,11 +43,6 @@ const navItems = [
         icon: Map,
     },
     {
-        title: "Sites / List",
-        url: "/stores",
-        icon: Building2,
-    },
-    {
         title: "Analysis",
         url: "/analysis",
         icon: BarChart3,
@@ -159,9 +154,17 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
                 <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-                    <SidebarGroupLabel>Your Sites</SidebarGroupLabel>
+                    <SidebarGroupLabel>Sites / List</SidebarGroupLabel>
                     <SidebarGroupContent>
-                        <SidebarMenu className="max-h-[300px] overflow-y-auto no-scrollbar">
+                        <SidebarMenu className="max-h-[400px] overflow-y-auto no-scrollbar">
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="All Sites Map">
+                                    <a href="/">
+                                        <Building2 className="size-4 text-primary/70" />
+                                        <span className="font-bold">GLOBAL MAP VIEW</span>
+                                    </a>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                             {stores.map((store) => (
                                 <SidebarMenuItem key={store.id}>
                                     <SidebarMenuButton asChild tooltip={store.name}>
