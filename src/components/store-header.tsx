@@ -9,6 +9,9 @@ interface StoreHeaderProps {
         status: string
         manager_name?: string
         manager_phone?: string
+        site_type?: string
+        site_category?: string
+        has_drive_thru?: boolean
     }
 }
 
@@ -21,12 +24,29 @@ export function StoreHeader({ store }: StoreHeaderProps) {
 
     return (
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between py-6 border-b">
-            <div>
-                <div className="flex items-center gap-3 mb-2">
+            <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <h1 className="text-3xl font-bold tracking-tight">{store.name}</h1>
-                    <Badge className={`${statusColors[store.status] || "bg-gray-500"} text-white uppercase`}>
-                        {store.status}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={`${statusColors[store.status] || "bg-gray-500"} text-white uppercase`}>
+                            {store.status}
+                        </Badge>
+                        {store.site_type && (
+                            <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/10 uppercase text-[10px]">
+                                {store.site_type}
+                            </Badge>
+                        )}
+                        {store.site_category && (
+                            <Badge variant="outline" className="text-muted-foreground uppercase text-[10px]">
+                                {store.site_category}
+                            </Badge>
+                        )}
+                        {store.has_drive_thru && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 uppercase text-[10px]">
+                                DRIVE THRU
+                            </Badge>
+                        )}
+                    </div>
                 </div>
                 <div className="flex flex-col gap-2 text-muted-foreground">
                     <div className="flex items-center gap-2">

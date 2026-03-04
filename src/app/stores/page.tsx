@@ -149,6 +149,7 @@ export default function StoresListPage() {
                                         <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
                                     </div>
                                 </TableHead>
+                                <TableHead className="hidden lg:table-cell">Classification</TableHead>
                                 <TableHead className="hidden lg:table-cell">Site Manager</TableHead>
                                 <TableHead className="hidden xl:table-cell">Hours</TableHead>
                                 <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -158,12 +159,12 @@ export default function StoresListPage() {
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={5} className="h-12 animate-pulse bg-muted/20" />
+                                        <TableCell colSpan={6} className="h-12 animate-pulse bg-muted/20" />
                                     </TableRow>
                                 ))
                             ) : filteredStores.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">
+                                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
                                         No sites found matching your search.
                                     </TableCell>
                                 </TableRow>
@@ -171,14 +172,35 @@ export default function StoresListPage() {
                                 filteredStores.map((store) => (
                                     <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="font-semibold">
-                                            <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
-                                                {store.name}
-                                            </Link>
+                                            <div className="grid gap-0.5">
+                                                <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
+                                                    {store.name}
+                                                </Link>
+                                                <div className="flex items-center gap-1.5">
+                                                    {store.has_drive_thru && (
+                                                        <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200">DRIVE THRU</Badge>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
                                             <div className="flex items-center gap-1">
                                                 <MapPin className="size-3 shrink-0" />
                                                 <span className="truncate max-w-[200px]">{store.address || "—"}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="hidden lg:table-cell">
+                                            <div className="flex flex-wrap gap-1">
+                                                {store.site_type && (
+                                                    <Badge variant="secondary" className="text-[10px] h-5 bg-primary/5 text-primary border-primary/10">
+                                                        {store.site_type}
+                                                    </Badge>
+                                                )}
+                                                {store.site_category && (
+                                                    <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
+                                                        {store.site_category}
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-sm hidden lg:table-cell">

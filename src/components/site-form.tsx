@@ -27,8 +27,10 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         region: site?.region || "",
         manager_name: site?.manager_name || "",
         manager_phone: site?.manager_phone || "",
-        hours_of_operation: site?.hours_of_operation || "",
         status: site?.status || "active",
+        site_type: site?.site_type || "St Pierre Sushi",
+        site_category: site?.site_category || "Stand alone",
+        has_drive_thru: site?.has_drive_thru || false,
     })
 
     // State for structured hours
@@ -64,6 +66,32 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         }
     })
 
+    useEffect(() => {
+        async function getClientId() {
+            // Get the first client or current user's client
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('client_id')
+                    .eq('id', user.id)
+                    .single()
+
+                if (userData?.client_id) {
+                    setClientId(userData.client_id)
+                } else {
+                    // Fallback to first client
+                    const { data: clients } = await supabase
+                        .from('clients')
+                        .select('id')
+                        .limit(1)
+                    if (clients?.[0]) setClientId(clients[0].id)
+                }
+            }
+        }
+        getClientId()
+    }, [supabase])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -82,7 +110,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         const payload = {
             ...formData,
             client_id: clientId,
-            hours_of_operation: JSON.stringify(hoursData)
+            hours_of_operation: JSON.stringify(hoursData),
+            // Map bento_bowl legacy flag if type is Bento Bowl
+            bento_bowl: formData.site_type === "Bento Bowl"
         }
 
         let error
@@ -120,6 +150,54 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
                     />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Type</Label>
+                        <div className="flex bg-muted rounded-md p-1">
+                            {["Bento Bowl", "K10", "St Pierre Sushi"].map(type => (
+                                <button
+                                    key={type}
+                                    type="button"
+                                    className={`flex-1 px-2 py-1.5 text-[9px] font-bold rounded-sm transition-all ${formData.site_type === type ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={() => setFormData({ ...formData, site_type: type })}
+                                >
+                                    {type.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Designation</Label>
+                        <div className="flex bg-muted rounded-md p-1">
+                            {["Stand alone", "Inline", "Mall"].map(cat => (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-sm transition-all ${formData.site_category === cat ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={() => setFormData({ ...formData, site_category: cat })}
+                                >
+                                    {cat.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between bg-muted/20 p-3 rounded-lg border border-dashed">
+                    <div className="space-y-0.5">
+                        <Label className="text-sm font-bold">Drive Thru</Label>
+                        <p className="text-xs text-muted-foreground tracking-tight">Does this site have a drive-thru facility?</p>
+                    </div>
+                    <button
+                        type="button"
+                        role="switch"
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${formData.has_drive_thru ? 'bg-primary' : 'bg-input'}`}
+                        onClick={() => setFormData({ ...formData, has_drive_thru: !formData.has_drive_thru })}
+                    >
+                        <span className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${formData.has_drive_thru ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
                 </div>
 
                 <div className="grid gap-2">
