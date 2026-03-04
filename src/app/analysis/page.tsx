@@ -54,7 +54,7 @@ export default function AnalyticsPage() {
 
             // 2. Process Jobs by Store
             const storeMap: any = {}
-            allJobs.forEach(job => {
+            allJobs.forEach((job: any) => {
                 const storeName = job.stores?.name || 'Unknown'
                 storeMap[storeName] = (storeMap[storeName] || 0) + 1
             })
@@ -62,7 +62,7 @@ export default function AnalyticsPage() {
 
             // 3. Process Jobs by Status
             const statusMap: any = { open: 0, in_progress: 0, resolved: 0, closed: 0 }
-            allJobs.forEach(job => {
+            allJobs.forEach((job: any) => {
                 statusMap[job.status] = (statusMap[job.status] || 0) + 1
             })
             const jobsByStatus = [
@@ -81,7 +81,7 @@ export default function AnalyticsPage() {
             }).reverse()
 
             last7Days.forEach(date => timeMap[date] = 0)
-            allJobs.forEach(job => {
+            allJobs.forEach((job: any) => {
                 const date = job.created_at.split('T')[0]
                 if (timeMap[date] !== undefined) {
                     timeMap[date]++
