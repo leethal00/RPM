@@ -24,7 +24,9 @@ import {
     AlertTriangle,
     CheckCircle2,
     Clock,
-    Filter
+    Filter,
+    BarChart3,
+    Building2
 } from "lucide-react"
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
@@ -36,7 +38,10 @@ export default function AnalyticsPage() {
         resolvedJobs: 0,
         jobsByStore: [],
         jobsByStatus: [],
-        jobsOverTime: []
+        jobsOverTime: [],
+        jobsByBrand: [],
+        projectBudgetStats: [],
+        totalBudget: 0
     })
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
@@ -45,14 +50,48 @@ export default function AnalyticsPage() {
         async function fetchStats() {
             setLoading(true)
 
-            // 1. Fetch all jobs for overall stats
+            // 1. Fetch all jobs with store brand info
             const { data: allJobs } = await supabase
                 .from('jobs')
-                .select('status, created_at, store_id, stores(name)')
+                .select(`
+                    status, 
+                    created_at, 
+                    store_id, 
+                    project_id,
+                    stores(name, brand_st_pierres, brand_bento_bowl, brand_k10)
+                `)
 
-            if (!allJobs) return
+            // 2. Fetch all projects
+            const { data: allProjects } = await supabase
+                .from('projects')
+                .select('*')
+                .neq('status', 'archived')
 
-            // 2. Process Jobs by Store
+            if (!allJobs || !allProjects) return
+
+            // 3. Process Brand Distribution
+            const brandStats: any = { 'St Pierre\'s': 0, 'Bento Bowl': 0, 'K10': 0 }
+            allJobs.forEach((job: any) => {
+                if (job.stores?.brand_st_pierres !== false) brandStats['St Pierre\'s']++
+                if (job.stores?.brand_bento_bowl) brandStats['Bento Bowl']++
+                if (job.stores?.brand_k10) brandStats['K10']++
+            })
+            const jobsByBrand = Object.entries(brandStats).map(([name, count]) => ({ name, count }))
+
+            // 4. Process Project Budget Stats
+            const projectBudgetStats = allProjects.map((p: any) => {
+                const linkedJobs = allJobs.filter((j: any) => j.project_id === p.id)
+                const completedJobs = linkedJobs.filter((j: any) => j.status === 'resolved' || j.status === 'closed').length
+                const progress = linkedJobs.length > 0 ? (completedJobs / linkedJobs.length) * 100 : 0
+                return {
+                    name: p.name,
+                    budget: p.budget,
+                    progress: Math.round(progress),
+                    jobCount: linkedJobs.length
+                }
+            })
+
+            // 5. Process Jobs by Store
             const storeMap: any = {}
             allJobs.forEach((job: any) => {
                 const storeName = job.stores?.name || 'Unknown'
@@ -98,7 +137,10 @@ export default function AnalyticsPage() {
                 resolvedJobs: statusMap.resolved + statusMap.closed,
                 jobsByStore,
                 jobsByStatus,
-                jobsOverTime
+                jobsOverTime,
+                jobsByBrand,
+                projectBudgetStats,
+                totalBudget: allProjects.reduce((acc: number, p: any) => acc + (p.budget || 0), 0)
             })
             setLoading(false)
         }
@@ -139,6 +181,15 @@ export default function AnalyticsPage() {
                             <p className="text-[10px] text-muted-foreground mt-1 font-medium">OPEN OR IN PROGRESS</p>
                         </CardContent>
                     </Card>
+                    <Card className="border-blue-100 bg-blue-50/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-blue-600">Strategic Capex</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-black text-blue-600">${stats.totalBudget?.toLocaleString()}</div>
+                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">PORTFOLIO PIPELINE</p>
+                        </CardContent>
+                    </Card>
                     <Card className="border-green-100 bg-green-50/30">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-xs font-bold uppercase tracking-wider text-green-600">Resolved</CardTitle>
@@ -148,18 +199,67 @@ export default function AnalyticsPage() {
                             <p className="text-[10px] text-muted-foreground mt-1 font-medium">COMPLETED TASKS</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Uptime Avg</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-black">98.2%</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">ACROSS PORTFOLIO</p>
-                        </CardContent>
-                    </Card>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                <BarChart3 className="size-4 text-primary" />
+                                Budget Allocation by Project
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[300px] pt-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.projectBudgetStats} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={120} fontSize={10} fontWeight="bold" stroke="#64748b" />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                                        cursor={{ fill: '#f8fafc' }}
+                                    />
+                                    <Bar dataKey="budget" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                <Building2 className="size-4 text-primary" />
+                                Fault attribution by Brand
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[300px] flex flex-col items-center justify-center pt-4">
+                            <ResponsiveContainer width="100%" height="80%">
+                                <PieChart>
+                                    <Pie
+                                        data={stats.jobsByBrand}
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="count"
+                                    >
+                                        {stats.jobsByBrand.map((entry: any, index: number) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            <div className="flex gap-4 mt-6">
+                                {stats.jobsByBrand.map((s: any, index: number) => (
+                                    <div key={s.name} className="flex items-center gap-1.5">
+                                        <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                        <span className="text-[10px] font-bold uppercase text-muted-foreground">{s.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card className="md:col-span-1 shadow-sm border-sidebar-border">
                         <CardHeader>
                             <CardTitle className="text-sm font-bold flex items-center gap-2 italic">

@@ -16,10 +16,23 @@ import {
     Clock,
     AlertTriangle,
     BarChart3,
-    ArrowUpRight
+    ArrowUpRight,
+    Edit2,
+    Trash2
 } from "lucide-react"
 import Link from "next/link"
 import { JobTimeline } from "@/components/job-timeline"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { ProjectForm } from "@/components/project-form"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export default function ProjectDetailPage({
     params
@@ -30,37 +43,55 @@ export default function ProjectDetailPage({
     const [project, setProject] = useState<any>(null)
     const [jobs, setJobs] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const supabase = createClient()
+    const router = useRouter()
+
+    const fetchData = async () => {
+        setLoading(true)
+        // Fetch Project
+        const { data: projectData } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+        // Fetch Linked Jobs
+        const { data: jobData } = await supabase
+            .from('jobs')
+            .select(`
+                *,
+                stores (
+                    name
+                )
+            `)
+            .eq('project_id', id)
+            .order('created_at', { ascending: false })
+
+        setProject(projectData)
+        setJobs(jobData || [])
+        setLoading(false)
+    }
 
     useEffect(() => {
-        async function fetchData() {
-            setLoading(true)
-            // Fetch Project
-            const { data: projectData } = await supabase
-                .from('projects')
-                .select('*')
-                .eq('id', id)
-                .single()
-
-            // Fetch Linked Jobs
-            const { data: jobData } = await supabase
-                .from('jobs')
-                .select(`
-                    *,
-                    stores (
-                        name
-                    )
-                `)
-                .eq('project_id', id)
-                .order('created_at', { ascending: false })
-
-            setProject(projectData)
-            setJobs(jobData || [])
-            setLoading(false)
-        }
-
         fetchData()
     }, [id, supabase])
+
+    const handleArchiveProject = async () => {
+        if (!confirm("Are you sure you want to archive this project? Linked jobs will be preserved but the project will be hidden from active views.")) return
+
+        const { error } = await supabase
+            .from('projects')
+            .update({ status: 'archived' })
+            .eq('id', id)
+
+        if (error) {
+            toast.error(error.message)
+        } else {
+            toast.success("Strategic Project Archived")
+            router.push('/projects')
+        }
+    }
 
     if (loading) {
         return (
@@ -100,25 +131,61 @@ export default function ProjectDetailPage({
         in_progress: "bg-amber-500",
         completed: "bg-green-500",
         cancelled: "bg-red-500",
+        archived: "bg-slate-500",
     }
 
     return (
         <DashboardLayout>
             <div className="flex flex-col gap-6 py-6 font-primary max-w-7xl mx-auto">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between">
                     <Button variant="ghost" size="sm" asChild className="-ml-2 h-8 text-muted-foreground">
                         <Link href="/projects" className="flex items-center gap-1">
                             <ChevronLeft className="size-4" />
                             Back to Portfolio
                         </Link>
                     </Button>
+                    <div className="flex items-center gap-2">
+                        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="gap-2 italic shadow-sm h-8">
+                                    <Edit2 className="size-3.5" />
+                                    Edit Scale
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[600px]">
+                                <DialogHeader>
+                                    <DialogTitle>Update Strategic Project</DialogTitle>
+                                    <DialogDescription>
+                                        Modify budget, timeline, or objectives for this initiative.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <ProjectForm
+                                    project={project}
+                                    onSuccess={() => {
+                                        setIsEditDialogOpen(false)
+                                        fetchData()
+                                    }}
+                                    onCancel={() => setIsEditDialogOpen(false)}
+                                />
+                            </DialogContent>
+                        </Dialog>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10 gap-2 italic"
+                            onClick={handleArchiveProject}
+                        >
+                            <Trash2 className="size-3.5" />
+                            Archive
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-3">
                             <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
-                            <Badge className={`${statusColors[project.status]} text-white text-[10px] black tracking-widest`}>
+                            <Badge className={`${statusColors[project.status]} text-white text-[10px] black tracking-widest uppercase`}>
                                 {project.status.replace('_', ' ')}
                             </Badge>
                         </div>

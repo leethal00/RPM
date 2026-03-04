@@ -16,22 +16,33 @@ import {
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
+interface Project {
+    id: string
+    name: string
+    description?: string
+    status: string
+    budget?: number
+    start_date?: string
+    end_date?: string
+}
+
 interface ProjectFormProps {
     onSuccess: () => void
     onCancel: () => void
+    project?: Project
 }
 
-export function ProjectForm({ onSuccess, onCancel }: ProjectFormProps) {
+export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
 
     const [formData, setFormData] = useState({
-        name: "",
-        description: "",
-        status: "planning",
-        budget: "",
-        start_date: "",
-        end_date: ""
+        name: project?.name || "",
+        description: project?.description || "",
+        status: project?.status || "planning",
+        budget: project?.budget?.toString() || "",
+        start_date: project?.start_date || "",
+        end_date: project?.end_date || ""
     })
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -46,24 +57,31 @@ export function ProjectForm({ onSuccess, onCancel }: ProjectFormProps) {
 
         const { data: userData } = await supabase.auth.getUser()
 
+        const payload: any = {
+            name: formData.name,
+            description: formData.description,
+            status: formData.status,
+            budget: parseFloat(formData.budget) || 0,
+            start_date: formData.start_date || null,
+            end_date: formData.end_date || null,
+        }
+
+        if (!project) {
+            payload.created_by = userData.user?.id
+        } else {
+            payload.id = project.id
+        }
+
         const { error } = await supabase
             .from('projects')
-            .insert({
-                name: formData.name,
-                description: formData.description,
-                status: formData.status,
-                budget: parseFloat(formData.budget) || 0,
-                start_date: formData.start_date || null,
-                end_date: formData.end_date || null,
-                created_by: userData.user?.id
-            })
+            .upsert(payload)
 
         setLoading(false)
 
         if (error) {
             toast.error(error.message)
         } else {
-            toast.success("Strategic Project Initiated!")
+            toast.success(project ? "Strategic Project Updated!" : "Strategic Project Initiated!")
             onSuccess()
         }
     }
@@ -152,10 +170,10 @@ export function ProjectForm({ onSuccess, onCancel }: ProjectFormProps) {
                     {loading ? (
                         <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Initiating...
+                            {project ? "Saving..." : "Initiating..."}
                         </>
                     ) : (
-                        "Initiate Project"
+                        project ? "Save Changes" : "Initiate Project"
                     )}
                 </Button>
             </div>

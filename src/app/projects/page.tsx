@@ -35,6 +35,7 @@ export default function ProjectsPage() {
                     budget_impact
                 )
             `)
+            .neq('status', 'archived')
             .order('created_at', { ascending: false })
 
         if (error) {
