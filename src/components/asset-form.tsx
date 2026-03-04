@@ -16,25 +16,36 @@ import {
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
+interface Asset {
+    id: string
+    name: string
+    asset_type_id: string
+    install_date?: string
+    status?: string
+    notes?: string
+    service_interval_days?: number
+}
+
 interface AssetFormProps {
     storeId: string
+    asset?: Asset
     onSuccess: () => void
     onCancel: () => void
 }
 
-export function AssetForm({ storeId, onSuccess, onCancel }: AssetFormProps) {
+export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [assetTypes, setAssetTypes] = useState<any[]>([])
 
     // Form State
     const [formData, setFormData] = useState({
-        name: "",
-        asset_type_id: "",
-        install_date: "",
-        status: "active",
-        notes: "",
-        service_interval_days: "365"
+        name: asset?.name || "",
+        asset_type_id: asset?.asset_type_id || "",
+        install_date: asset?.install_date || "",
+        status: asset?.status || "active",
+        notes: asset?.notes || "",
+        service_interval_days: asset?.service_interval_days?.toString() || "365"
     })
 
     useEffect(() => {
@@ -58,22 +69,34 @@ export function AssetForm({ storeId, onSuccess, onCancel }: AssetFormProps) {
             return
         }
 
-        const { error } = await supabase
-            .from('assets')
-            .insert({
-                store_id: storeId,
-                name: formData.name,
-                asset_type_id: formData.asset_type_id,
-                install_date: formData.install_date || null,
-                status: formData.status,
-                notes: formData.notes,
-                service_interval_days: parseInt(formData.service_interval_days) || 365
-            })
+        const payload: any = {
+            store_id: storeId,
+            name: formData.name,
+            asset_type_id: formData.asset_type_id,
+            install_date: formData.install_date || null,
+            status: formData.status,
+            notes: formData.notes,
+            service_interval_days: parseInt(formData.service_interval_days) || 365
+        }
+
+        let error;
+        if (asset?.id) {
+            const { error: updateError } = await supabase
+                .from('assets')
+                .update(payload)
+                .eq('id', asset.id)
+            error = updateError
+        } else {
+            const { error: insertError } = await supabase
+                .from('assets')
+                .insert(payload)
+            error = insertError
+        }
 
         if (error) {
             toast.error(error.message)
         } else {
-            toast.success("Asset added successfully")
+            toast.success(asset?.id ? "Asset updated successfully" : "Asset added successfully")
             onSuccess()
         }
         setLoading(false)
@@ -156,7 +179,7 @@ export function AssetForm({ storeId, onSuccess, onCancel }: AssetFormProps) {
                             Saving...
                         </>
                     ) : (
-                        "Add Asset"
+                        asset?.id ? "Save Changes" : "Add Asset"
                     )}
                 </Button>
             </div>

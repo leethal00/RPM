@@ -6,12 +6,22 @@ import { createClient } from "@/lib/supabase/client"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, Calendar, Settings, FileText, Activity } from "lucide-react"
+import { ChevronLeft, Calendar, Settings, FileText, Activity, Trash2, Edit } from "lucide-react"
 import Link from "next/link"
 import { JobTimeline } from "@/components/job-timeline"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MaintenanceScheduleList } from "@/components/maintenance-schedule-list"
+import { AssetForm } from "@/components/asset-form"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export default function AssetDetailPage({
     params
@@ -19,17 +29,19 @@ export default function AssetDetailPage({
     params: Promise<{ id: string, assetId: string }>
 }) {
     const { id, assetId } = use(params)
+    const router = useRouter()
     const [asset, setAsset] = useState<any>(null)
     const [jobs, setJobs] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [editDialogOpen, setEditDialogOpen] = useState(false)
     const supabase = createClient()
 
-    useEffect(() => {
-        async function fetchData() {
-            // Fetch Asset
-            const { data: assetData } = await supabase
-                .from('assets')
-                .select(`
+    const fetchData = async () => {
+        setLoading(true)
+        // Fetch Asset
+        const { data: assetData } = await supabase
+            .from('assets')
+            .select(`
           *,
           stores (
             name
@@ -38,23 +50,40 @@ export default function AssetDetailPage({
             label
           )
         `)
-                .eq('id', assetId)
-                .single()
+            .eq('id', assetId)
+            .single()
 
-            // Fetch Jobs for THIS asset
-            const { data: jobData } = await supabase
-                .from('jobs')
-                .select('*')
-                .eq('asset_id', assetId)
-                .order('created_at', { ascending: false })
+        // Fetch Jobs for THIS asset
+        const { data: jobData } = await supabase
+            .from('jobs')
+            .select('*')
+            .eq('asset_id', assetId)
+            .order('created_at', { ascending: false })
 
-            setAsset(assetData)
-            setJobs(jobData || [])
-            setLoading(false)
-        }
+        setAsset(assetData)
+        setJobs(jobData || [])
+        setLoading(false)
+    }
 
+    useEffect(() => {
         fetchData()
     }, [assetId, supabase])
+
+    const handleDelete = async () => {
+        if (!confirm("Are you sure you want to delete this asset? This will also affect any linked maintenance schedules.")) return
+
+        const { error } = await supabase
+            .from('assets')
+            .delete()
+            .eq('id', assetId)
+
+        if (error) {
+            toast.error(error.message)
+        } else {
+            toast.success("Asset deleted successfully")
+            router.push(`/stores/${id}`)
+        }
+    }
 
     if (loading) {
         return (
@@ -95,12 +124,49 @@ export default function AssetDetailPage({
                     </Button>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-3xl font-bold tracking-tight">{asset.name}</h1>
-                        <Badge variant="outline" className="uppercase">{asset.asset_types?.label}</Badge>
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div className="flex flex-col gap-2 font-primary">
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-bold tracking-tight">{asset.name}</h1>
+                            <Badge variant="outline" className="uppercase">{asset.asset_types?.label}</Badge>
+                        </div>
+                        <p className="text-muted-foreground">{asset.stores?.name} • Site Asset</p>
                     </div>
-                    <p className="text-muted-foreground">{asset.stores?.name} • Site Asset</p>
+
+                    <div className="flex items-center gap-2">
+                        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-8 gap-1 font-primary">
+                                    <Edit className="size-3.5" />
+                                    Edit Asset
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[500px]">
+                                <DialogHeader>
+                                    <DialogTitle>Edit Asset Details</DialogTitle>
+                                </DialogHeader>
+                                <AssetForm
+                                    storeId={id}
+                                    asset={asset}
+                                    onSuccess={() => {
+                                        setEditDialogOpen(false)
+                                        fetchData()
+                                    }}
+                                    onCancel={() => setEditDialogOpen(false)}
+                                />
+                            </DialogContent>
+                        </Dialog>
+
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1 text-red-500 hover:text-red-600 hover:bg-red-50 font-primary"
+                            onClick={handleDelete}
+                        >
+                            <Trash2 className="size-3.5" />
+                            Delete Asset
+                        </Button>
+                    </div>
                 </div>
 
                 <Tabs defaultValue="specs" className="w-full">
