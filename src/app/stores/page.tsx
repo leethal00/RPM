@@ -192,7 +192,21 @@ export default function StoresListPage() {
                                         <TableCell className="text-sm hidden xl:table-cell">
                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                 <Clock className="size-3 shrink-0" />
-                                                <span className="truncate max-w-[250px]">{store.hours_of_operation || "—"}</span>
+                                                <span className="truncate max-w-[250px]">
+                                                    {(() => {
+                                                        if (!store.hours_of_operation) return "—"
+                                                        try {
+                                                            const hours = JSON.parse(store.hours_of_operation)
+                                                            if (hours.type === "daily") {
+                                                                return `All Days: ${hours.hours.start}—${hours.hours.end}`
+                                                            } else {
+                                                                return "Custom Weekly Hours"
+                                                            }
+                                                        } catch {
+                                                            return store.hours_of_operation
+                                                        }
+                                                    })()}
+                                                </span>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right">
