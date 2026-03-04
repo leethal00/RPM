@@ -9,9 +9,11 @@ interface StoreHeaderProps {
         status: string
         manager_name?: string
         manager_phone?: string
-        site_type?: string
         site_category?: string
         has_drive_thru?: boolean
+        brand_st_pierres?: boolean
+        brand_bento_bowl?: boolean
+        brand_k10?: boolean
     }
 }
 
@@ -25,17 +27,26 @@ export function StoreHeader({ store }: StoreHeaderProps) {
     return (
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between py-6 border-b">
             <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-4">
                     <h1 className="text-3xl font-bold tracking-tight">{store.name}</h1>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                         <Badge className={`${statusColors[store.status] || "bg-gray-500"} text-white uppercase`}>
                             {store.status}
                         </Badge>
-                        {store.site_type && (
-                            <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/10 uppercase text-[10px]">
-                                {store.site_type}
-                            </Badge>
-                        )}
+
+                        {/* Brand Logos */}
+                        <div className="flex items-center gap-2 px-2 py-1 bg-muted/20 rounded-lg border">
+                            {store.brand_st_pierres !== false && (
+                                <img src="/brands/st-pierres.png" alt="St Pierre's" className="h-8 w-auto object-contain" title="St Pierre's Sushi" />
+                            )}
+                            {store.brand_bento_bowl && (
+                                <img src="/brands/bento-bowl.png" alt="Bento Bowl" className="h-8 w-auto object-contain" title="Bento Bowl" />
+                            )}
+                            {store.brand_k10 && (
+                                <img src="/brands/k10.png" alt="K10" className="h-8 w-auto object-contain" title="K10 Sushi Train" />
+                            )}
+                        </div>
+
                         {store.site_category && (
                             <Badge variant="outline" className="text-muted-foreground uppercase text-[10px]">
                                 {store.site_category}

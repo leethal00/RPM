@@ -172,10 +172,29 @@ export default function StoresListPage() {
                                 filteredStores.map((store) => (
                                     <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="font-semibold">
-                                            <div className="grid gap-0.5">
-                                                <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
-                                                    {store.name}
-                                                </Link>
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="flex items-center gap-2">
+                                                    <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
+                                                        {store.name}
+                                                    </Link>
+                                                    <div className="flex items-center gap-1">
+                                                        {store.brand_st_pierres !== false && (
+                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                                <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                                            </div>
+                                                        )}
+                                                        {store.brand_bento_bowl && (
+                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                                <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                                            </div>
+                                                        )}
+                                                        {store.brand_k10 && (
+                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                                <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                                 <div className="flex items-center gap-1.5">
                                                     {store.has_drive_thru && (
                                                         <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200">DRIVE THRU</Badge>

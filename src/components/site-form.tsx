@@ -28,7 +28,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         manager_name: site?.manager_name || "",
         manager_phone: site?.manager_phone || "",
         status: site?.status || "active",
-        site_type: site?.site_type || "St Pierre Sushi",
+        brand_st_pierres: site?.brand_st_pierres ?? true,
+        brand_bento_bowl: site?.brand_bento_bowl || false,
+        brand_k10: site?.brand_k10 || false,
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
     })
@@ -111,8 +113,8 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             ...formData,
             client_id: clientId,
             hours_of_operation: JSON.stringify(hoursData),
-            // Map bento_bowl legacy flag if type is Bento Bowl
-            bento_bowl: formData.site_type === "Bento Bowl"
+            // Maintain bento_bowl flag for backward compatibility
+            bento_bowl: formData.brand_bento_bowl
         }
 
         let error
@@ -152,36 +154,77 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Type</Label>
-                        <div className="flex bg-muted rounded-md p-1">
-                            {["Bento Bowl", "K10", "St Pierre Sushi"].map(type => (
-                                <button
-                                    key={type}
-                                    type="button"
-                                    className={`flex-1 px-2 py-1.5 text-[9px] font-bold rounded-sm transition-all ${formData.site_type === type ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                                    onClick={() => setFormData({ ...formData, site_type: type })}
-                                >
-                                    {type.toUpperCase()}
-                                </button>
-                            ))}
+                <div className="space-y-3">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Brands at this Site</Label>
+                    <div className="grid grid-cols-3 gap-3">
+                        {/* St Pierre's - Always True */}
+                        <div className="relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-primary bg-primary/5 cursor-default">
+                            <div className="h-10 w-full flex items-center justify-center">
+                                <img src="/brands/st-pierres.png" alt="St Pierres" className="max-h-full max-w-full object-contain" />
+                            </div>
+                            <span className="text-[10px] font-bold text-primary uppercase">Sushi of Japan</span>
+                            <div className="absolute -top-2 -right-2 bg-primary text-white rounded-full p-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            </div>
                         </div>
+
+                        {/* Bento Bowl */}
+                        <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, brand_bento_bowl: !formData.brand_bento_bowl })}
+                            className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_bento_bowl ? 'border-[#e67e22] bg-[#e67e22]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
+                        >
+                            <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100 group">
+                                <img
+                                    src="/brands/bento-bowl.png"
+                                    alt="Bento Bowl"
+                                    className={`max-h-full max-w-full object-contain ${formData.brand_bento_bowl ? 'grayscale-0 opacity-100' : ''}`}
+                                />
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase ${formData.brand_bento_bowl ? 'text-[#e67e22]' : 'text-muted-foreground'}`}>Bento Bowl</span>
+                            {formData.brand_bento_bowl && (
+                                <div className="absolute -top-2 -right-2 bg-[#e67e22] text-white rounded-full p-0.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                            )}
+                        </button>
+
+                        {/* K10 */}
+                        <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, brand_k10: !formData.brand_k10 })}
+                            className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_k10 ? 'border-[#a32b2b] bg-[#a32b2b]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
+                        >
+                            <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100">
+                                <img
+                                    src="/brands/k10.png"
+                                    alt="K10"
+                                    className={`max-h-full max-w-full object-contain ${formData.brand_k10 ? 'grayscale-0 opacity-100' : ''}`}
+                                />
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase ${formData.brand_k10 ? 'text-[#a32b2b]' : 'text-muted-foreground'}`}>K10 Train</span>
+                            {formData.brand_k10 && (
+                                <div className="absolute -top-2 -right-2 bg-[#a32b2b] text-white rounded-full p-0.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                            )}
+                        </button>
                     </div>
-                    <div className="grid gap-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Designation</Label>
-                        <div className="flex bg-muted rounded-md p-1">
-                            {["Stand alone", "Inline", "Mall"].map(cat => (
-                                <button
-                                    key={cat}
-                                    type="button"
-                                    className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-sm transition-all ${formData.site_category === cat ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                                    onClick={() => setFormData({ ...formData, site_category: cat })}
-                                >
-                                    {cat.toUpperCase()}
-                                </button>
-                            ))}
-                        </div>
+                </div>
+
+                <div className="grid gap-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Designation</Label>
+                    <div className="flex bg-muted rounded-md p-1">
+                        {["Stand alone", "Inline", "Mall"].map(cat => (
+                            <button
+                                key={cat}
+                                type="button"
+                                className={`flex-1 px-2 py-1.5 text-[10px] font-bold rounded-sm transition-all ${formData.site_category === cat ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setFormData({ ...formData, site_category: cat })}
+                            >
+                                {cat.toUpperCase()}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
