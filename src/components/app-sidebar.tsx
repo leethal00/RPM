@@ -9,6 +9,7 @@ import {
     Settings,
     PlusCircle,
     Building2,
+    Calendar,
 } from "lucide-react"
 
 import {
@@ -56,6 +57,11 @@ const navItems = [
         url: "/jobs",
         icon: ClipboardList,
     },
+    {
+        title: "Maintenance",
+        url: "/maintenance",
+        icon: Calendar,
+    },
 ]
 
 const projectItems = [
@@ -71,24 +77,33 @@ export function AppSidebar() {
     const router = useRouter()
     const [user, setUser] = React.useState<any>(null)
     const [profile, setProfile] = React.useState<any>(null)
+    const [stores, setStores] = React.useState<any[]>([])
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
-        async function getUser() {
+        async function fetchData() {
             const { data: { user } } = await supabase.auth.getUser()
             setUser(user)
 
             if (user) {
-                const { data: profile } = await supabase
+                // Fetch Profile
+                const { data: profileData } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', user.id)
                     .single()
-                setProfile(profile)
+                setProfile(profileData)
+
+                // Fetch Stores
+                const { data: storesData } = await supabase
+                    .from('stores')
+                    .select('id, name')
+                    .order('name')
+                setStores(storesData || [])
             }
             setLoading(false)
         }
-        getUser()
+        fetchData()
     }, [supabase])
 
     const handleSignOut = async () => {
@@ -143,6 +158,29 @@ export function AppSidebar() {
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
+                <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+                    <SidebarGroupLabel>Your Sites</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu className="max-h-[300px] overflow-y-auto no-scrollbar">
+                            {stores.map((store) => (
+                                <SidebarMenuItem key={store.id}>
+                                    <SidebarMenuButton asChild tooltip={store.name}>
+                                        <a href={`/stores/${store.id}`}>
+                                            <Building2 className="size-4 text-primary/70" />
+                                            <span className="truncate">{store.name}</span>
+                                        </a>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                            {stores.length === 0 && !loading && (
+                                <div className="px-4 py-2 text-xs text-muted-foreground italic">
+                                    No sites found
+                                </div>
+                            )}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
                 <SidebarGroup>
                     <SidebarGroupLabel>Strategic</SidebarGroupLabel>
                     <SidebarGroupContent>

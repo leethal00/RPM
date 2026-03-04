@@ -10,6 +10,9 @@ import { ChevronLeft, Calendar, Settings, FileText, Activity } from "lucide-reac
 import Link from "next/link"
 import { JobTimeline } from "@/components/job-timeline"
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MaintenanceScheduleList } from "@/components/maintenance-schedule-list"
+
 export default function AssetDetailPage({
     params
 }: {
@@ -100,67 +103,83 @@ export default function AssetDetailPage({
                     <p className="text-muted-foreground">{asset.stores?.name} • Site Asset</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="col-span-2">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium italic">Technical Specifications</CardTitle>
-                            <Settings className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-2 gap-y-4 py-4">
-                                <div className="space-y-1">
-                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Install Date</p>
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="size-4 text-primary" />
-                                        <p className="text-sm">{asset.install_date ? new Date(asset.install_date).toLocaleDateString() : "Unknown"}</p>
+                <Tabs defaultValue="specs" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
+                        <TabsTrigger value="specs">Specifications</TabsTrigger>
+                        <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+                        <TabsTrigger value="history">History</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="specs" className="mt-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <Card className="col-span-2">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium italic">Technical Specifications</CardTitle>
+                                    <Settings className="size-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-2 gap-y-4 py-4">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Install Date</p>
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="size-4 text-primary" />
+                                                <p className="text-sm">{asset.install_date ? new Date(asset.install_date).toLocaleDateString() : "Unknown"}</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Service Interval</p>
+                                            <div className="flex items-center gap-2">
+                                                <Activity className="size-4 text-primary" />
+                                                <p className="text-sm">{asset.service_interval_days || 365} Days</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1 col-span-2">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Technical Notes</p>
+                                            <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
+                                                <FileText className="size-4 text-primary mt-0.5" />
+                                                <p className="text-sm italic text-muted-foreground leading-relaxed">
+                                                    {asset.notes || "No technical notes available for this asset."}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Service Interval</p>
-                                    <div className="flex items-center gap-2">
-                                        <Activity className="size-4 text-primary" />
-                                        <p className="text-sm">{asset.service_interval_days || 365} Days</p>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-sm font-medium italic">Current Status</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex flex-col items-center justify-center py-6 gap-4">
+                                    <div className={`size-16 rounded-full flex items-center justify-center border-4 ${asset.status === 'active' || !asset.status ? 'border-green-500 bg-green-50' : 'border-amber-500 bg-amber-50'
+                                        }`}>
+                                        <div className={`size-8 rounded-full ${asset.status === 'active' || !asset.status ? 'bg-green-500' : 'bg-amber-500'
+                                            } animate-pulse`} />
                                     </div>
-                                </div>
-                                <div className="space-y-1 col-span-2">
-                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Technical Notes</p>
-                                    <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
-                                        <FileText className="size-4 text-primary mt-0.5" />
-                                        <p className="text-sm italic text-muted-foreground leading-relaxed">
-                                            {asset.notes || "No technical notes available for this asset."}
+                                    <div className="text-center">
+                                        <p className="text-lg font-bold uppercase tracking-tight">
+                                            {asset.status || "Operational"}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Last Serviced: {asset.last_service_date ? new Date(asset.last_service_date).toLocaleDateString() : "Never"}
                                         </p>
                                     </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-medium italic">Current Status</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex flex-col items-center justify-center py-6 gap-4">
-                            <div className={`size-16 rounded-full flex items-center justify-center border-4 ${asset.status === 'active' || !asset.status ? 'border-green-500 bg-green-50' : 'border-amber-500 bg-amber-50'
-                                }`}>
-                                <div className={`size-8 rounded-full ${asset.status === 'active' || !asset.status ? 'bg-green-500' : 'bg-amber-500'
-                                    } animate-pulse`} />
-                            </div>
-                            <div className="text-center">
-                                <p className="text-lg font-bold uppercase tracking-tight">
-                                    {asset.status || "Operational"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    Last Serviced: {asset.last_service_date ? new Date(asset.last_service_date).toLocaleDateString() : "Never"}
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <TabsContent value="maintenance" className="mt-6">
+                        <MaintenanceScheduleList assetId={assetId} />
+                    </TabsContent>
 
-                    <div className="col-span-1 md:col-span-3 mt-4">
-                        <h3 className="text-lg font-bold mb-6 italic">Service Log & Asset History</h3>
-                        <JobTimeline jobs={jobs} />
-                    </div>
-                </div>
+                    <TabsContent value="history" className="mt-6">
+                        <div className="mt-4">
+                            <h3 className="text-lg font-bold mb-6 italic">Service Log & Asset History</h3>
+                            <JobTimeline jobs={jobs} />
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </div>
         </DashboardLayout>
     )
