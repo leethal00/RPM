@@ -27,6 +27,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
     const [jobs, setJobs] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
+    const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
     const supabase = createClient()
 
     const fetchData = async () => {
@@ -144,7 +145,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 </DialogContent>
                             </Dialog>
 
-                            <Dialog>
+                            <Dialog open={editSiteDialogOpen} onOpenChange={setEditSiteDialogOpen}>
                                 <DialogTrigger asChild>
                                     <Button variant="outline" size="sm" className="h-8 gap-1">
                                         <Plus className="size-3.5" />
@@ -158,9 +159,10 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                     <SiteForm
                                         site={store}
                                         onSuccess={() => {
+                                            setEditSiteDialogOpen(false)
                                             fetchData()
                                         }}
-                                        onCancel={() => { }}
+                                        onCancel={() => setEditSiteDialogOpen(false)}
                                     />
                                 </DialogContent>
                             </Dialog>

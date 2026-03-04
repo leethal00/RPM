@@ -38,6 +38,9 @@ interface Store {
     lng: number
     status: string
     region: string
+    brand_st_pierres?: boolean
+    brand_bento_bowl?: boolean
+    brand_k10?: boolean
 }
 
 interface StoreMapProps {
@@ -105,7 +108,26 @@ export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom =
                     >
                         <Popup>
                             <div className="p-1">
-                                <h3 className="font-bold text-sm mb-1">{store.name}</h3>
+                                <div className="flex items-center justify-between gap-3 mb-1">
+                                    <h3 className="font-bold text-sm tracking-tight">{store.name}</h3>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {store.brand_st_pierres !== false && (
+                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
+                                                <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                            </div>
+                                        )}
+                                        {store.brand_bento_bowl && (
+                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
+                                                <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                            </div>
+                                        )}
+                                        {store.brand_k10 && (
+                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
+                                                <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 <p className="text-xs text-muted-foreground mb-2">{store.address}</p>
                                 <div className="flex items-center gap-2">
                                     <div className={`size-2 rounded-full ${store.status === 'active' ? 'bg-green-500' :
