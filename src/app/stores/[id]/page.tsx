@@ -8,6 +8,7 @@ import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AssetForm } from "@/components/asset-form"
+import { SiteForm } from "@/components/site-form"
 import {
     Dialog,
     DialogContent,
@@ -139,6 +140,27 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                             fetchData()
                                         }}
                                         onCancel={() => setAssetDialogOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
+
+                            <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-8 gap-1">
+                                        <Plus className="size-3.5" />
+                                        Edit Site
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[600px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Edit Site Details</DialogTitle>
+                                    </DialogHeader>
+                                    <SiteForm
+                                        site={store}
+                                        onSuccess={() => {
+                                            fetchData()
+                                        }}
+                                        onCancel={() => { }}
                                     />
                                 </DialogContent>
                             </Dialog>

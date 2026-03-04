@@ -14,6 +14,9 @@ interface Store {
     lng: number
     status: string
     region: string
+    brand_st_pierres?: boolean
+    brand_bento_bowl?: boolean
+    brand_k10?: boolean
 }
 
 interface StoreListProps {
@@ -48,15 +51,34 @@ export function StoreList({ stores, onStoreClick, selectedStoreId }: StoreListPr
                         <div
                             key={store.id}
                             className={`flex flex-col rounded-xl overflow-hidden border transition-all ${selectedStoreId === store.id
-                                    ? "bg-muted/50 border-primary ring-1 ring-primary/20 shadow-md"
-                                    : "bg-card hover:border-muted-foreground/30 border-border"
+                                ? "bg-muted/50 border-primary ring-1 ring-primary/20 shadow-md"
+                                : "bg-card hover:border-muted-foreground/30 border-border"
                                 }`}
                         >
                             <div className="p-3 border-b border-muted/50">
                                 <div className="flex items-start justify-between gap-2 mb-1">
-                                    <h3 className="font-bold text-sm tracking-tight leading-tight">{store.name}</h3>
+                                    <div className="flex flex-col gap-1">
+                                        <h3 className="font-bold text-sm tracking-tight leading-tight">{store.name}</h3>
+                                        <div className="flex items-center gap-1">
+                                            {store.brand_st_pierres !== false && (
+                                                <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm">
+                                                    <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                                </div>
+                                            )}
+                                            {store.brand_bento_bowl && (
+                                                <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm">
+                                                    <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                                </div>
+                                            )}
+                                            {store.brand_k10 && (
+                                                <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm">
+                                                    <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className={`size-2.5 rounded-full shrink-0 mt-1 ${store.status === 'active' ? 'bg-green-500' :
-                                            store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'
+                                        store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'
                                         }`} />
                                 </div>
                                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
