@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Search, MapPin } from "lucide-react"
 
 interface SiteFormProps {
     site?: any
@@ -33,7 +34,43 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         brand_k10: site?.brand_k10 || false,
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
+        lat: site?.lat || null,
+        lng: site?.lng || null,
     })
+
+    // Geocoding State
+    const [searching, setSearching] = useState(false)
+    const [suggestions, setSuggestions] = useState<any[]>([])
+
+    const lookupAddress = async () => {
+        if (!formData.address || formData.address.length < 5) {
+            toast.error("Please enter a more specific address to search")
+            return
+        }
+
+        setSearching(true)
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.address)}&limit=5&countrycodes=nz`)
+            const data = await response.json()
+            setSuggestions(data)
+            if (data.length === 0) toast.error("No locations found. Try adding more detail.")
+        } catch (error) {
+            toast.error("Error connecting to geocoding service")
+        } finally {
+            setSearching(false)
+        }
+    }
+
+    const selectAddress = (suggestion: any) => {
+        setFormData({
+            ...formData,
+            address: suggestion.display_name,
+            lat: parseFloat(suggestion.lat),
+            lng: parseFloat(suggestion.lon)
+        })
+        setSuggestions([])
+        toast.success("Location verified & coordinates captured!")
+    }
 
     // State for structured hours
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -244,13 +281,42 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Address</Label>
-                    <Input
-                        id="address"
-                        placeholder="123 Example St, Auckland"
-                        value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    />
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Address *</Label>
+                        {formData.lat && formData.lng && (
+                            <Badge variant="outline" className="h-4 text-[8px] bg-green-50 text-green-700 border-green-200">LOCATION VERIFIED</Badge>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <Input
+                                id="address"
+                                placeholder="Start typing address..."
+                                value={formData.address}
+                                onChange={(e) => setFormData({ ...formData, address: e.target.value, lat: null, lng: null })}
+                                className={formData.lat ? 'border-green-200 bg-green-50/20' : ''}
+                            />
+                            {searching && <Loader2 className="absolute right-3 top-2.5 size-4 animate-spin text-muted-foreground" />}
+                        </div>
+                        <Button type="button" size="sm" onClick={lookupAddress} disabled={searching} className="h-10">
+                            Lookup
+                        </Button>
+                    </div>
+
+                    {suggestions.length > 0 && (
+                        <div className="mt-1 border rounded-lg bg-white shadow-xl max-h-40 overflow-y-auto z-50 divide-y">
+                            {suggestions.map((s, i) => (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    className="w-full text-left p-2 hover:bg-muted text-xs transition-colors"
+                                    onClick={() => selectAddress(s)}
+                                >
+                                    {s.display_name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

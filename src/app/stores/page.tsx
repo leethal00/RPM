@@ -203,9 +203,17 @@ export default function StoresListPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
-                                            <div className="flex items-center gap-1">
-                                                <MapPin className="size-3 shrink-0" />
-                                                <span className="truncate max-w-[200px]">{store.address || "—"}</span>
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1">
+                                                    <MapPin className="size-3 shrink-0" />
+                                                    <span className="truncate max-w-[200px]">{store.address || "—"}</span>
+                                                </div>
+                                                {store.lat && store.lng && (
+                                                    <div className="flex items-center gap-1 text-[9px] text-green-600 font-bold uppercase tracking-tight">
+                                                        <div className="size-1.5 rounded-full bg-green-500" />
+                                                        Verified Location
+                                                    </div>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell className="hidden lg:table-cell">

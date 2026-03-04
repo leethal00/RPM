@@ -97,7 +97,7 @@ export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom =
                 />
                 <ChangeView center={center} zoom={zoom} />
                 <ResetViewControl nzCenter={nzCenter} nzZoom={nzZoom} />
-                {stores.map((store) => (
+                {stores.filter(s => s.lat && s.lng).map((store) => (
                     <Marker
                         key={store.id}
                         position={[store.lat, store.lng]}
