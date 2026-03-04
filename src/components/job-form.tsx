@@ -27,12 +27,15 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [fetchingAssets, setFetchingAssets] = useState(true)
+    const [fetchingProjects, setFetchingProjects] = useState(true)
     const [assets, setAssets] = useState<any[]>([])
+    const [projects, setProjects] = useState<any[]>([])
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [previews, setPreviews] = useState<string[]>([])
 
     const [formData, setFormData] = useState({
         asset_id: "",
+        project_id: "",
         job_type: "fault",
         title: "",
         description: "",
@@ -40,20 +43,29 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     })
 
     useEffect(() => {
-        async function fetchAssets() {
-            const { data, error } = await supabase
+        async function fetchData() {
+            setFetchingAssets(true)
+            setFetchingProjects(true)
+
+            // Fetch Assets
+            const { data: assetsData } = await supabase
                 .from('assets')
                 .select('id, name')
                 .eq('store_id', storeId)
 
-            if (error) {
-                toast.error("Failed to load assets")
-            } else {
-                setAssets(data || [])
-            }
+            setAssets(assetsData || [])
             setFetchingAssets(false)
+
+            // Fetch Projects
+            const { data: projectsData } = await supabase
+                .from('projects')
+                .select('id, name')
+                .order('name')
+
+            setProjects(projectsData || [])
+            setFetchingProjects(false)
         }
-        fetchAssets()
+        fetchData()
     }, [storeId, supabase])
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,6 +126,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             const insertData: any = {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
+                project_id: formData.project_id || null, // Link to strategic HQ project
                 job_type: formData.job_type,
                 title: formData.title,
                 description: formData.description,
@@ -193,25 +206,48 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 </div>
             </div>
 
-            <div className="space-y-2">
-                <Label htmlFor="asset_id">Affected Asset (Optional)</Label>
-                <Select
-                    value={formData.asset_id}
-                    onValueChange={(v) => setFormData({ ...formData, asset_id: v })}
-                    disabled={fetchingAssets}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder={fetchingAssets ? "Loading assets..." : "Select an asset"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">No specific asset (Site-wide issue)</SelectItem>
-                        {assets.map((asset) => (
-                            <SelectItem key={asset.id} value={asset.id}>
-                                {asset.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="asset_id">Affected Asset (Optional)</Label>
+                    <Select
+                        value={formData.asset_id}
+                        onValueChange={(v) => setFormData({ ...formData, asset_id: v })}
+                        disabled={fetchingAssets}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder={fetchingAssets ? "Loading assets..." : "Select an asset"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="none">No specific asset (Site-wide issue)</SelectItem>
+                            {assets.map((asset) => (
+                                <SelectItem key={asset.id} value={asset.id}>
+                                    {asset.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="project_id">HQ Strategic Project (Optional)</Label>
+                    <Select
+                        value={formData.project_id}
+                        onValueChange={(v) => setFormData({ ...formData, project_id: v })}
+                        disabled={fetchingProjects}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder={fetchingProjects ? "Loading projects..." : "Link to capital project"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">No linked project (Stand-alone repair)</SelectItem>
+                            {projects.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                    {p.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div className="space-y-2">

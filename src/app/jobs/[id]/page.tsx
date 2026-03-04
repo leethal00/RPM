@@ -13,7 +13,8 @@ import {
     AlertTriangle,
     CheckCircle2,
     Hammer,
-    PlayCircle
+    PlayCircle,
+    BarChart3
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -41,6 +42,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           *,
           stores ( name, address ),
           assets ( name ),
+          projects ( name, id ),
           reporter:reported_by ( name ),
           assignee:assigned_to ( name )
         `)
@@ -208,6 +210,28 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                 )}
                             </CardContent>
                         </Card>
+
+                        {job.projects && (
+                            <Card className="border-primary/20 bg-primary/5">
+                                <CardHeader>
+                                    <CardTitle className="text-sm font-medium italic">HQ Strategic Project</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-primary/20 rounded-lg">
+                                            <BarChart3 className="size-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold">{job.projects.name}</p>
+                                            <p className="text-xs text-muted-foreground italic">Linked to capital infrastructure project</p>
+                                        </div>
+                                    </div>
+                                    <Button variant="link" asChild className="text-primary font-bold">
+                                        <Link href={`/projects/${job.projects.id}`}>View Project Stream</Link>
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
 
                     <div className="space-y-6">
