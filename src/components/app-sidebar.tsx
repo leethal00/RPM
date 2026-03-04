@@ -38,6 +38,16 @@ import { useRouter } from "next/navigation"
 
 const navItems = [
     {
+        title: "Map View",
+        url: "/",
+        icon: Map,
+    },
+    {
+        title: "Sites / List",
+        url: "/stores",
+        icon: Building2,
+    },
+    {
         title: "Analysis",
         url: "/analysis",
         icon: BarChart3,
@@ -148,36 +158,7 @@ export function AppSidebar() {
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
-                <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-                    <SidebarGroupLabel>Sites / List</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu className="max-h-[400px] overflow-y-auto no-scrollbar">
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="All Sites Map">
-                                    <a href="/">
-                                        <Building2 className="size-4 text-primary/70" />
-                                        <span className="font-bold">GLOBAL MAP VIEW</span>
-                                    </a>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            {stores.map((store) => (
-                                <SidebarMenuItem key={store.id}>
-                                    <SidebarMenuButton asChild tooltip={store.name}>
-                                        <a href={`/stores/${store.id}`}>
-                                            <Building2 className="size-4 text-primary/70" />
-                                            <span className="truncate">{store.name}</span>
-                                        </a>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                            {stores.length === 0 && !loading && (
-                                <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                                    No sites found
-                                </div>
-                            )}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+
 
                 <SidebarGroup>
                     <SidebarGroupLabel>Strategic</SidebarGroupLabel>
