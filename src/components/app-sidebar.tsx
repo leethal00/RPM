@@ -43,6 +43,11 @@ const navItems = [
         icon: Map,
     },
     {
+        title: "Sites / List",
+        url: "/stores",
+        icon: Building2,
+    },
+    {
         title: "Analysis",
         url: "/analysis",
         icon: BarChart3,
