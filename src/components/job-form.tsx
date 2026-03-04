@@ -1,0 +1,201 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
+
+interface JobFormProps {
+    storeId: string
+    onSuccess?: () => void
+}
+
+export function JobForm({ storeId, onSuccess }: JobFormProps) {
+    const router = useRouter()
+    const supabase = createClient()
+    const [loading, setLoading] = useState(false)
+    const [fetchingAssets, setFetchingAssets] = useState(true)
+    const [assets, setAssets] = useState<any[]>([])
+
+    const [formData, setFormData] = useState({
+        asset_id: "",
+        job_type: "fault",
+        title: "",
+        description: "",
+        severity: "medium",
+    })
+
+    useEffect(() => {
+        async function fetchAssets() {
+            const { data, error } = await supabase
+                .from('assets')
+                .select('id, name')
+                .eq('store_id', storeId)
+
+            if (error) {
+                toast.error("Failed to load assets")
+            } else {
+                setAssets(data || [])
+            }
+            setFetchingAssets(false)
+        }
+        fetchAssets()
+    }, [storeId, supabase])
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoading(true)
+
+        try {
+            const { data: userData } = await supabase.auth.getUser()
+            const userId = userData.user?.id || null
+
+            const insertData: any = {
+                store_id: storeId,
+                asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
+                job_type: formData.job_type,
+                title: formData.title,
+                description: formData.description,
+                severity: formData.severity,
+                status: 'open'
+            }
+
+            if (userId) {
+                insertData.reported_by = userId
+            }
+
+            const { error } = await supabase
+                .from('jobs')
+                .insert(insertData)
+
+            if (error) throw error
+
+            toast.success("Job created successfully")
+            if (onSuccess) {
+                onSuccess()
+            } else {
+                router.push(`/stores/${storeId}`)
+                router.refresh()
+            }
+        } catch (error: any) {
+            toast.error(error.message || "Failed to create job")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto p-6 bg-card rounded-xl border shadow-sm">
+            <div className="space-y-2">
+                <h2 className="text-xl font-bold tracking-tight">Report a New Job</h2>
+                <p className="text-sm text-muted-foreground italic">Fill in the details below to log a fault or maintenance request.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="job_type">Job Type</Label>
+                    <Select
+                        value={formData.job_type}
+                        onValueChange={(v) => setFormData({ ...formData, job_type: v })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="fault">Fault / Repair</SelectItem>
+                            <SelectItem value="maintenance">Preventative Maintenance</SelectItem>
+                            <SelectItem value="project">New Installation / Project</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="severity">Severity</Label>
+                    <Select
+                        value={formData.severity}
+                        onValueChange={(v) => setFormData({ ...formData, severity: v })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select severity" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="low">Low (Non-urgent)</SelectItem>
+                            <SelectItem value="medium">Medium (Standard)</SelectItem>
+                            <SelectItem value="high">High (Priority / Urgent)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="asset_id">Affected Asset (Optional)</Label>
+                <Select
+                    value={formData.asset_id}
+                    onValueChange={(v) => setFormData({ ...formData, asset_id: v })}
+                    disabled={fetchingAssets}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder={fetchingAssets ? "Loading assets..." : "Select an asset"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">No specific asset (Site-wide issue)</SelectItem>
+                        {assets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.id}>
+                                {asset.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="title">Job Summary / Title</Label>
+                <Input
+                    id="title"
+                    placeholder="e.g. Broken Pylon Light, Digital Menu Black Screen"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    required
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="description">Detailed Description</Label>
+                <Textarea
+                    id="description"
+                    placeholder="Please describe the issue in detail..."
+                    rows={4}
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.back()}
+                    disabled={loading}
+                >
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Create Job
+                </Button>
+            </div>
+        </form>
+    )
+}
