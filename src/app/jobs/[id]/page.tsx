@@ -157,10 +157,33 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                             <CardHeader>
                                 <CardTitle className="text-sm font-medium italic">Issue Description</CardTitle>
                             </CardHeader>
-                            <CardContent>
-                                <p className="text-base leading-relaxed text-foreground min-h-[100px]">
+                            <CardContent className="space-y-6">
+                                <p className="text-base leading-relaxed text-foreground">
                                     {job.description || "No description provided."}
                                 </p>
+
+                                {job.media_urls && job.media_urls.length > 0 && (
+                                    <div className="pt-4 border-t">
+                                        <h3 className="text-sm font-medium italic mb-3">Fault Photos</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {job.media_urls.map((url: string, idx: number) => (
+                                                <a
+                                                    key={idx}
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="relative aspect-square rounded-lg overflow-hidden border bg-muted hover:opacity-80 transition-opacity"
+                                                >
+                                                    <img
+                                                        src={url}
+                                                        alt={`Fault ${idx + 1}`}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 

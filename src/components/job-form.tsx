@@ -15,7 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
 
 interface JobFormProps {
     storeId: string
@@ -28,6 +28,8 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const [loading, setLoading] = useState(false)
     const [fetchingAssets, setFetchingAssets] = useState(true)
     const [assets, setAssets] = useState<any[]>([])
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+    const [previews, setPreviews] = useState<string[]>([])
 
     const [formData, setFormData] = useState({
         asset_id: "",
@@ -54,6 +56,28 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
         fetchAssets()
     }, [storeId, supabase])
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || [])
+        if (files.length + selectedFiles.length > 5) {
+            toast.error("Maximum 5 images allowed")
+            return
+        }
+
+        setSelectedFiles(prev => [...prev, ...files])
+
+        const newPreviews = files.map(file => URL.createObjectURL(file))
+        setPreviews(prev => [...prev, ...newPreviews])
+    }
+
+    const removeFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+        setPreviews(prev => {
+            const newPreviews = [...prev]
+            URL.revokeObjectURL(newPreviews[index])
+            return newPreviews.filter((_, i) => i !== index)
+        })
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -62,6 +86,31 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             const { data: userData } = await supabase.auth.getUser()
             const userId = userData.user?.id || null
 
+            // 1. Upload Images
+            const media_urls: string[] = []
+            for (const file of selectedFiles) {
+                const fileExt = file.name.split('.').pop()
+                const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
+                const filePath = `${storeId}/${fileName}`
+
+                const { error: uploadError, data } = await supabase.storage
+                    .from('job-attachments')
+                    .upload(filePath, file)
+
+                if (uploadError) {
+                    console.error('Upload error:', uploadError)
+                    continue
+                }
+
+                if (data) {
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('job-attachments')
+                        .getPublicUrl(data.path)
+                    media_urls.push(publicUrl)
+                }
+            }
+
+            // 2. Insert Job
             const insertData: any = {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
@@ -69,7 +118,8 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 title: formData.title,
                 description: formData.description,
                 severity: formData.severity,
-                status: 'open'
+                status: 'open',
+                media_urls: media_urls
             }
 
             if (userId) {
@@ -82,7 +132,11 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
 
             if (error) throw error
 
-            toast.success("Job created successfully")
+            toast.success("Job created successfully with " + media_urls.length + " photos")
+
+            // Cleanup previews
+            previews.forEach(url => URL.revokeObjectURL(url))
+
             if (onSuccess) {
                 onSuccess()
             } else {
@@ -169,6 +223,41 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     required
                 />
+            </div>
+
+            <div className="space-y-2">
+                <Label>Attach Photos (Optional)</Label>
+                <div className="flex flex-wrap gap-4 mt-2">
+                    {previews.map((url, index) => (
+                        <div key={url} className="relative group w-24 h-24 border rounded-lg overflow-hidden bg-muted">
+                            <img src={url} alt="Preview" className="w-full h-full object-cover" />
+                            <button
+                                type="button"
+                                onClick={() => removeFile(index)}
+                                className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <X className="size-3" />
+                            </button>
+                        </div>
+                    ))}
+                    {selectedFiles.length < 5 && (
+                        <div className="relative">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleFileChange}
+                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                id="photo-upload"
+                            />
+                            <div className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-muted rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all">
+                                <Camera className="size-6 text-muted-foreground mb-1" />
+                                <span className="text-[10px] font-medium text-muted-foreground">Add Photo</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <p className="text-[10px] text-muted-foreground italic">Up to 5 images. Max 5MB each.</p>
             </div>
 
             <div className="space-y-2">
