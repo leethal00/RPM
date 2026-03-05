@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Phone, User, Calendar } from "lucide-react"
+import { MapPin, Phone, User, Calendar, Heart } from "lucide-react"
 
 interface StoreHeaderProps {
     store: {
@@ -16,6 +16,7 @@ interface StoreHeaderProps {
         brand_k10?: boolean
         lat?: number
         lng?: number
+        maintenance_score?: number
     }
 }
 
@@ -59,6 +60,19 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                                 DRIVE THRU
                             </Badge>
                         )}
+
+                        <Badge
+                            variant="outline"
+                            className={`
+                                font-black text-[10px] tracking-widest uppercase gap-1 px-2 py-1 border-2
+                                ${store.maintenance_score && store.maintenance_score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    store.maintenance_score && store.maintenance_score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                        'bg-red-50 text-red-700 border-red-200'}
+                            `}
+                        >
+                            <Heart className="size-3 fill-current" />
+                            Score: {store.maintenance_score ?? 100}
+                        </Badge>
                     </div>
                 </div>
                 <div className="flex flex-col gap-2 text-muted-foreground">

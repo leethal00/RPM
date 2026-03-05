@@ -28,14 +28,17 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const [loading, setLoading] = useState(false)
     const [fetchingAssets, setFetchingAssets] = useState(true)
     const [fetchingProjects, setFetchingProjects] = useState(true)
+    const [fetchingVendors, setFetchingVendors] = useState(true)
     const [assets, setAssets] = useState<any[]>([])
     const [projects, setProjects] = useState<any[]>([])
+    const [vendors, setVendors] = useState<any[]>([])
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [previews, setPreviews] = useState<string[]>([])
 
     const [formData, setFormData] = useState({
         asset_id: "",
         project_id: "",
+        vendor_id: "",
         job_type: "fault",
         title: "",
         description: "",
@@ -46,6 +49,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
         async function fetchData() {
             setFetchingAssets(true)
             setFetchingProjects(true)
+            setFetchingVendors(true)
 
             // Fetch Assets
             const { data: assetsData } = await supabase
@@ -64,6 +68,16 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
 
             setProjects(projectsData || [])
             setFetchingProjects(false)
+
+            // Fetch Vendors
+            const { data: vendorsData } = await supabase
+                .from('vendors')
+                .select('id, name, trade')
+                .eq('status', 'active')
+                .order('name')
+
+            setVendors(vendorsData || [])
+            setFetchingVendors(false)
         }
         fetchData()
     }, [storeId, supabase])
@@ -127,6 +141,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
                 project_id: formData.project_id || null, // Link to strategic HQ project
+                vendor_id: formData.vendor_id || null, // Assign to specialized vendor
                 job_type: formData.job_type,
                 title: formData.title,
                 description: formData.description,
@@ -227,7 +242,9 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                         </SelectContent>
                     </Select>
                 </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="project_id">HQ Strategic Project (Optional)</Label>
                     <Select
@@ -243,6 +260,27 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                             {projects.map((p) => (
                                 <SelectItem key={p.id} value={p.id}>
                                     {p.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="vendor_id">Assign Vendor / Contractor</Label>
+                    <Select
+                        value={formData.vendor_id}
+                        onValueChange={(v) => setFormData({ ...formData, vendor_id: v })}
+                        disabled={fetchingVendors}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder={fetchingVendors ? "Loading vendors..." : "Select specialized contractor"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">Unassigned (Internal / TBD)</SelectItem>
+                            {vendors.map((v: any) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                    {v.name} ({v.trade})
                                 </SelectItem>
                             ))}
                         </SelectContent>

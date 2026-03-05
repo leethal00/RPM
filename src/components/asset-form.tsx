@@ -24,6 +24,9 @@ interface Asset {
     status?: string
     notes?: string
     service_interval_days?: number
+    pm_interval_months?: number
+    last_service_date?: string
+    next_service_date?: string
 }
 
 interface AssetFormProps {
@@ -45,7 +48,10 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         install_date: asset?.install_date || "",
         status: asset?.status || "active",
         notes: asset?.notes || "",
-        service_interval_days: asset?.service_interval_days?.toString() || "365"
+        service_interval_days: asset?.service_interval_days?.toString() || "365",
+        pm_interval_months: asset?.pm_interval_months?.toString() || "6",
+        last_service_date: asset?.last_service_date || "",
+        next_service_date: asset?.next_service_date || ""
     })
 
     useEffect(() => {
@@ -76,7 +82,11 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
             install_date: formData.install_date || null,
             status: formData.status,
             notes: formData.notes,
-            service_interval_days: parseInt(formData.service_interval_days) || 365
+            service_interval_days: parseInt(formData.service_interval_days) || 365,
+            pm_interval_months: parseInt(formData.pm_interval_months) || null,
+            last_service_date: formData.last_service_date || null,
+            next_service_date: formData.next_service_date || null,
+            pm_status: formData.pm_interval_months ? 'active' : 'not_applicable'
         }
 
         let error;
@@ -119,6 +129,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                 <div className="grid gap-2">
                     <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type *</Label>
                     <Select
+                        value={formData.asset_type_id}
                         onValueChange={(value) => setFormData({ ...formData, asset_type_id: value })}
                         required
                     >
@@ -146,13 +157,56 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="interval" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Service Interval (Days)</Label>
-                        <Input
-                            id="interval"
-                            type="number"
-                            value={formData.service_interval_days}
-                            onChange={(e) => setFormData({ ...formData, service_interval_days: e.target.value })}
-                        />
+                        <Label htmlFor="status" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
+                        <Select
+                            value={formData.status}
+                            onValueChange={(value) => setFormData({ ...formData, status: value })}
+                        >
+                            <SelectTrigger id="status">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="maintenance">Maintenance</SelectItem>
+                                <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
+                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Maintenance Scheduling</Label>
+
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="pm_interval" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">PM Interval (Months)</Label>
+                            <Input
+                                id="pm_interval"
+                                type="number"
+                                placeholder="e.g. 6"
+                                value={formData.pm_interval_months}
+                                onChange={(e) => setFormData({ ...formData, pm_interval_months: e.target.value })}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="last_service" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Last Service</Label>
+                            <Input
+                                id="last_service"
+                                type="date"
+                                value={formData.last_service_date}
+                                onChange={(e) => setFormData({ ...formData, last_service_date: e.target.value })}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="next_service" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Next Service</Label>
+                            <Input
+                                id="next_service"
+                                type="date"
+                                value={formData.next_service_date}
+                                onChange={(e) => setFormData({ ...formData, next_service_date: e.target.value })}
+                                className="border-primary/20 bg-primary/5 font-bold"
+                            />
+                        </div>
                     </div>
                 </div>
 

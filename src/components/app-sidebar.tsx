@@ -10,6 +10,8 @@ import {
     PlusCircle,
     Building2,
     Calendar,
+    Briefcase,
+    Hammer,
 } from "lucide-react"
 
 import {
@@ -53,14 +55,27 @@ const navItems = [
         icon: BarChart3,
     },
     {
-        title: "Job Logs",
+        title: "Active Jobs",
         url: "/jobs",
         icon: ClipboardList,
+    },
+    {
+        title: "PM Scheduler",
+        url: "/maintenance/pm",
+        icon: Hammer,
     },
     {
         title: "Maintenance",
         url: "/maintenance",
         icon: Calendar,
+    },
+]
+
+const supplyChainItems = [
+    {
+        title: "Vendors",
+        url: "/vendors",
+        icon: Briefcase,
     },
 ]
 
@@ -161,7 +176,25 @@ export function AppSidebar() {
 
 
                 <SidebarGroup>
-                    <SidebarGroupLabel>Strategic</SidebarGroupLabel>
+                    <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {supplyChainItems.map((item) => (
+                                <SidebarMenuItem key={item.title}>
+                                    <SidebarMenuButton asChild tooltip={item.title}>
+                                        <a href={item.url}>
+                                            <item.icon className="size-4" />
+                                            <span>{item.title}</span>
+                                        </a>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel>Strategic Portfolio</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {projectItems.map((item) => (

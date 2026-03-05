@@ -64,12 +64,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }, [id, supabase])
 
     const updateJobStatus = async (newStatus: string) => {
+        const updateData: any = { status: newStatus }
+
+        // SLA Tracking: Record when a job is first responded to (e.g., in_progress or assigned)
+        if ((newStatus === 'in_progress' || newStatus === 'assigned') && !job.responded_at) {
+            updateData.responded_at = new Date().toISOString()
+        }
+
+        // SLA Tracking: Record when a job is resolved
+        if (newStatus === 'resolved') {
+            updateData.resolved_at = new Date().toISOString()
+        } else {
+            updateData.resolved_at = null
+        }
+
         const { error } = await supabase
             .from('jobs')
-            .update({
-                status: newStatus,
-                resolved_at: newStatus === 'resolved' ? new Date().toISOString() : null
-            })
+            .update(updateData)
             .eq('id', id)
 
         if (error) {
