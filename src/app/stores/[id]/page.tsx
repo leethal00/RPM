@@ -9,6 +9,7 @@ import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AssetForm } from "@/components/asset-form"
 import { SiteForm } from "@/components/site-form"
+import { SitePhotoGallery } from "@/components/site-photo-gallery"
 import {
     Dialog,
     DialogContent,
@@ -185,6 +186,8 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                         <JobTimeline jobs={jobs} />
                     </TabsContent>
                 </Tabs>
+
+                <SitePhotoGallery storeId={id} />
             </div>
         </DashboardLayout>
     )
