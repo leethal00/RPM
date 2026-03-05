@@ -18,7 +18,8 @@ import {
     BarChart3,
     ArrowUpRight,
     Edit2,
-    Trash2
+    Trash2,
+    Building2
 } from "lucide-react"
 import Link from "next/link"
 import { JobTimeline } from "@/components/job-timeline"
@@ -49,10 +50,10 @@ export default function ProjectDetailPage({
 
     const fetchData = async () => {
         setLoading(true)
-        // Fetch Project
+        // Fetch Project with Site info
         const { data: projectData } = await supabase
             .from('projects')
-            .select('*')
+            .select('*, stores(name)')
             .eq('id', id)
             .single()
 
@@ -188,6 +189,12 @@ export default function ProjectDetailPage({
                             <Badge className={`${statusColors[project.status]} text-white text-[10px] black tracking-widest uppercase`}>
                                 {project.status.replace('_', ' ')}
                             </Badge>
+                            {project.stores && (
+                                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary flex items-center gap-1 bg-primary/5 uppercase tracking-widest px-2">
+                                    <Building2 className="size-3" />
+                                    {project.stores.name}
+                                </Badge>
+                            )}
                         </div>
                         <p className="text-muted-foreground italic max-w-2xl">{project.description || "Strategic capital expenditure initiative."}</p>
                     </div>

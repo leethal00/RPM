@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
     BarChart,
     Bar,
@@ -26,8 +28,11 @@ import {
     Clock,
     Filter,
     BarChart3,
-    Building2
+    Building2,
+    Layers,
+    ArrowUpRight
 } from "lucide-react"
+import Link from "next/link"
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
 
@@ -61,11 +66,12 @@ export default function AnalyticsPage() {
                     stores(name, brand_st_pierres, brand_bento_bowl, brand_k10)
                 `)
 
-            // 2. Fetch all projects
+            // 2. Fetch all projects with store info
             const { data: allProjects } = await supabase
                 .from('projects')
-                .select('*')
+                .select('*, stores(name)')
                 .neq('status', 'archived')
+                .order('created_at', { ascending: false })
 
             if (!allJobs || !allProjects) return
 
@@ -140,6 +146,7 @@ export default function AnalyticsPage() {
                 jobsOverTime,
                 jobsByBrand,
                 projectBudgetStats,
+                recentProjects: allProjects,
                 totalBudget: allProjects.reduce((acc: number, p: any) => acc + (p.budget || 0), 0)
             })
             setLoading(false)
@@ -319,7 +326,7 @@ export default function AnalyticsPage() {
                     </Card>
 
                     <Card className="md:col-span-2 shadow-sm border-sidebar-border">
-                        <CardHeader>
+                        <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
                                 <TrendingUp className="size-4 text-primary" />
                                 Reporting Trend (Last 7 Days)
@@ -344,6 +351,51 @@ export default function AnalyticsPage() {
                                     />
                                 </LineChart>
                             </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="md:col-span-2 shadow-sm border-sidebar-border overflow-hidden">
+                        <CardHeader className="bg-muted/30 pb-3 border-b">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                    <Layers className="size-4 text-primary" />
+                                    Recent HQ Initiatives
+                                </CardTitle>
+                                <Button variant="link" size="sm" asChild className="text-[10px] font-bold uppercase tracking-widest h-auto p-0">
+                                    <Link href="/projects">View Portfolio</Link>
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="divide-y divide-sidebar-border">
+                                {stats.recentProjects?.length > 0 ? (
+                                    stats.recentProjects.slice(0, 5).map((project: any) => (
+                                        <div key={project.id} className="p-4 hover:bg-muted/20 transition-colors flex items-center justify-between">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-sm">{project.name}</span>
+                                                    <Badge variant="outline" className="text-[9px] uppercase font-black px-1.5 h-4">
+                                                        {project.status.replace('_', ' ')}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground italic">
+                                                    <Building2 className="size-3" />
+                                                    {project.stores?.name || "General HQ"} • {new Date(project.created_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                            <Button variant="ghost" size="icon" asChild className="size-7 rounded-full">
+                                                <Link href={`/projects/${project.id}`}>
+                                                    <ArrowUpRight className="size-4" />
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-8 text-center text-muted-foreground italic text-sm">
+                                        No active strategic projects found.
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>

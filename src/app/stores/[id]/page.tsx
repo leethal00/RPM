@@ -8,6 +8,7 @@ import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AssetForm } from "@/components/asset-form"
+import { ProjectCard } from "@/components/project-card"
 import { SiteForm } from "@/components/site-form"
 import { SitePhotoGallery } from "@/components/site-photo-gallery"
 import {
@@ -26,6 +27,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
     const [store, setStore] = useState<any>(null)
     const [assets, setAssets] = useState<any[]>([])
     const [jobs, setJobs] = useState<any[]>([])
+    const [projects, setProjects] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
@@ -57,9 +59,25 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
             .eq('store_id', id)
             .order('created_at', { ascending: false })
 
+        // Fetch Projects linked to this store
+        const { data: projectData } = await supabase
+            .from('projects')
+            .select(`
+                *,
+                jobs (
+                    id,
+                    status,
+                    budget_impact
+                )
+            `)
+            .eq('store_id', id)
+            .neq('status', 'archived')
+            .order('created_at', { ascending: false })
+
         setStore(storeData)
         setAssets(assetData || [])
         setJobs(jobData || [])
+        setProjects(projectData || [])
         setLoading(false)
     }
 
@@ -120,6 +138,18 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
                             >
                                 History
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="projects"
+                                className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
+                            >
+                                {projects.length > 0 && (
+                                    <span className="absolute top-2 right-1 flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                                    </span>
+                                )}
+                                Strategy
                             </TabsTrigger>
                         </TabsList>
 
@@ -184,6 +214,23 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
 
                     <TabsContent value="jobs" className="pt-6">
                         <JobTimeline jobs={jobs} />
+                    </TabsContent>
+
+                    <TabsContent value="projects" className="pt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {projects.map((project) => (
+                                <ProjectCard
+                                    key={project.id}
+                                    project={project}
+                                    viewMode="grid"
+                                />
+                            ))}
+                            {projects.length === 0 && (
+                                <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
+                                    <p className="text-muted-foreground italic">No strategic HQ projects linked to this site.</p>
+                                </div>
+                            )}
+                        </div>
                     </TabsContent>
                 </Tabs>
 

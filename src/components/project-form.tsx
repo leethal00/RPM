@@ -24,6 +24,7 @@ interface Project {
     budget?: number
     start_date?: string
     end_date?: string
+    store_id?: string
 }
 
 interface ProjectFormProps {
@@ -42,7 +43,21 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         status: project?.status || "planning",
         budget: project?.budget?.toString() || "",
         start_date: project?.start_date || "",
-        end_date: project?.end_date || ""
+        end_date: project?.end_date || "",
+        store_id: project?.store_id || ""
+    })
+
+    const [stores, setStores] = useState<any[]>([])
+    const [fetchingStores, setFetchingStores] = useState(true)
+
+    useState(() => {
+        async function fetchStores() {
+            setFetchingStores(true)
+            const { data } = await supabase.from('stores').select('id, name').order('name')
+            setStores(data || [])
+            setFetchingStores(false)
+        }
+        fetchStores()
     })
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -64,6 +79,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
             budget: parseFloat(formData.budget) || 0,
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
+            store_id: formData.store_id || null,
         }
 
         if (!project) {
@@ -138,6 +154,27 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                             onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
                         />
                     </div>
+                </div>
+
+                <div className="grid gap-2">
+                    <Label htmlFor="store_id" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Linked Site (Optional)</Label>
+                    <Select
+                        value={formData.store_id}
+                        onValueChange={(v) => setFormData({ ...formData, store_id: v })}
+                        disabled={fetchingStores}
+                    >
+                        <SelectTrigger id="store_id">
+                            <SelectValue placeholder={fetchingStores ? "Loading stores..." : "Select site (optional)"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">General Strategic HQ (No link)</SelectItem>
+                            {stores.map((store) => (
+                                <SelectItem key={store.id} value={store.id}>
+                                    {store.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
