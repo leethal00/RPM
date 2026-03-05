@@ -92,7 +92,6 @@ export function AppSidebar() {
     const router = useRouter()
     const [user, setUser] = React.useState<any>(null)
     const [profile, setProfile] = React.useState<any>(null)
-    const [stores, setStores] = React.useState<any[]>([])
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
@@ -108,13 +107,6 @@ export function AppSidebar() {
                     .eq('id', user.id)
                     .single()
                 setProfile(profileData)
-
-                // Fetch Stores
-                const { data: storesData } = await supabase
-                    .from('stores')
-                    .select('id, name, brand_st_pierres, brand_bento_bowl, brand_k10')
-                    .order('name')
-                setStores(storesData || [])
             }
             setLoading(false)
         }
@@ -211,38 +203,6 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-                {stores.length > 0 && (
-                    <SidebarGroup>
-                        <SidebarGroupLabel>Sites Portfolio</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                {stores.map((store) => (
-                                    <SidebarMenuItem key={store.id}>
-                                        <SidebarMenuButton asChild tooltip={store.name}>
-                                            <a href={`/stores/${store.id}`} className="flex items-center justify-between w-full">
-                                                <div className="flex items-center gap-2 overflow-hidden">
-                                                    <Building2 className="size-4 shrink-0" />
-                                                    <span className="truncate">{store.name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                                                    {store.brand_st_pierres !== false && (
-                                                        <img src="/brands/st-pierres.png" alt="S" className="h-3 w-auto" />
-                                                    )}
-                                                    {store.brand_bento_bowl && (
-                                                        <img src="/brands/bento-bowl.png" alt="B" className="h-3 w-auto" />
-                                                    )}
-                                                    {store.brand_k10 && (
-                                                        <img src="/brands/k10.png" alt="K" className="h-3 w-auto" />
-                                                    )}
-                                                </div>
-                                            </a>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                ))}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                )}
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border p-4">
                 <SidebarMenu>
