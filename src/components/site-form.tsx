@@ -26,6 +26,7 @@ interface SiteFormProps {
 export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
+    const [regions, setRegions] = useState<any[]>([])
     const [clientId, setClientId] = useState<string | null>(site?.client_id || null)
 
     // Form State
@@ -138,6 +139,17 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         getClientId()
     }, [supabase])
 
+    useEffect(() => {
+        async function fetchRegions() {
+            const { data } = await supabase
+                .from('regions')
+                .select('name')
+                .order('name')
+            setRegions(data || [])
+        }
+        fetchRegions()
+    }, [supabase])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -223,11 +235,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             <SelectValue placeholder="Select a region" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Auckland">Auckland</SelectItem>
-                            <SelectItem value="Wellington">Wellington</SelectItem>
-                            <SelectItem value="Christchurch">Christchurch</SelectItem>
-                            <SelectItem value="North Island Regional">North Island Regional</SelectItem>
-                            <SelectItem value="South Island Regional">South Island Regional</SelectItem>
+                            {regions.map((r) => (
+                                <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>

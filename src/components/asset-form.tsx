@@ -127,24 +127,52 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type *</Label>
+                    <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type Hierarchy *</Label>
                     <Select
                         value={formData.asset_type_id}
                         onValueChange={(value) => setFormData({ ...formData, asset_type_id: value })}
                         required
                     >
                         <SelectTrigger id="type">
-                            <SelectValue placeholder="Select asset type" />
+                            <SelectValue placeholder="Select asset classification" />
                         </SelectTrigger>
                         <SelectContent>
                             {assetTypes.map((type) => (
                                 <SelectItem key={type.id} value={type.id}>
-                                    {type.label}
+                                    <div className="flex flex-col text-left">
+                                        <span className="font-bold">{type.label}</span>
+                                        {(type.sub_cat_1 || type.sub_cat_2 || type.sub_cat_3) && (
+                                            <span className="text-[10px] text-muted-foreground leading-tight">
+                                                {[type.sub_cat_1, type.sub_cat_2, type.sub_cat_3].filter(Boolean).join(" > ")}
+                                            </span>
+                                        )}
+                                    </div>
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                 </div>
+
+                {formData.asset_type_id && (() => {
+                    const selectedType = assetTypes.find(t => t.id === formData.asset_type_id);
+                    if (!selectedType) return null;
+                    return (
+                        <div className="grid grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg border border-dashed">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 1</span>
+                                <span className="text-xs font-semibold">{selectedType.sub_cat_1 || "—"}</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 2</span>
+                                <span className="text-xs font-semibold">{selectedType.sub_cat_2 || "—"}</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 3</span>
+                                <span className="text-xs font-semibold">{selectedType.sub_cat_3 || "—"}</span>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">

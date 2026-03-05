@@ -36,7 +36,8 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
+import Link from "next/link"
 
 const navItems = [
     {
@@ -69,6 +70,11 @@ const navItems = [
         url: "/maintenance",
         icon: Calendar,
     },
+    {
+        title: "Settings",
+        url: "/settings",
+        icon: Settings,
+    },
 ]
 
 const supplyChainItems = [
@@ -90,6 +96,7 @@ const projectItems = [
 export function AppSidebar() {
     const supabase = createClient()
     const router = useRouter()
+    const pathname = usePathname()
     const [user, setUser] = React.useState<any>(null)
     const [profile, setProfile] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
@@ -154,11 +161,11 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {navItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title}>
-                                        <a href={item.url}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                        <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
