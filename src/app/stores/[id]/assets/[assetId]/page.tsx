@@ -128,8 +128,8 @@ export default function AssetDetailPage({
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div className="flex flex-col gap-2 font-primary">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-3xl font-bold tracking-tight">{asset.name}</h1>
-                            <Badge variant="outline" className="uppercase">{asset.asset_types?.label}</Badge>
+                            <h1 className="text-3xl font-bold tracking-tight">{asset.asset_types?.label || "Unidentified Asset"}</h1>
+                            <Badge variant="outline" className="uppercase">{asset.asset_group}</Badge>
                         </div>
                         <p className="text-muted-foreground">{asset.stores?.name} • Site Asset</p>
                     </div>
@@ -197,15 +197,19 @@ export default function AssetDetailPage({
                                             <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Service Interval</p>
                                             <div className="flex items-center gap-2">
                                                 <Activity className="size-4 text-primary" />
-                                                <p className="text-sm">{asset.service_interval_days || 365} Days</p>
+                                                <p className="text-sm font-bold">18 Months (Standard)</p>
                                             </div>
                                         </div>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Asset Dimensions</p>
+                                            <p className="text-sm">{asset.asset_dimensions || "Not recorded"}</p>
+                                        </div>
                                         <div className="space-y-1 col-span-2">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Technical Notes</p>
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Asset Details (Free Format)</p>
                                             <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
                                                 <FileText className="size-4 text-primary mt-0.5" />
                                                 <p className="text-sm italic text-muted-foreground leading-relaxed">
-                                                    {asset.notes || "No technical notes available for this asset."}
+                                                    {asset.asset_details || "No technical details available for this asset."}
                                                 </p>
                                             </div>
                                         </div>
@@ -218,19 +222,48 @@ export default function AssetDetailPage({
                                     <CardTitle className="text-sm font-medium italic">Current Status</CardTitle>
                                 </CardHeader>
                                 <CardContent className="flex flex-col items-center justify-center py-6 gap-4">
-                                    <div className={`size-16 rounded-full flex items-center justify-center border-4 ${asset.status === 'active' || !asset.status ? 'border-green-500 bg-green-50' : 'border-amber-500 bg-amber-50'
-                                        }`}>
-                                        <div className={`size-8 rounded-full ${asset.status === 'active' || !asset.status ? 'bg-green-500' : 'bg-amber-500'
-                                            } animate-pulse`} />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-lg font-bold uppercase tracking-tight">
-                                            {asset.status || "Operational"}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Last Serviced: {asset.last_service_date ? new Date(asset.last_service_date).toLocaleDateString() : "Never"}
-                                        </p>
-                                    </div>
+                                    {(() => {
+                                        const hasActiveJob = jobs.some(j => j.status === 'open' || j.status === 'in_progress');
+                                        const isOverdue = asset.next_service_date && new Date(asset.next_service_date) < new Date();
+
+                                        let statusColor = "border-green-500 bg-green-50";
+                                        let dotColor = "bg-green-500";
+                                        let statusLabel = "HEALTHY";
+
+                                        if (hasActiveJob) {
+                                            statusColor = "border-red-500 bg-red-50";
+                                            dotColor = "bg-red-500";
+                                            statusLabel = "REPORTED FAULT";
+                                        } else if (isOverdue) {
+                                            statusColor = "border-orange-500 bg-orange-50";
+                                            dotColor = "bg-orange-500";
+                                            statusLabel = "PM OVERDUE";
+                                        }
+
+                                        return (
+                                            <>
+                                                <div className={`size-16 rounded-full flex items-center justify-center border-4 ${statusColor}`}>
+                                                    <div className={`size-8 rounded-full ${dotColor} animate-pulse`} />
+                                                </div>
+                                                <div className="text-center">
+                                                    <p className={`text-lg font-black uppercase tracking-tight ${dotColor.replace('bg-', 'text-')}`}>
+                                                        {statusLabel}
+                                                    </p>
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        <p className="text-[10px] uppercase font-bold text-muted-foreground">Next Service Target</p>
+                                                        <p className="text-sm font-black text-primary">
+                                                            {(() => {
+                                                                if (!asset.next_service_date) return "TBD";
+                                                                const d = new Date(asset.next_service_date);
+                                                                const quarter = Math.floor(d.getMonth() / 3) + 1;
+                                                                return `Q${quarter} ${d.getFullYear()}`;
+                                                            })()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </CardContent>
                             </Card>
                         </div>

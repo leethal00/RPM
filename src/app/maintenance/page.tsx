@@ -47,7 +47,7 @@ export default function MaintenanceDashboard() {
             .lte('next_due_at', now.toISOString())
             .order('next_due_at', { ascending: true })
 
-        // 2. Fetch Assets with intervals (Fallback/Base Maintenance)
+        // 2. Fetch Assets with Overdue next_service_date
         const { data: assetsData } = await supabase
             .from('assets')
             .select(`
@@ -55,35 +55,27 @@ export default function MaintenanceDashboard() {
                 stores (
                     name,
                     id
+                ),
+                asset_types (
+                    label
                 )
             `)
-            .not('service_interval_days', 'is', null)
+            .lte('next_service_date', now.toISOString())
 
-        // Filter and map overdue assets
-        const overdueAssets = (assetsData || []).filter((asset: any) => {
-            const referenceDate = asset.last_service_date || asset.install_date
-            if (!referenceDate || !asset.service_interval_days) return false
-
-            const nextDue = new Date(referenceDate)
-            nextDue.setDate(nextDue.getDate() + asset.service_interval_days)
-            return nextDue <= now
-        }).map((asset: any) => {
-            const referenceDate = asset.last_service_date || asset.install_date
-            const nextDue = new Date(referenceDate!)
-            nextDue.setDate(nextDue.getDate() + asset.service_interval_days!)
-
+        // Map overdue assets
+        const overdueAssets = (assetsData || []).map((asset: any) => {
             return {
-                id: `asset-main-${asset.id}`,
+                id: `asset-pm-${asset.id}`,
                 asset_id: asset.id,
-                task_name: 'General Service',
-                next_due_at: nextDue.toISOString(),
+                task_name: `Preventative Maintenance: ${asset.asset_types?.label || 'Asset'}`,
+                next_due_at: asset.next_service_date,
                 assets: {
-                    name: asset.name,
+                    name: asset.asset_types?.label || 'Asset',
                     id: asset.id,
                     stores: asset.stores
                 },
                 isAssetLevel: true,
-                frequency_days: asset.service_interval_days
+                frequency_days: 547 // 18 months standard
             }
         })
 
