@@ -19,7 +19,7 @@ interface SiteFormProps {
 export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const [clientId, setClientId] = useState<string | null>(null)
+    const [clientId, setClientId] = useState<string | null>(site?.client_id || null)
 
     // Form State
     const [formData, setFormData] = useState({
@@ -135,8 +135,12 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name || !clientId) {
-            toast.error("Please fill in required fields")
+        if (!formData.name || !formData.address || !clientId) {
+            if (!clientId) {
+                toast.error("System error: Client ID missing. Please refresh.")
+            } else {
+                toast.error("Please fill in all required fields (*)")
+            }
             setLoading(false)
             return
         }
@@ -188,6 +192,16 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
+                    />
+                </div>
+
+                <div className="grid gap-2">
+                    <Label htmlFor="region" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Region</Label>
+                    <Input
+                        id="region"
+                        placeholder="e.g. Auckland"
+                        value={formData.region}
+                        onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                     />
                 </div>
 
@@ -295,6 +309,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                                 value={formData.address}
                                 onChange={(e) => setFormData({ ...formData, address: e.target.value, lat: null, lng: null })}
                                 className={formData.lat ? 'border-green-200 bg-green-50/20' : ''}
+                                required
                             />
                             {searching && <Loader2 className="absolute right-3 top-2.5 size-4 animate-spin text-muted-foreground" />}
                         </div>
