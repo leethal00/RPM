@@ -51,6 +51,9 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                 ),
                 jobs (
                     status
+                ),
+                asset_photos (
+                    id
                 )
             `)
             .eq('store_id', id)

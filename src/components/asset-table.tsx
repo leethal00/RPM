@@ -23,6 +23,9 @@ interface Asset {
     jobs?: {
         status: string
     }[]
+    asset_photos?: {
+        id: string
+    }[]
 }
 
 interface AssetTableProps {
@@ -77,6 +80,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableHead className="text-[10px] font-black uppercase tracking-widest">Type / Group</TableHead>
                         <TableHead className="text-[10px] font-black uppercase tracking-widest">Status</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Photo</TableHead>
                         <TableHead className="text-[10px] font-black uppercase tracking-widest">Dimensions</TableHead>
                         <TableHead className="text-[10px] font-black uppercase tracking-widest">Next Service</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Actions</TableHead>
@@ -100,6 +104,13 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                                 </TableCell>
                                 <TableCell>
                                     {getStatusBadge(asset)}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    {(asset.asset_photos && asset.asset_photos.length > 0) ? (
+                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] font-black px-1.5 h-4">YES</Badge>
+                                    ) : (
+                                        <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 text-[9px] font-black px-1.5 h-4">NO</Badge>
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-xs font-medium text-muted-foreground">
                                     {asset.asset_dimensions || "—"}
