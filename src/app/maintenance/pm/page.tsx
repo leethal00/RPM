@@ -32,7 +32,7 @@ export default function PMSchedulerPage() {
     async function fetchPMData() {
         setLoading(true)
 
-        // Fetch assets with PM intervals
+        // Fetch assets with next service dates
         const { data: assetsData, error } = await supabase
             .from('assets')
             .select(`
@@ -40,13 +40,18 @@ export default function PMSchedulerPage() {
                 stores (
                     name,
                     id,
-                    brand
+                    brand_st_pierres,
+                    brand_bento_bowl,
+                    brand_k10
                 ),
                 asset_types (
                     label
+                ),
+                jobs (
+                    status
                 )
             `)
-            .not('pm_interval_months', 'is', null)
+            .not('next_service_date', 'is', null)
             .order('next_service_date', { ascending: true })
 
         if (error) {
@@ -58,18 +63,48 @@ export default function PMSchedulerPage() {
     }
 
     const getStatusColor = (asset: any) => {
+        // Red if active fault
+        const activeFaults = asset.jobs?.filter((j: any) => j.status === 'open' || j.status === 'in_progress')
+        if (activeFaults && activeFaults.length > 0) return "bg-red-50 text-red-600"
+
         if (!asset.next_service_date) return "bg-slate-100 text-slate-600"
         const nextDue = new Date(asset.next_service_date)
         const now = new Date()
 
-        if (nextDue < now) return "bg-red-50 text-red-600"
-
-        const thirtyDaysFromNow = new Date()
-        thirtyDaysFromNow.setDate(now.getDate() + 30)
-
-        if (nextDue <= thirtyDaysFromNow) return "bg-amber-50 text-amber-600"
+        if (nextDue < now) return "bg-orange-50 text-orange-600 border-orange-200"
 
         return "bg-emerald-50 text-emerald-600"
+    }
+
+    const getStoreBrand = (store: any) => {
+        if (store.brand_bento_bowl) return "Bento Bowl"
+        if (store.brand_k10) return "K10"
+        return "St Pierre's"
+    }
+
+    // Helper for 18-month quarter rounding
+    const calculateNextService = (fromDate: Date) => {
+        const date = new Date(fromDate)
+        date.setMonth(date.getMonth() + 18)
+
+        const month = date.getMonth()
+        const year = date.getFullYear()
+
+        let targetMonth = 0
+        if (month >= 3 && month <= 5) targetMonth = 3
+        if (month >= 6 && month <= 8) targetMonth = 6
+        if (month >= 9 && month <= 11) targetMonth = 9
+
+        return new Date(year, targetMonth, 1).toISOString().split('T')[0]
+    }
+
+    const getQuarterLabel = (dateString: string) => {
+        if (!dateString) return "TBD"
+        const date = new Date(dateString)
+        const month = date.getMonth()
+        const year = date.getFullYear()
+        const quarter = Math.floor(month / 3) + 1
+        return `Q${quarter} ${year}`
     }
 
     const generatePMJob = async (asset: any) => {
@@ -80,8 +115,8 @@ export default function PMSchedulerPage() {
             .insert({
                 store_id: asset.stores.id,
                 asset_id: asset.id,
-                title: `Preventative Maintenance: ${asset.name}`,
-                description: `Scheduled maintenance for ${asset.name}. PM Interval: ${asset.pm_interval_months} months.`,
+                title: `Preventative Maintenance: ${asset.asset_types?.label}`,
+                description: `Routine 18-month maintenance service for ${asset.asset_types?.label}. \nGroup: ${asset.asset_group}\nDetails: ${asset.asset_details || 'N/A'}`,
                 job_type: 'maintenance',
                 severity: 'low',
                 status: 'open',
@@ -93,21 +128,18 @@ export default function PMSchedulerPage() {
             return
         }
 
-        // Update asset next_service_date based on current interval
-        if (asset.pm_interval_months) {
-            const nextDate = new Date()
-            nextDate.setMonth(nextDate.getMonth() + asset.pm_interval_months)
+        // Update asset with new schedule (18 months from today, rounded to quarter)
+        const nextDate = calculateNextService(new Date())
 
-            await supabase
-                .from('assets')
-                .update({
-                    last_service_date: new Date().toISOString().split('T')[0],
-                    next_service_date: nextDate.toISOString().split('T')[0]
-                })
-                .eq('id', asset.id)
-        }
+        await supabase
+            .from('assets')
+            .update({
+                last_service_date: new Date().toISOString().split('T')[0],
+                next_service_date: nextDate
+            })
+            .eq('id', asset.id)
 
-        toast.success("PM Job generated and schedule updated")
+        toast.success("PM Job generated and schedule updated (Q-Rounded)")
         fetchPMData()
     }
 
@@ -204,23 +236,19 @@ export default function PMSchedulerPage() {
                                             </div>
                                             <div className="space-y-1">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="font-black text-slate-800 uppercase tracking-tight">{asset.name}</span>
-                                                    <Badge variant="outline" className="h-5 text-[9px] font-black tracking-tighter uppercase px-1.5">
-                                                        {asset.asset_types?.label}
+                                                    <span className="font-black text-slate-800 uppercase tracking-tight">{asset.asset_types?.label}</span>
+                                                    <Badge variant="outline" className="h-5 text-[9px] font-black tracking-tighter uppercase px-1.5 bg-primary/5 text-primary border-primary/20">
+                                                        {asset.asset_group}
                                                     </Badge>
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                                                     <span className="flex items-center gap-1.5">
                                                         <Building2 className="size-3.5 text-primary/60" />
-                                                        {asset.stores.brand} - {asset.stores.name}
+                                                        {getStoreBrand(asset.stores)} - {asset.stores.name}
                                                     </span>
-                                                    <span className="flex items-center gap-1.5">
-                                                        <Calendar className="size-3.5 text-primary/60" />
-                                                        Next: {asset.next_service_date || "TBD"}
-                                                    </span>
-                                                    <span className="flex items-center gap-1.5">
-                                                        <Clock className="size-3.5 text-primary/60" />
-                                                        Interval: {asset.pm_interval_months}M
+                                                    <span className="flex items-center gap-1.5 bg-amber-50 px-2 py-0.5 rounded text-amber-700">
+                                                        <Calendar className="size-3.5" />
+                                                        Due: {getQuarterLabel(asset.next_service_date)}
                                                     </span>
                                                 </div>
                                             </div>

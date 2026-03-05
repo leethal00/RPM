@@ -36,9 +36,9 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const [previews, setPreviews] = useState<string[]>([])
 
     const [formData, setFormData] = useState({
-        asset_id: "",
-        project_id: "",
-        vendor_id: "",
+        asset_id: "none",
+        project_id: "none",
+        vendor_id: "none",
         job_type: "fault",
         title: "",
         description: "",
@@ -54,7 +54,13 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             // Fetch Assets
             const { data: assetsData } = await supabase
                 .from('assets')
-                .select('id, name')
+                .select(`
+                    id,
+                    asset_group,
+                    asset_types (
+                        label
+                    )
+                `)
                 .eq('store_id', storeId)
 
             setAssets(assetsData || [])
@@ -140,8 +146,8 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             const insertData: any = {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
-                project_id: formData.project_id || null, // Link to strategic HQ project
-                vendor_id: formData.vendor_id || null, // Assign to specialized vendor
+                project_id: formData.project_id === 'none' ? null : (formData.project_id || null),
+                vendor_id: formData.vendor_id === 'none' ? null : (formData.vendor_id || null),
                 job_type: formData.job_type,
                 title: formData.title,
                 description: formData.description,
@@ -236,7 +242,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                             <SelectItem value="none">No specific asset (Site-wide issue)</SelectItem>
                             {assets.map((asset) => (
                                 <SelectItem key={asset.id} value={asset.id}>
-                                    {asset.name}
+                                    {asset.asset_types?.label} — {asset.asset_group}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -256,7 +262,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                             <SelectValue placeholder={fetchingProjects ? "Loading projects..." : "Link to capital project"} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">No linked project (Stand-alone repair)</SelectItem>
+                            <SelectItem value="none">No linked project (Stand-alone repair)</SelectItem>
                             {projects.map((p) => (
                                 <SelectItem key={p.id} value={p.id}>
                                     {p.name}
@@ -277,7 +283,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                             <SelectValue placeholder={fetchingVendors ? "Loading vendors..." : "Select specialized contractor"} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">Unassigned (Internal / TBD)</SelectItem>
+                            <SelectItem value="none">Unassigned (Internal / TBD)</SelectItem>
                             {vendors.map((v: any) => (
                                 <SelectItem key={v.id} value={v.id}>
                                     {v.name} ({v.trade})

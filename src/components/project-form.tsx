@@ -44,7 +44,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         budget: project?.budget?.toString() || "",
         start_date: project?.start_date || "",
         end_date: project?.end_date || "",
-        store_id: project?.store_id || ""
+        store_id: project?.store_id || "none"
     })
 
     const [stores, setStores] = useState<any[]>([])
@@ -79,7 +79,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
             budget: parseFloat(formData.budget) || 0,
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
-            store_id: formData.store_id || null,
+            store_id: formData.store_id === 'none' ? null : (formData.store_id || null),
         }
 
         if (!project) {
@@ -167,7 +167,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                             <SelectValue placeholder={fetchingStores ? "Loading stores..." : "Select site (optional)"} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">General Strategic HQ (No link)</SelectItem>
+                            <SelectItem value="none">General Strategic HQ (No link)</SelectItem>
                             {stores.map((store) => (
                                 <SelectItem key={store.id} value={store.id}>
                                     {store.name}

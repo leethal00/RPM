@@ -45,11 +45,14 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         const { data: assetData } = await supabase
             .from('assets')
             .select(`
-      *,
-      asset_types (
-        label
-      )
-    `)
+                *,
+                asset_types (
+                    label
+                ),
+                jobs (
+                    status
+                )
+            `)
             .eq('store_id', id)
 
         // Fetch Jobs

@@ -19,14 +19,12 @@ import { AssetPhotoGallery } from "./asset-photo-gallery"
 
 interface Asset {
     id: string
-    name: string
+    asset_group?: 'internal' | 'external'
     asset_type_id: string
     install_date?: string
     status?: string
-    notes?: string
-    service_interval_days?: number
-    pm_interval_months?: number
-    asset_code?: string
+    asset_details?: string
+    asset_dimensions?: string
     last_service_date?: string
     next_service_date?: string
 }
@@ -45,20 +43,15 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
 
     // Form State
     const [formData, setFormData] = useState({
-        name: asset?.name || "",
+        asset_group: asset?.asset_group || "external",
         asset_type_id: asset?.asset_type_id || "",
         install_date: asset?.install_date || "",
         status: asset?.status || "active",
-        notes: asset?.notes || "",
-        service_interval_days: asset?.service_interval_days?.toString() || "365",
-        pm_interval_months: asset?.pm_interval_months?.toString() || "6",
+        asset_details: asset?.asset_details || "",
+        asset_dimensions: asset?.asset_dimensions || "",
         last_service_date: asset?.last_service_date || "",
         next_service_date: asset?.next_service_date || "",
-        asset_code: asset?.asset_code || ""
     })
-
-    const [searchTerm, setSearchTerm] = useState("")
-    const [isSearching, setIsSearching] = useState(false)
 
     useEffect(() => {
         async function fetchAssetTypes() {
@@ -71,28 +64,64 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         fetchAssetTypes()
     }, [supabase])
 
+    // Helper to calculate next service date (18 months + quarter rounding)
+    const calculateNextService = (installDate: string) => {
+        if (!installDate) return ""
+        const date = new Date(installDate)
+        // Add 18 months
+        date.setMonth(date.getMonth() + 18)
+
+        const month = date.getMonth()
+        const year = date.getFullYear()
+
+        // Round to start of quarter
+        let targetMonth = 0 // Q1 (Jan)
+        if (month >= 3 && month <= 5) targetMonth = 3 // Q2 (Apr)
+        if (month >= 6 && month <= 8) targetMonth = 6 // Q3 (Jul)
+        if (month >= 9 && month <= 11) targetMonth = 9 // Q4 (Oct)
+
+        const roundedDate = new Date(year, targetMonth, 1)
+        return roundedDate.toISOString().split('T')[0]
+    }
+
+    const getQuarterLabel = (dateString: string) => {
+        if (!dateString) return ""
+        const date = new Date(dateString)
+        const month = date.getMonth()
+        const year = date.getFullYear()
+        const quarter = Math.floor(month / 3) + 1
+        return `Q${quarter} ${year}`
+    }
+
+    const handleInstallDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const date = e.target.value
+        setFormData(prev => ({
+            ...prev,
+            install_date: date,
+            next_service_date: calculateNextService(date)
+        }))
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name || !formData.asset_type_id) {
-            toast.error("Please fill in required fields")
+        if (!formData.asset_type_id) {
+            toast.error("Please select an Asset Type")
             setLoading(false)
             return
         }
 
         const payload: any = {
             store_id: storeId,
-            name: formData.name,
+            asset_group: formData.asset_group,
             asset_type_id: formData.asset_type_id,
             install_date: formData.install_date || null,
             status: formData.status,
-            notes: formData.notes,
-            service_interval_days: parseInt(formData.service_interval_days) || 365,
-            pm_interval_months: parseInt(formData.pm_interval_months) || null,
+            asset_details: formData.asset_details,
+            asset_dimensions: formData.asset_dimensions,
             last_service_date: formData.last_service_date || null,
             next_service_date: formData.next_service_date || null,
-            asset_code: formData.asset_code || null
         }
 
         let error;
@@ -121,134 +150,61 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
     return (
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
             <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="asset_group" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Group *</Label>
+                        <Select
+                            value={formData.asset_group}
+                            onValueChange={(v: any) => setFormData({ ...formData, asset_group: v })}
+                        >
+                            <SelectTrigger id="asset_group">
+                                <SelectValue placeholder="Select group" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="external">External</SelectItem>
+                                <SelectItem value="internal">Internal</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="asset_type_id" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type *</Label>
+                        <Select
+                            value={formData.asset_type_id}
+                            onValueChange={(v) => setFormData({ ...formData, asset_type_id: v })}
+                        >
+                            <SelectTrigger id="asset_type_id">
+                                <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {assetTypes.map((type) => (
+                                    <SelectItem key={type.id} value={type.id}>
+                                        {type.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
                 <div className="grid gap-2">
-                    <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Name *</Label>
+                    <Label htmlFor="asset_dimensions" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Dimensions</Label>
                     <Input
-                        id="name"
-                        placeholder="e.g. Front Counter Menu Board"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
+                        id="asset_dimensions"
+                        placeholder="e.g. 2400mm x 600mm"
+                        value={formData.asset_dimensions}
+                        onChange={(e) => setFormData({ ...formData, asset_dimensions: e.target.value })}
                     />
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor="type-search" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Search Asset Classification *</Label>
-                    <div className="relative">
-                        <Input
-                            id="type-search"
-                            placeholder="Type to search by code, name or category..."
-                            value={searchTerm}
-                            onChange={(e) => {
-                                setSearchTerm(e.target.value)
-                                setIsSearching(true)
-                            }}
-                            onFocus={() => setIsSearching(true)}
-                            className="pr-10"
-                        />
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground opacity-50" />
-
-                        {isSearching && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-[300px] overflow-y-auto">
-                                <div className="p-1">
-                                    {assetTypes
-                                        .filter(t =>
-                                            t.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                            (t.code || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                            (t.sub_cat_1 || "").toLowerCase().includes(searchTerm.toLowerCase())
-                                        )
-                                        .map((type) => (
-                                            <button
-                                                key={type.id}
-                                                type="button"
-                                                className="w-full text-left px-3 py-2 rounded-sm hover:bg-accent transition-colors flex flex-col items-start gap-0.5"
-                                                onClick={() => {
-                                                    setFormData({
-                                                        ...formData,
-                                                        asset_type_id: type.id,
-                                                        name: formData.name || type.label
-                                                    })
-                                                    setSearchTerm("")
-                                                    setIsSearching(false)
-                                                }}
-                                            >
-                                                <div className="flex items-center gap-2 w-full text-sm">
-                                                    {type.code && <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">{type.code}</span>}
-                                                    <span className="font-bold flex-1">{type.label}</span>
-                                                </div>
-                                                {(type.sub_cat_1 || type.sub_cat_2 || type.sub_cat_3) && (
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                        {[type.sub_cat_1, type.sub_cat_2, type.sub_cat_3].filter(Boolean).join(" > ")}
-                                                    </span>
-                                                )}
-                                            </button>
-                                        ))
-                                    }
-                                    {assetTypes.filter(t =>
-                                        t.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        (t.code || "").toLowerCase().includes(searchTerm.toLowerCase())
-                                    ).length === 0 && (
-                                            <div className="px-3 py-4 text-center text-sm text-muted-foreground italic">
-                                                No matches found
-                                            </div>
-                                        )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {formData.asset_type_id && (
-                    <div className="flex items-center justify-between p-2 bg-primary/5 rounded border border-primary/20">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] uppercase font-black text-primary/60">Selected Classification</span>
-                            <span className="text-sm font-bold">
-                                {assetTypes.find(t => t.id === formData.asset_type_id)?.label}
-                            </span>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-[10px] uppercase font-bold"
-                            onClick={() => {
-                                setFormData({ ...formData, asset_type_id: "" })
-                                setSearchTerm("")
-                            }}
-                        >
-                            Change
-                        </Button>
-                    </div>
-                )}
-
-                {formData.asset_type_id && (() => {
-                    const selectedType = assetTypes.find(t => t.id === formData.asset_type_id);
-                    if (!selectedType) return null;
-                    return (
-                        <div className="grid grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg border border-dashed">
-                            <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 1</span>
-                                <span className="text-xs font-semibold">{selectedType.sub_cat_1 || "—"}</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 2</span>
-                                <span className="text-xs font-semibold">{selectedType.sub_cat_2 || "—"}</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <span className="text-[9px] font-black uppercase text-muted-foreground/60">Sub Cat 3</span>
-                                <span className="text-xs font-semibold">{selectedType.sub_cat_3 || "—"}</span>
-                            </div>
-                        </div>
-                    );
-                })()}
-
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="asset_code" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Identity Code</Label>
+                        <Label htmlFor="install_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Install Date</Label>
                         <Input
-                            id="asset_code"
-                            placeholder="e.g. SN-9921"
-                            value={formData.asset_code}
-                            onChange={(e) => setFormData({ ...formData, asset_code: e.target.value })}
+                            id="install_date"
+                            type="date"
+                            value={formData.install_date}
+                            onChange={handleInstallDateChange}
                         />
                     </div>
                     <div className="grid gap-2">
@@ -269,60 +225,39 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                     </div>
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor="install_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Install Date</Label>
-                    <Input
-                        id="install_date"
-                        type="date"
-                        value={formData.install_date}
-                        onChange={(e) => setFormData({ ...formData, install_date: e.target.value })}
-                    />
-                </div>
-
-                <div className="space-y-4 pt-4 border-t">
-                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Maintenance Scheduling</Label>
-
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="pm_interval" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">PM Interval (Months)</Label>
-                            <Input
-                                id="pm_interval"
-                                type="number"
-                                placeholder="e.g. 6"
-                                value={formData.pm_interval_months}
-                                onChange={(e) => setFormData({ ...formData, pm_interval_months: e.target.value })}
-                            />
+                <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 space-y-3">
+                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Service Intelligence</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-1">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Service Interval</span>
+                            <span className="text-sm font-black italic">18 Months (Standard)</span>
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="last_service" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Last Service</Label>
-                            <Input
-                                id="last_service"
-                                type="date"
-                                value={formData.last_service_date}
-                                onChange={(e) => setFormData({ ...formData, last_service_date: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="next_service" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Next Service</Label>
-                            <Input
-                                id="next_service"
-                                type="date"
-                                value={formData.next_service_date}
-                                onChange={(e) => setFormData({ ...formData, next_service_date: e.target.value })}
-                                className="border-primary/20 bg-primary/5 font-bold"
-                            />
+                        <div className="grid gap-1">
+                            <Label htmlFor="next_service" className="text-[10px] font-bold uppercase text-muted-foreground">Next Service Target</Label>
+                            <div className="flex flex-col">
+                                <span className="text-lg font-black text-primary uppercase tracking-tighter">
+                                    {getQuarterLabel(formData.next_service_date) || "TBD"}
+                                </span>
+                                <Input
+                                    id="next_service"
+                                    type="date"
+                                    value={formData.next_service_date}
+                                    onChange={(e) => setFormData({ ...formData, next_service_date: e.target.value })}
+                                    className="h-7 text-[10px] mt-1 opacity-50 focus:opacity-100 transition-opacity"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="notes" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes</Label>
+                    <Label htmlFor="asset_details" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Details (Free Format) *</Label>
                     <Textarea
-                        id="notes"
-                        placeholder="Additional technical details, model numbers, etc."
+                        id="asset_details"
+                        placeholder="e.g. Mounted on main pylon cabinet, requires cherry picker for access."
                         className="min-h-[100px]"
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        value={formData.asset_details}
+                        onChange={(e) => setFormData({ ...formData, asset_details: e.target.value })}
                     />
                 </div>
 
