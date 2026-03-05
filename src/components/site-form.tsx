@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Search, MapPin } from "lucide-react"
+import { Loader2, Search, MapPin, Globe } from "lucide-react"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 interface SiteFormProps {
     site?: any
@@ -208,12 +215,21 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="grid gap-2">
                     <Label htmlFor="region" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Region</Label>
-                    <Input
-                        id="region"
-                        placeholder="e.g. Auckland"
+                    <Select
                         value={formData.region}
-                        onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                    />
+                        onValueChange={(value) => setFormData({ ...formData, region: value })}
+                    >
+                        <SelectTrigger id="region" className="w-full">
+                            <SelectValue placeholder="Select a region" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Auckland">Auckland</SelectItem>
+                            <SelectItem value="Wellington">Wellington</SelectItem>
+                            <SelectItem value="Christchurch">Christchurch</SelectItem>
+                            <SelectItem value="North Island Regional">North Island Regional</SelectItem>
+                            <SelectItem value="South Island Regional">South Island Regional</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <div className="space-y-3">

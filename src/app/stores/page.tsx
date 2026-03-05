@@ -57,6 +57,7 @@ export default function StoresListPage() {
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' })
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
+    const [filterRegion, setFilterRegion] = useState<string>("all")
     const [vendors, setVendors] = useState<any[]>([])
 
     const fetchStores = async () => {
@@ -161,6 +162,11 @@ export default function StoresListPage() {
             if (!hasVendor) return false
         }
 
+        // 4. Region Filter
+        if (filterRegion !== "all") {
+            if (s.region !== filterRegion) return false
+        }
+
         return true
     })
 
@@ -230,6 +236,25 @@ export default function StoresListPage() {
                                 </Select>
                             </div>
 
+                            <div className="flex flex-col gap-1.5">
+                                <Select value={filterRegion} onValueChange={setFilterRegion}>
+                                    <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="size-3.5 text-primary" />
+                                            <SelectValue placeholder="Filter by Region" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all" className="font-bold">All Regions</SelectItem>
+                                        <SelectItem value="Auckland">Auckland</SelectItem>
+                                        <SelectItem value="Wellington">Wellington</SelectItem>
+                                        <SelectItem value="Christchurch">Christchurch</SelectItem>
+                                        <SelectItem value="North Island Regional">North Island Regional</SelectItem>
+                                        <SelectItem value="South Island Regional">South Island Regional</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <Button
                                 variant={filterOverdue ? "destructive" : "outline"}
                                 className={`h-10 border-2 font-black uppercase text-[10px] tracking-widest gap-2 ${!filterOverdue && 'bg-white hover:bg-slate-50'}`}
@@ -248,6 +273,7 @@ export default function StoresListPage() {
                                         setSearch("")
                                         setFilterOverdue(false)
                                         setFilterVendor("all")
+                                        setFilterRegion("all")
                                     }}
                                     className="h-10 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary gap-2"
                                 >
@@ -295,6 +321,7 @@ export default function StoresListPage() {
                                     </div>
                                 </TableHead>
                                 <TableHead className="hidden lg:table-cell">Classification</TableHead>
+                                <TableHead className="hidden md:table-cell">Region</TableHead>
                                 <TableHead className="hidden lg:table-cell">Site Manager</TableHead>
                                 <TableHead className="hidden xl:table-cell">Hours</TableHead>
                                 <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -390,6 +417,9 @@ export default function StoresListPage() {
                                                     </Badge>
                                                 )}
                                             </div>
+                                        </TableCell>
+                                        <TableCell className="text-sm hidden md:table-cell text-muted-foreground">
+                                            {store.region || "—"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden lg:table-cell">
                                             {store.manager_name ? (
