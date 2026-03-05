@@ -157,6 +157,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         <DialogTitle>Edit Site Details</DialogTitle>
                                     </DialogHeader>
                                     <SiteForm
+                                        key={store.id}
                                         site={store}
                                         onSuccess={() => {
                                             setEditSiteDialogOpen(false)

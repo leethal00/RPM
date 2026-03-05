@@ -29,9 +29,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         manager_name: site?.manager_name || "",
         manager_phone: site?.manager_phone || "",
         status: site?.status || "active",
-        brand_st_pierres: site?.brand_st_pierres ?? true,
-        brand_bento_bowl: site?.brand_bento_bowl || false,
-        brand_k10: site?.brand_k10 || false,
+        brand_st_pierres: site?.brand_st_pierres ?? site?.st_pierres ?? true,
+        brand_bento_bowl: site?.brand_bento_bowl ?? site?.bento_bowl ?? false,
+        brand_k10: site?.brand_k10 ?? site?.k10 ?? false,
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
         lat: site?.lat || null,
@@ -139,7 +139,10 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             if (!clientId) {
                 toast.error("System error: Client ID missing. Please refresh.")
             } else {
-                toast.error("Please fill in all required fields (*)")
+                const missing = []
+                if (!formData.name) missing.push("Site Name")
+                if (!formData.address) missing.push("Site Address")
+                toast.error(`Required missing: ${missing.join(", ")}`)
             }
             setLoading(false)
             return
@@ -154,28 +157,34 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             ...formData,
             client_id: clientId,
             hours_of_operation: JSON.stringify(hoursData),
-            // Maintain bento_bowl flag for backward compatibility
+            // Legacy support
             bento_bowl: formData.brand_bento_bowl
         }
 
-        let error
+        let error, count
         if (site?.id) {
-            const { error: updateError } = await supabase
+            const { error: updateError, count: updateCount } = await supabase
                 .from('stores')
-                .update(payload)
+                .update(payload, { count: 'exact' })
                 .eq('id', site.id)
             error = updateError
+            count = updateCount
         } else {
-            const { error: insertError } = await supabase
+            const { error: insertError, count: insertCount } = await supabase
                 .from('stores')
-                .insert(payload)
+                .insert(payload, { count: 'exact' })
             error = insertError
+            count = insertCount
         }
 
         if (error) {
             toast.error(error.message)
         } else {
-            toast.success(site?.id ? "Site updated successfully" : "Site added successfully")
+            if (count === 0 && site?.id) {
+                toast.warning("Site found but 0 changes applied (check permissions)")
+            } else {
+                toast.success(site?.id ? "Site updated successfully" : "Site added successfully")
+            }
             onSuccess()
         }
         setLoading(false)
@@ -183,9 +192,11 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 no-scrollbar">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid gap-2">
-                    <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Name *</Label>
+                    <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Site Name <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                         id="name"
                         placeholder="e.g. St Pierre's — Ponsonby"
@@ -296,7 +307,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="grid gap-2">
                     <div className="flex items-center justify-between">
-                        <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Address *</Label>
+                        <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Site Address <span className="text-red-500">*</span>
+                        </Label>
                         {formData.lat && formData.lng && (
                             <Badge variant="outline" className="h-4 text-[8px] bg-green-50 text-green-700 border-green-200">LOCATION VERIFIED</Badge>
                         )}
