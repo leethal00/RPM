@@ -14,7 +14,8 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Search, Camera } from "lucide-react"
+import { AssetPhotoGallery } from "./asset-photo-gallery"
 
 interface Asset {
     id: string
@@ -25,6 +26,7 @@ interface Asset {
     notes?: string
     service_interval_days?: number
     pm_interval_months?: number
+    asset_code?: string
     last_service_date?: string
     next_service_date?: string
 }
@@ -51,8 +53,12 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         service_interval_days: asset?.service_interval_days?.toString() || "365",
         pm_interval_months: asset?.pm_interval_months?.toString() || "6",
         last_service_date: asset?.last_service_date || "",
-        next_service_date: asset?.next_service_date || ""
+        next_service_date: asset?.next_service_date || "",
+        asset_code: asset?.asset_code || ""
     })
+
+    const [searchTerm, setSearchTerm] = useState("")
+    const [isSearching, setIsSearching] = useState(false)
 
     useEffect(() => {
         async function fetchAssetTypes() {
@@ -86,7 +92,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
             pm_interval_months: parseInt(formData.pm_interval_months) || null,
             last_service_date: formData.last_service_date || null,
             next_service_date: formData.next_service_date || null,
-            pm_status: formData.pm_interval_months ? 'active' : 'not_applicable'
+            asset_code: formData.asset_code || null
         }
 
         let error;
@@ -127,31 +133,92 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type Hierarchy *</Label>
-                    <Select
-                        value={formData.asset_type_id}
-                        onValueChange={(value) => setFormData({ ...formData, asset_type_id: value })}
-                        required
-                    >
-                        <SelectTrigger id="type">
-                            <SelectValue placeholder="Select asset classification" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {assetTypes.map((type) => (
-                                <SelectItem key={type.id} value={type.id}>
-                                    <div className="flex flex-col text-left">
-                                        <span className="font-bold">{type.label}</span>
-                                        {(type.sub_cat_1 || type.sub_cat_2 || type.sub_cat_3) && (
-                                            <span className="text-[10px] text-muted-foreground leading-tight">
-                                                {[type.sub_cat_1, type.sub_cat_2, type.sub_cat_3].filter(Boolean).join(" > ")}
-                                            </span>
+                    <Label htmlFor="type-search" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Search Asset Classification *</Label>
+                    <div className="relative">
+                        <Input
+                            id="type-search"
+                            placeholder="Type to search by code, name or category..."
+                            value={searchTerm}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value)
+                                setIsSearching(true)
+                            }}
+                            onFocus={() => setIsSearching(true)}
+                            className="pr-10"
+                        />
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground opacity-50" />
+
+                        {isSearching && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-[300px] overflow-y-auto">
+                                <div className="p-1">
+                                    {assetTypes
+                                        .filter(t =>
+                                            t.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            (t.code || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            (t.sub_cat_1 || "").toLowerCase().includes(searchTerm.toLowerCase())
+                                        )
+                                        .map((type) => (
+                                            <button
+                                                key={type.id}
+                                                type="button"
+                                                className="w-full text-left px-3 py-2 rounded-sm hover:bg-accent transition-colors flex flex-col items-start gap-0.5"
+                                                onClick={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        asset_type_id: type.id,
+                                                        name: formData.name || type.label
+                                                    })
+                                                    setSearchTerm("")
+                                                    setIsSearching(false)
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2 w-full text-sm">
+                                                    {type.code && <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">{type.code}</span>}
+                                                    <span className="font-bold flex-1">{type.label}</span>
+                                                </div>
+                                                {(type.sub_cat_1 || type.sub_cat_2 || type.sub_cat_3) && (
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {[type.sub_cat_1, type.sub_cat_2, type.sub_cat_3].filter(Boolean).join(" > ")}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ))
+                                    }
+                                    {assetTypes.filter(t =>
+                                        t.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        (t.code || "").toLowerCase().includes(searchTerm.toLowerCase())
+                                    ).length === 0 && (
+                                            <div className="px-3 py-4 text-center text-sm text-muted-foreground italic">
+                                                No matches found
+                                            </div>
                                         )}
-                                    </div>
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {formData.asset_type_id && (
+                    <div className="flex items-center justify-between p-2 bg-primary/5 rounded border border-primary/20">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase font-black text-primary/60">Selected Classification</span>
+                            <span className="text-sm font-bold">
+                                {assetTypes.find(t => t.id === formData.asset_type_id)?.label}
+                            </span>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-[10px] uppercase font-bold"
+                            onClick={() => {
+                                setFormData({ ...formData, asset_type_id: "" })
+                                setSearchTerm("")
+                            }}
+                        >
+                            Change
+                        </Button>
+                    </div>
+                )}
 
                 {formData.asset_type_id && (() => {
                     const selectedType = assetTypes.find(t => t.id === formData.asset_type_id);
@@ -176,12 +243,12 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="install_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Install Date</Label>
+                        <Label htmlFor="asset_code" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Identity Code</Label>
                         <Input
-                            id="install_date"
-                            type="date"
-                            value={formData.install_date}
-                            onChange={(e) => setFormData({ ...formData, install_date: e.target.value })}
+                            id="asset_code"
+                            placeholder="e.g. SN-9921"
+                            value={formData.asset_code}
+                            onChange={(e) => setFormData({ ...formData, asset_code: e.target.value })}
                         />
                     </div>
                     <div className="grid gap-2">
@@ -200,6 +267,16 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                             </SelectContent>
                         </Select>
                     </div>
+                </div>
+
+                <div className="grid gap-2">
+                    <Label htmlFor="install_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Install Date</Label>
+                    <Input
+                        id="install_date"
+                        type="date"
+                        value={formData.install_date}
+                        onChange={(e) => setFormData({ ...formData, install_date: e.target.value })}
+                    />
                 </div>
 
                 <div className="space-y-4 pt-4 border-t">
@@ -248,6 +325,19 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     />
                 </div>
+
+                {asset?.id ? (
+                    <div className="pt-6 border-t">
+                        <AssetPhotoGallery assetId={asset.id} />
+                    </div>
+                ) : (
+                    <div className="pt-4 border-t px-4 py-3 bg-primary/5 rounded-lg border-2 border-dashed border-primary/20">
+                        <p className="text-xs text-primary font-medium flex items-center gap-2">
+                            <Camera className="size-4" />
+                            Note: Photos can be attached after the asset has been created.
+                        </p>
+                    </div>
+                )}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

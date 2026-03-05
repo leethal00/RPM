@@ -27,7 +27,8 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [regions, setRegions] = useState<any[]>([])
-    const [clientId, setClientId] = useState<string | null>(site?.client_id || null)
+    const [customers, setCustomers] = useState<any[]>([])
+    const [clientId, setClientId] = useState<string>(site?.client_id || "")
 
     // Form State
     const [formData, setFormData] = useState({
@@ -114,30 +115,20 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     })
 
     useEffect(() => {
-        async function getClientId() {
-            // Get the first client or current user's client
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-                const { data: userData } = await supabase
-                    .from('users')
-                    .select('client_id')
-                    .eq('id', user.id)
-                    .single()
+        async function fetchCustomers() {
+            const { data } = await supabase
+                .from('clients')
+                .select('id, name')
+                .order('name')
+            setCustomers(data || [])
 
-                if (userData?.client_id) {
-                    setClientId(userData.client_id)
-                } else {
-                    // Fallback to first client
-                    const { data: clients } = await supabase
-                        .from('clients')
-                        .select('id')
-                        .limit(1)
-                    if (clients?.[0]) setClientId(clients[0].id)
-                }
+            // If creating new and no client selected, default to first
+            if (!site?.id && !clientId && data?.[0]) {
+                setClientId(data[0].id)
             }
         }
-        getClientId()
-    }, [supabase])
+        fetchCustomers()
+    }, [supabase, site?.id])
 
     useEffect(() => {
         async function fetchRegions() {
@@ -223,6 +214,26 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
                     />
+                </div>
+
+                <div className="grid gap-2">
+                    <Label htmlFor="customer" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Customer <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                        value={clientId}
+                        onValueChange={setClientId}
+                        required
+                    >
+                        <SelectTrigger id="customer">
+                            <SelectValue placeholder="Select a customer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {customers.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <div className="grid gap-2">

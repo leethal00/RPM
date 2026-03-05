@@ -351,17 +351,17 @@ export default function StoresListPage() {
                                                     </Link>
                                                     <div className="flex items-center gap-1">
                                                         {store.brand_st_pierres !== false && (
-                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
                                                                 <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
                                                             </div>
                                                         )}
                                                         {store.brand_bento_bowl && (
-                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
                                                                 <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
                                                             </div>
                                                         )}
                                                         {store.brand_k10 && (
-                                                            <div className="h-5 w-5 rounded bg-white p-0.5 border shadow-sm">
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
                                                                 <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
                                                             </div>
                                                         )}

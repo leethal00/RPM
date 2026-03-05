@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
@@ -41,6 +41,9 @@ interface Store {
     brand_st_pierres?: boolean
     brand_bento_bowl?: boolean
     brand_k10?: boolean
+    site_photos?: {
+        url: string
+    }[]
 }
 
 interface StoreMapProps {
@@ -73,11 +76,101 @@ function ResetViewControl({ nzCenter, nzZoom }: { nzCenter: [number, number]; nz
     );
 }
 
+function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: React.MutableRefObject<NodeJS.Timeout | null> }) {
+    const map = useMap()
+
+    return (
+        <Marker
+            position={[store.lat, store.lng]}
+            icon={getStatusIcon(store.status)}
+            eventHandlers={{
+                mouseover: (e) => {
+                    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+                    e.target.openPopup()
+                },
+                mouseout: (e) => {
+                    const marker = e.target
+                    closeTimerRef.current = setTimeout(() => {
+                        marker.closePopup()
+                    }, 300)
+                }
+            }}
+        >
+            <Popup closeButton={false} className="custom-hover-popup">
+                <div
+                    className="p-1 min-w-[200px]"
+                    onMouseEnter={() => {
+                        if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+                    }}
+                    onMouseLeave={() => {
+                        closeTimerRef.current = setTimeout(() => {
+                            map.closePopup()
+                        }, 200)
+                    }}
+                >
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                        <h3 className="font-bold text-sm tracking-tight">{store.name}</h3>
+                        <div className="flex items-center gap-1 shrink-0">
+                            {store.brand_st_pierres !== false && (
+                                <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
+                                    <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                </div>
+                            )}
+                            {store.brand_bento_bowl && (
+                                <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
+                                    <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                </div>
+                            )}
+                            {store.brand_k10 && (
+                                <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
+                                    <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">{store.address}</p>
+
+                    {store.site_photos && store.site_photos.length > 0 && (
+                        <div className="w-full aspect-video rounded-lg overflow-hidden mb-2 border shadow-sm">
+                            <img
+                                src={store.site_photos[0].url}
+                                alt={store.name}
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        <div className={`size-2 rounded-full ${store.status === 'active' ? 'bg-green-500' :
+                            store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'
+                            }`} />
+                        <span className="text-[10px] uppercase font-bold tracking-wider">
+                            {store.status}
+                        </span>
+                    </div>
+                    <div className="mt-3 pt-2 border-t">
+                        <Link
+                            href={`/stores/${store.id}`}
+                            className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                            VIEW SITE DETAILS →
+                        </Link>
+                    </div>
+                </div>
+            </Popup>
+        </Marker>
+    )
+}
+
 export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom = 5.5 }: StoreMapProps) {
     const [isMounted, setIsMounted] = useState(false)
+    const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         setIsMounted(true)
+        return () => {
+            if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+        }
     }, [])
 
     if (!isMounted) return <div className="h-full w-full bg-muted animate-pulse rounded-lg" />
@@ -101,53 +194,7 @@ export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom =
                 <ChangeView center={center} zoom={zoom} />
                 <ResetViewControl nzCenter={nzCenter} nzZoom={nzZoom} />
                 {stores.filter(s => s.lat && s.lng).map((store) => (
-                    <Marker
-                        key={store.id}
-                        position={[store.lat, store.lng]}
-                        icon={getStatusIcon(store.status)}
-                    >
-                        <Popup>
-                            <div className="p-1">
-                                <div className="flex items-center justify-between gap-3 mb-1">
-                                    <h3 className="font-bold text-sm tracking-tight">{store.name}</h3>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        {store.brand_st_pierres !== false && (
-                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
-                                                <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
-                                            </div>
-                                        )}
-                                        {store.brand_bento_bowl && (
-                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
-                                                <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
-                                            </div>
-                                        )}
-                                        {store.brand_k10 && (
-                                            <div className="h-4 w-4 rounded bg-white p-0.5 border shadow-sm flex items-center justify-center">
-                                                <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground mb-2">{store.address}</p>
-                                <div className="flex items-center gap-2">
-                                    <div className={`size-2 rounded-full ${store.status === 'active' ? 'bg-green-500' :
-                                        store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'
-                                        }`} />
-                                    <span className="text-[10px] uppercase font-bold tracking-wider">
-                                        {store.status}
-                                    </span>
-                                </div>
-                                <div className="mt-3 pt-2 border-t">
-                                    <Link
-                                        href={`/stores/${store.id}`}
-                                        className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
-                                    >
-                                        VIEW SITE DETAILS →
-                                    </Link>
-                                </div>
-                            </div>
-                        </Popup>
-                    </Marker>
+                    <StoreMarker key={store.id} store={store} closeTimerRef={closeTimerRef} />
                 ))}
             </MapContainer>
         </div>

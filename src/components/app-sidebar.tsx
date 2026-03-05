@@ -12,6 +12,9 @@ import {
     Calendar,
     Briefcase,
     Hammer,
+    MapPin,
+    Layers,
+    Users,
 } from "lucide-react"
 
 import {
@@ -25,6 +28,9 @@ import {
     SidebarGroup,
     SidebarGroupLabel,
     SidebarGroupContent,
+    SidebarMenuSub,
+    SidebarMenuSubItem,
+    SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -69,11 +75,6 @@ const navItems = [
         title: "Maintenance",
         url: "/maintenance",
         icon: Calendar,
-    },
-    {
-        title: "Settings",
-        url: "/settings",
-        icon: Settings,
     },
 ]
 
@@ -173,18 +174,17 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-
                 <SidebarGroup>
                     <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {supplyChainItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title}>
-                                        <a href={item.url}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                        <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
@@ -198,11 +198,11 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {projectItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title}>
-                                        <a href={item.url}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                        <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
@@ -210,6 +210,47 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
+                <SidebarGroup>
+                    <SidebarGroupLabel>Administration</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild isActive={pathname.startsWith('/settings')}>
+                                    <div className="flex items-center gap-2 cursor-pointer w-full">
+                                        <Settings className="size-4" />
+                                        <span>Portal Settings</span>
+                                    </div>
+                                </SidebarMenuButton>
+                                <SidebarMenuSub>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/customers'}>
+                                            <Link href="/settings/customers" className="flex items-center gap-2">
+                                                <Users className="size-3.5" />
+                                                <span>Customers</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/regions'}>
+                                            <Link href="/settings/regions" className="flex items-center gap-2">
+                                                <MapPin className="size-3.5" />
+                                                <span>Regions</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/asset-types'}>
+                                            <Link href="/settings/asset-types" className="flex items-center gap-2">
+                                                <Layers className="size-3.5" />
+                                                <span>Asset Classifications</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                </SidebarMenuSub>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border p-4">
                 <SidebarMenu>
@@ -265,6 +306,6 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
-        </Sidebar>
+        </Sidebar >
     )
 }

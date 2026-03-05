@@ -13,6 +13,7 @@ import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MaintenanceScheduleList } from "@/components/maintenance-schedule-list"
 import { AssetForm } from "@/components/asset-form"
+import { AssetPhotoGallery } from "@/components/asset-photo-gallery"
 import {
     Dialog,
     DialogContent,
@@ -233,6 +234,15 @@ export default function AssetDetailPage({
                                 </CardContent>
                             </Card>
                         </div>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-sm font-medium italic">Asset Media</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <AssetPhotoGallery assetId={assetId} />
+                            </CardContent>
+                        </Card>
                     </TabsContent>
 
                     <TabsContent value="maintenance" className="mt-6">
