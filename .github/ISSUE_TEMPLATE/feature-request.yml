@@ -1,0 +1,159 @@
+name: 🤖 AI Feature Request
+description: Request a new feature to be implemented by AI
+title: "[Feature]: "
+labels: ["ai-feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## AI Feature Request
+
+        This template is for requesting features that will be **automatically implemented by Claude Code Action**.
+
+        📝 **Tips for best results:**
+        - Be specific and detailed about what you want
+        - Describe the user flow and expected behavior
+        - Mention any UI/UX requirements
+        - Reference existing components or pages if building on them
+        - Include examples if helpful
+
+        ⚠️ **After submission:** Add the `ai-feature` label to trigger the automation (or it may be auto-applied).
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: Describe the feature you want implemented
+      placeholder: |
+        Example: Add a "Quick Actions" dropdown menu to each store card on the stores list page.
+        The dropdown should include options to:
+        - View store details
+        - Report a fault
+        - Add a note
+        - View on map
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: Describe who needs this and why
+      placeholder: |
+        As a [role], I want to [action] so that I can [benefit].
+
+        Example: As a store manager, I want to quickly report faults from the stores list without navigating to the store detail page, so that I can save time when reporting multiple issues.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What type of feature is this?
+      options:
+        - New page/route
+        - New component
+        - Enhancement to existing page
+        - New database table/field
+        - UI/UX improvement
+        - Data visualization/chart
+        - Form/input enhancement
+        - Search/filter functionality
+        - Export/import functionality
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve workflow
+        - High - Needed for key functionality
+        - Critical - Blocking work
+      default: 1
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How will we know this feature is complete and working?
+      placeholder: |
+        List the specific requirements that must be met:
+
+        - [ ] Dropdown appears on hover over store card
+        - [ ] All 4 actions are present and functional
+        - [ ] "Report fault" opens the job form with store pre-selected
+        - [ ] "View on map" scrolls to the store's location on the map
+        - [ ] UI matches existing design patterns (shadcn components)
+        - [ ] Works on mobile and desktop
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-notes
+    attributes:
+      label: Technical Notes (Optional)
+      description: Any technical details, constraints, or preferences
+      placeholder: |
+        - Should use existing JobForm component
+        - Store data is in stores table
+        - Follow patterns from store-header.tsx
+        - Use Lucide icons for dropdown items
+
+  - type: dropdown
+    id: affected-areas
+    attributes:
+      label: Affected Areas
+      description: What parts of the app will this touch?
+      multiple: true
+      options:
+        - Stores/Sites
+        - Assets
+        - Jobs/Tickets
+        - Maintenance/PM
+        - Projects
+        - Vendors
+        - Analytics
+        - Map
+        - Settings
+        - Authentication
+        - Database schema
+        - None - standalone feature
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Check all that apply
+      options:
+        - label: I have checked that this feature doesn't already exist
+          required: true
+        - label: I have provided enough detail for AI implementation
+          required: true
+        - label: I understand this will create a PR to the `dev` branch for review
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        ### What happens next?
+
+        1. **AI Processing**: Claude will analyze your request and implement the feature
+        2. **PR Creation**: A pull request will be created against the `dev` branch
+        3. **Preview Deployment**: Vercel will create a preview deployment for testing
+        4. **Your Review**: You'll be assigned as reviewer - test and approve/request changes
+        5. **Merge to Dev**: Once approved, merge to `dev` for staging testing
+        6. **Production**: Later, merge `dev` to `main` for production release
+
+        ⏱️ **Estimated time**: 5-15 minutes for AI implementation
+
+        📊 **Track progress**: Check the [Actions tab](../../actions) for workflow status
