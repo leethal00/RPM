@@ -15,6 +15,7 @@ import {
     MapPin,
     Layers,
     Users,
+    Lightbulb,
 } from "lucide-react"
 
 import {
@@ -247,6 +248,22 @@ export function AppSidebar() {
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
                                 </SidebarMenuSub>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel>Support</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="Feature Request" isActive={pathname === '/feature-request'}>
+                                    <Link href="/feature-request">
+                                        <Lightbulb className="size-4" />
+                                        <span>Feature Request</span>
+                                    </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
