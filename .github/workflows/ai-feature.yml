@@ -20,6 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: dev
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -48,15 +49,17 @@ jobs:
             - Use existing components and conventions
             - Ensure code passes build and lint checks
             - Test the implementation thoroughly
-            - Create clear commit messages
-            - Create a new branch: ai-feature/issue-${{ github.event.issue.number }}-${{ github.run_id }}
-            - Base branch: dev
-            - Create a pull request with appropriate title and description
+            - Commit your changes directly to the dev branch
+            - Use clear, descriptive commit messages
+            - Reference issue #${{ github.event.issue.number }} in your commit message
+            - Push your commits to origin/dev when complete
 
             After implementation:
             - Run: npm run build
             - Run: npm run lint
-            - Fix any errors before completing
+            - Fix any errors before committing
+            - Commit all changes with message: "feat: implement issue #${{ github.event.issue.number }} - ${{ github.event.issue.title }}"
+            - Push to dev branch
 
             Environment variables available:
             - NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
@@ -76,7 +79,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🤖 **AI Implementation Complete!**\n\nGemini has finished implementing your feature request. A pull request has been created and is ready for review.\n\n📋 **Next Steps:**\n1. Review the pull request\n2. Test the preview deployment from Vercel\n3. Request changes if needed or approve and merge\n\n🔗 Check the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for full details.'
+              body: '🤖 **AI Implementation Complete!**\n\nGemini has finished implementing your feature request and committed the changes directly to the `dev` branch.\n\n📋 **Next Steps:**\n1. Check the dev preview deployment from Vercel\n2. Test the implemented feature\n3. Review the commits in the dev branch\n4. If everything works, merge dev to main for production\n\n🔗 [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n🔗 [View dev branch](${{ github.server_url }}/${{ github.repository }}/tree/dev)\n\nCloses #${{ github.event.issue.number }}'
             })
 
       - name: Comment on issue - Failure
