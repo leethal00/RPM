@@ -15,6 +15,7 @@ import {
     MapPin,
     Layers,
     Users,
+    UserCog,
     Lightbulb,
 } from "lucide-react"
 
@@ -223,6 +224,14 @@ export function AppSidebar() {
                                     </div>
                                 </SidebarMenuButton>
                                 <SidebarMenuSub>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/users'}>
+                                            <Link href="/settings/users" className="flex items-center gap-2">
+                                                <UserCog className="size-3.5" />
+                                                <span>Users</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
                                     <SidebarMenuSubItem>
                                         <SidebarMenuSubButton asChild isActive={pathname === '/settings/customers'}>
                                             <Link href="/settings/customers" className="flex items-center gap-2">
