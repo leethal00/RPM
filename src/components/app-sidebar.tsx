@@ -258,10 +258,18 @@ export function AppSidebar() {
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="Feature Request" isActive={pathname === '/feature-request'}>
+                                <SidebarMenuButton asChild tooltip="New Feature Request" isActive={pathname === '/feature-request'}>
                                     <Link href="/feature-request">
                                         <Lightbulb className="size-4" />
-                                        <span>Feature Request</span>
+                                        <span>New Feature</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="View Feature Requests" isActive={pathname === '/feature-requests'}>
+                                    <Link href="/feature-requests">
+                                        <ClipboardList className="size-4" />
+                                        <span>Feature Requests</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
