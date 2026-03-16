@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -80,7 +80,7 @@ interface AnalyticsData {
 export default function AnalyticsPage() {
     const [data, setData] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     useEffect(() => {
         async function fetchAnalytics() {
@@ -88,7 +88,7 @@ export default function AnalyticsPage() {
             const now = new Date()
 
             // Fetch all assets with types, stores, and active jobs
-            const { data: assets } = await supabase
+            const { data: assets, error: assetsError } = await supabase
                 .from('assets')
                 .select(`
                     *,
@@ -97,11 +97,13 @@ export default function AnalyticsPage() {
                     jobs (status)
                 `)
 
+            if (assetsError) console.error('Error fetching assets:', assetsError)
+
             // Fetch upcoming maintenance schedules (next 90 days)
             const in90Days = new Date(now)
             in90Days.setDate(in90Days.getDate() + 90)
 
-            const { data: schedules } = await supabase
+            const { data: schedules, error: schedulesError } = await supabase
                 .from('maintenance_schedules')
                 .select(`
                     *,
@@ -114,14 +116,18 @@ export default function AnalyticsPage() {
                 .lte('next_due_at', in90Days.toISOString())
                 .order('next_due_at', { ascending: true })
 
+            if (schedulesError) console.error('Error fetching schedules:', schedulesError)
+
             // Fetch jobs for maintenance activity over time (last 6 months)
             const sixMonthsAgo = new Date(now)
             sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
-            const { data: recentJobs } = await supabase
+            const { data: recentJobs, error: jobsError } = await supabase
                 .from('jobs')
                 .select('status, created_at, resolved_at, job_type')
                 .gte('created_at', sixMonthsAgo.toISOString())
+
+            if (jobsError) console.error('Error fetching jobs:', jobsError)
 
             if (!assets) {
                 setLoading(false)
