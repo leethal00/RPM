@@ -5,7 +5,6 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
     BarChart,
     Bar,
@@ -17,388 +16,577 @@ import {
     PieChart,
     Pie,
     Cell,
-    LineChart,
-    Line
+    AreaChart,
+    Area,
+    Legend
 } from "recharts"
 import {
-    LayoutDashboard,
-    TrendingUp,
-    AlertTriangle,
+    Activity,
     CheckCircle2,
+    AlertTriangle,
     Clock,
-    Filter,
     BarChart3,
-    Building2,
-    Layers,
-    ArrowUpRight
+    Wrench,
+    MapPin,
+    Layers
 } from "lucide-react"
-import Link from "next/link"
 
-const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
+const STATUS_COLORS = {
+    healthy: '#10b981',
+    due: '#f59e0b',
+    overdue: '#ef4444',
+    faulted: '#8b5cf6'
+}
+
+const TYPE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b']
+
+interface AssetWithRelations {
+    id: string
+    name: string
+    status: string
+    next_service_date: string | null
+    last_service_date: string | null
+    install_date: string | null
+    asset_type_id: string | null
+    store_id: string
+    asset_types: { label: string } | null
+    stores: { name: string; region: string | null } | null
+    jobs: { status: string }[]
+}
+
+interface MaintenanceSchedule {
+    id: string
+    next_due_at: string
+    task_name: string
+    assets: {
+        name: string
+        stores: { name: string } | null
+    } | null
+}
+
+interface AnalyticsData {
+    totalAssets: number
+    healthyCount: number
+    dueCount: number
+    overdueCount: number
+    faultedCount: number
+    healthPieData: { name: string; value: number; color: string }[]
+    assetsByType: { name: string; count: number }[]
+    assetsByRegion: { name: string; count: number }[]
+    maintenanceTimeline: { month: string; completed: number; scheduled: number }[]
+    upcomingMaintenance: { name: string; store: string; due: string; daysUntil: number }[]
+}
 
 export default function AnalyticsPage() {
-    const [stats, setStats] = useState<any>({
-        totalJobs: 0,
-        openJobs: 0,
-        resolvedJobs: 0,
-        jobsByStore: [],
-        jobsByStatus: [],
-        jobsOverTime: [],
-        jobsByBrand: [],
-        projectBudgetStats: [],
-        totalBudget: 0
-    })
+    const [data, setData] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
 
     useEffect(() => {
-        async function fetchStats() {
+        async function fetchAnalytics() {
             setLoading(true)
+            const now = new Date()
 
-            // 1. Fetch all jobs with store brand info
-            const { data: allJobs } = await supabase
-                .from('jobs')
+            // Fetch all assets with types, stores, and active jobs
+            const { data: assets } = await supabase
+                .from('assets')
                 .select(`
-                    status, 
-                    created_at, 
-                    store_id, 
-                    project_id,
-                    stores(name, brand_st_pierres, brand_bento_bowl, brand_k10)
+                    *,
+                    asset_types (label),
+                    stores (name, region),
+                    jobs (status)
                 `)
 
-            // 2. Fetch all projects with store info
-            const { data: allProjects } = await supabase
-                .from('projects')
-                .select('*, stores(name)')
-                .neq('status', 'archived')
-                .order('created_at', { ascending: false })
+            // Fetch upcoming maintenance schedules (next 90 days)
+            const in90Days = new Date(now)
+            in90Days.setDate(in90Days.getDate() + 90)
 
-            if (!allJobs || !allProjects) return
+            const { data: schedules } = await supabase
+                .from('maintenance_schedules')
+                .select(`
+                    *,
+                    assets (
+                        name,
+                        stores (name)
+                    )
+                `)
+                .gte('next_due_at', now.toISOString())
+                .lte('next_due_at', in90Days.toISOString())
+                .order('next_due_at', { ascending: true })
 
-            // 3. Process Brand Distribution
-            const brandStats: any = { 'St Pierre\'s': 0, 'Bento Bowl': 0, 'K10': 0 }
-            allJobs.forEach((job: any) => {
-                if (job.stores?.brand_st_pierres !== false) brandStats['St Pierre\'s']++
-                if (job.stores?.brand_bento_bowl) brandStats['Bento Bowl']++
-                if (job.stores?.brand_k10) brandStats['K10']++
-            })
-            const jobsByBrand = Object.entries(brandStats).map(([name, count]) => ({ name, count }))
+            // Fetch jobs for maintenance activity over time (last 6 months)
+            const sixMonthsAgo = new Date(now)
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
-            // 4. Process Project Budget Stats
-            const projectBudgetStats = allProjects.map((p: any) => {
-                const linkedJobs = allJobs.filter((j: any) => j.project_id === p.id)
-                const completedJobs = linkedJobs.filter((j: any) => j.status === 'resolved' || j.status === 'closed').length
-                const progress = linkedJobs.length > 0 ? (completedJobs / linkedJobs.length) * 100 : 0
-                return {
-                    name: p.name,
-                    budget: p.budget,
-                    progress: Math.round(progress),
-                    jobCount: linkedJobs.length
+            const { data: recentJobs } = await supabase
+                .from('jobs')
+                .select('status, created_at, resolved_at, job_type')
+                .gte('created_at', sixMonthsAgo.toISOString())
+
+            if (!assets) {
+                setLoading(false)
+                return
+            }
+
+            const typedAssets = assets as AssetWithRelations[]
+            const typedSchedules = (schedules || []) as MaintenanceSchedule[]
+
+            // --- Compute asset health status ---
+            let healthyCount = 0
+            let dueCount = 0
+            let overdueCount = 0
+            let faultedCount = 0
+
+            typedAssets.forEach(asset => {
+                const hasActiveFault = asset.jobs?.some(
+                    (j) => j.status === 'open' || j.status === 'in_progress'
+                )
+
+                if (hasActiveFault) {
+                    faultedCount++
+                } else if (asset.next_service_date) {
+                    const nextService = new Date(asset.next_service_date)
+                    const daysUntil = Math.ceil((nextService.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                    if (daysUntil < 0) {
+                        overdueCount++
+                    } else if (daysUntil <= 30) {
+                        dueCount++
+                    } else {
+                        healthyCount++
+                    }
+                } else {
+                    healthyCount++
                 }
             })
 
-            // 5. Process Jobs by Store
-            const storeMap: any = {}
-            allJobs.forEach((job: any) => {
-                const storeName = job.stores?.name || 'Unknown'
-                storeMap[storeName] = (storeMap[storeName] || 0) + 1
-            })
-            const jobsByStore = Object.entries(storeMap).map(([name, count]) => ({ name, count }))
-
-            // 3. Process Jobs by Status
-            const statusMap: any = { open: 0, in_progress: 0, resolved: 0, closed: 0 }
-            allJobs.forEach((job: any) => {
-                statusMap[job.status] = (statusMap[job.status] || 0) + 1
-            })
-            const jobsByStatus = [
-                { name: 'Open', value: statusMap.open, color: '#ef4444' },
-                { name: 'In Progress', value: statusMap.in_progress, color: '#3b82f6' },
-                { name: 'Resolved', value: statusMap.resolved, color: '#10b981' },
-                { name: 'Closed', value: statusMap.closed, color: '#64748b' }
+            const healthPieData = [
+                { name: 'Healthy', value: healthyCount, color: STATUS_COLORS.healthy },
+                { name: 'Due Soon', value: dueCount, color: STATUS_COLORS.due },
+                { name: 'Overdue', value: overdueCount, color: STATUS_COLORS.overdue },
+                { name: 'Faulted', value: faultedCount, color: STATUS_COLORS.faulted },
             ].filter(d => d.value > 0)
 
-            // 4. Process Jobs Over Time (Last 7 days)
-            const timeMap: any = {}
-            const last7Days = [...Array(7)].map((_, i) => {
-                const d = new Date()
-                d.setDate(d.getDate() - i)
-                return d.toISOString().split('T')[0]
-            }).reverse()
+            // --- Assets by type ---
+            const typeMap: Record<string, number> = {}
+            typedAssets.forEach(asset => {
+                const label = asset.asset_types?.label || 'Untyped'
+                typeMap[label] = (typeMap[label] || 0) + 1
+            })
+            const assetsByType = Object.entries(typeMap)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count)
 
-            last7Days.forEach(date => timeMap[date] = 0)
-            allJobs.forEach((job: any) => {
-                const date = job.created_at.split('T')[0]
-                if (timeMap[date] !== undefined) {
-                    timeMap[date]++
+            // --- Assets by region ---
+            const regionMap: Record<string, number> = {}
+            typedAssets.forEach(asset => {
+                const region = asset.stores?.region || 'Unassigned'
+                regionMap[region] = (regionMap[region] || 0) + 1
+            })
+            const assetsByRegion = Object.entries(regionMap)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count)
+
+            // --- Maintenance activity over time (last 6 months) ---
+            const monthBuckets: Record<string, { completed: number; scheduled: number }> = {}
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now)
+                d.setMonth(d.getMonth() - i)
+                const key = d.toLocaleDateString('en-NZ', { month: 'short', year: '2-digit' })
+                monthBuckets[key] = { completed: 0, scheduled: 0 }
+            }
+
+            const monthKeys = Object.keys(monthBuckets)
+
+            ;(recentJobs || []).forEach((job: any) => {
+                const created = new Date(job.created_at)
+                const key = created.toLocaleDateString('en-NZ', { month: 'short', year: '2-digit' })
+                if (monthBuckets[key]) {
+                    if (job.job_type === 'maintenance') {
+                        if (job.status === 'resolved' || job.status === 'closed') {
+                            monthBuckets[key].completed++
+                        } else {
+                            monthBuckets[key].scheduled++
+                        }
+                    } else {
+                        // faults and project jobs count as scheduled work
+                        monthBuckets[key].scheduled++
+                    }
                 }
             })
-            const jobsOverTime = Object.entries(timeMap).map(([date, count]) => ({
-                date: new Date(date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }),
-                count
+
+            const maintenanceTimeline = monthKeys.map(month => ({
+                month,
+                completed: monthBuckets[month].completed,
+                scheduled: monthBuckets[month].scheduled
             }))
 
-            setStats({
-                totalJobs: allJobs.length,
-                openJobs: statusMap.open + statusMap.in_progress,
-                resolvedJobs: statusMap.resolved + statusMap.closed,
-                jobsByStore,
-                jobsByStatus,
-                jobsOverTime,
-                jobsByBrand,
-                projectBudgetStats,
-                recentProjects: allProjects,
-                totalBudget: allProjects.reduce((acc: number, p: any) => acc + (p.budget || 0), 0)
+            // --- Upcoming maintenance (next 90 days, top 10) ---
+            const upcomingMaintenance = typedSchedules.slice(0, 10).map(s => {
+                const dueDate = new Date(s.next_due_at)
+                const daysUntil = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                return {
+                    name: s.assets?.name || s.task_name,
+                    store: s.assets?.stores?.name || 'Unknown',
+                    due: dueDate.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }),
+                    daysUntil
+                }
+            })
+
+            setData({
+                totalAssets: typedAssets.length,
+                healthyCount,
+                dueCount,
+                overdueCount,
+                faultedCount,
+                healthPieData,
+                assetsByType,
+                assetsByRegion,
+                maintenanceTimeline,
+                upcomingMaintenance
             })
             setLoading(false)
         }
 
-        fetchStats()
+        fetchAnalytics()
     }, [supabase])
 
-    if (loading) return <DashboardLayout><div className="p-8 animate-pulse space-y-8"><div className="h-8 w-64 bg-muted rounded" /><div className="grid grid-cols-1 md:grid-cols-4 gap-6"><div className="h-24 bg-muted rounded" /><div className="h-24 bg-muted rounded" /><div className="h-24 bg-muted rounded" /><div className="h-24 bg-muted rounded" /></div><div className="h-96 bg-muted rounded" /></div></DashboardLayout>
+    if (loading) {
+        return (
+            <DashboardLayout>
+                <div className="p-8 animate-pulse space-y-8">
+                    <div className="h-8 w-64 bg-muted rounded" />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div className="h-28 bg-muted rounded-lg" />
+                        <div className="h-28 bg-muted rounded-lg" />
+                        <div className="h-28 bg-muted rounded-lg" />
+                        <div className="h-28 bg-muted rounded-lg" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="h-80 bg-muted rounded-lg" />
+                        <div className="h-80 bg-muted rounded-lg" />
+                    </div>
+                </div>
+            </DashboardLayout>
+        )
+    }
+
+    if (!data) {
+        return (
+            <DashboardLayout>
+                <div className="p-8 text-center text-muted-foreground">
+                    Unable to load analytics data.
+                </div>
+            </DashboardLayout>
+        )
+    }
+
+    const healthPercent = data.totalAssets > 0
+        ? Math.round((data.healthyCount / data.totalAssets) * 100)
+        : 0
 
     return (
         <DashboardLayout>
             <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Analytics & Trends</h1>
-                        <p className="text-muted-foreground mt-1 text-sm italic">
-                            Portfolio performance metrics and fault distribution.
-                        </p>
-                    </div>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Portfolio Analytics</h1>
+                    <p className="text-muted-foreground mt-1 text-sm italic">
+                        Asset health, maintenance operations, and portfolio distribution.
+                    </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <Card className="bg-primary/5 border-primary/20">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Tickets</CardTitle>
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                <Layers className="size-3.5" />
+                                Total Assets
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black">{stats.totalJobs}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">LIFETIME LOGS</p>
+                            <div className="text-3xl font-black">{data.totalAssets}</div>
+                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">
+                                {healthPercent}% HEALTHY
+                            </p>
                         </CardContent>
                     </Card>
-                    <Card className="border-red-100 bg-red-50/30">
+
+                    <Card className="border-green-200 bg-green-50/30 dark:bg-green-950/20 dark:border-green-900">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-red-600">Active Issues</CardTitle>
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400 flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5" />
+                                Healthy
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-red-600">{stats.openJobs}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">OPEN OR IN PROGRESS</p>
+                            <div className="text-3xl font-black text-green-600 dark:text-green-400">{data.healthyCount}</div>
+                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">NO ACTION NEEDED</p>
                         </CardContent>
                     </Card>
-                    <Card className="border-blue-100 bg-blue-50/30">
+
+                    <Card className="border-amber-200 bg-amber-50/30 dark:bg-amber-950/20 dark:border-amber-900">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-blue-600">Strategic Capex</CardTitle>
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                <Clock className="size-3.5" />
+                                Due Soon
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-blue-600">${stats.totalBudget?.toLocaleString()}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">PORTFOLIO PIPELINE</p>
+                            <div className="text-3xl font-black text-amber-600 dark:text-amber-400">{data.dueCount}</div>
+                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">WITHIN 30 DAYS</p>
                         </CardContent>
                     </Card>
-                    <Card className="border-green-100 bg-green-50/30">
+
+                    <Card className="border-red-200 bg-red-50/30 dark:bg-red-950/20 dark:border-red-900">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-green-600">Resolved</CardTitle>
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                                <AlertTriangle className="size-3.5" />
+                                Attention
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-green-600">{stats.resolvedJobs}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">COMPLETED TASKS</p>
+                            <div className="text-3xl font-black text-red-600 dark:text-red-400">{data.overdueCount + data.faultedCount}</div>
+                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">
+                                {data.overdueCount} OVERDUE + {data.faultedCount} FAULTED
+                            </p>
                         </CardContent>
                     </Card>
                 </div>
 
+                {/* Charts Row 1: Health Donut + Asset Distribution by Type */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
+                    <Card className="shadow-sm border-sidebar-border">
                         <CardHeader>
                             <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                <BarChart3 className="size-4 text-primary" />
-                                Budget Allocation by Project
+                                <Activity className="size-4 text-primary" />
+                                Asset Health Overview
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="h-[300px] pt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.projectBudgetStats} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={120} fontSize={10} fontWeight="bold" stroke="#64748b" />
-                                    <Tooltip
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                                        cursor={{ fill: '#f8fafc' }}
-                                    />
-                                    <Bar dataKey="budget" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                <Building2 className="size-4 text-primary" />
-                                Fault attribution by Brand
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="h-[300px] flex flex-col items-center justify-center pt-4">
-                            <ResponsiveContainer width="100%" height="80%">
+                        <CardContent className="h-[320px] flex flex-col items-center justify-center">
+                            <ResponsiveContainer width="100%" height="75%">
                                 <PieChart>
                                     <Pie
-                                        data={stats.jobsByBrand}
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="count"
-                                    >
-                                        {stats.jobsByBrand.map((entry: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="flex gap-4 mt-6">
-                                {stats.jobsByBrand.map((s: any, index: number) => (
-                                    <div key={s.name} className="flex items-center gap-1.5">
-                                        <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                                        <span className="text-[10px] font-bold uppercase text-muted-foreground">{s.name}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                <AlertTriangle className="size-4 text-primary" />
-                                Faults by Site
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="h-[300px] pt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.jobsByStore} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={100} fontSize={10} fontWeight="bold" stroke="#64748b" />
-                                    <Tooltip
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                                        cursor={{ fill: '#f8fafc' }}
-                                    />
-                                    <Bar dataKey="count" fill="#1e293b" radius={[0, 4, 4, 0]} barSize={20} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="md:col-span-1 shadow-sm border-sidebar-border">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                <CheckCircle2 className="size-4 text-primary" />
-                                Status Distribution
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="h-[300px] flex flex-col items-center justify-center pt-4">
-                            <ResponsiveContainer width="100%" height="80%">
-                                <PieChart>
-                                    <Pie
-                                        data={stats.jobsByStatus}
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
+                                        data={data.healthPieData}
+                                        innerRadius={65}
+                                        outerRadius={90}
+                                        paddingAngle={3}
                                         dataKey="value"
+                                        strokeWidth={2}
+                                        stroke="var(--background, #fff)"
                                     >
-                                        {stats.jobsByStatus.map((entry: any, index: number) => (
+                                        {data.healthPieData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip />
+                                    <Tooltip
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                            fontSize: '12px'
+                                        }}
+                                        formatter={(value) => [`${value} assets`]}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
-                            <div className="flex gap-4 mt-6">
-                                {stats.jobsByStatus.map((s: any) => (
+                            <div className="flex flex-wrap justify-center gap-4 mt-2">
+                                {data.healthPieData.map((s) => (
                                     <div key={s.name} className="flex items-center gap-1.5">
-                                        <div className="size-2 rounded-full" style={{ backgroundColor: s.color }} />
-                                        <span className="text-[10px] font-bold uppercase text-muted-foreground">{s.name}</span>
+                                        <div className="size-2.5 rounded-full" style={{ backgroundColor: s.color }} />
+                                        <span className="text-[11px] font-semibold text-muted-foreground">
+                                            {s.name} ({s.value})
+                                        </span>
                                     </div>
                                 ))}
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="md:col-span-2 shadow-sm border-sidebar-border">
-                        <CardHeader className="flex flex-row items-center justify-between">
+                    <Card className="shadow-sm border-sidebar-border">
+                        <CardHeader>
                             <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                <TrendingUp className="size-4 text-primary" />
-                                Reporting Trend (Last 7 Days)
+                                <BarChart3 className="size-4 text-primary" />
+                                Assets by Type
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="h-[350px] pt-8">
+                        <CardContent className="h-[320px] pt-4">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={stats.jobsOverTime}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                    <XAxis dataKey="date" fontSize={10} fontWeight="bold" stroke="#64748b" tickMargin={10} />
-                                    <YAxis fontSize={10} fontWeight="bold" stroke="#64748b" />
+                                <BarChart data={data.assetsByType} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                                    <XAxis type="number" fontSize={10} stroke="#94a3b8" allowDecimals={false} />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        width={130}
+                                        fontSize={11}
+                                        fontWeight={600}
+                                        stroke="#64748b"
+                                        tickLine={false}
+                                    />
                                     <Tooltip
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                            fontSize: '12px'
+                                        }}
+                                        cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                                        formatter={(value) => [`${value} assets`, 'Count']}
                                     />
-                                    <Line
+                                    <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={22}>
+                                        {data.assetsByType.map((_, index) => (
+                                            <Cell key={`type-${index}`} fill={TYPE_COLORS[index % TYPE_COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Charts Row 2: Maintenance Activity + Assets by Region */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Card className="shadow-sm border-sidebar-border">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                <Wrench className="size-4 text-primary" />
+                                Maintenance Activity (6 Months)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[320px] pt-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={data.maintenanceTimeline}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                    <XAxis
+                                        dataKey="month"
+                                        fontSize={11}
+                                        fontWeight={600}
+                                        stroke="#64748b"
+                                        tickMargin={8}
+                                        tickLine={false}
+                                    />
+                                    <YAxis
+                                        fontSize={10}
+                                        stroke="#94a3b8"
+                                        allowDecimals={false}
+                                        tickLine={false}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                            fontSize: '12px'
+                                        }}
+                                    />
+                                    <Legend
+                                        verticalAlign="top"
+                                        height={36}
+                                        iconType="circle"
+                                        iconSize={8}
+                                        formatter={(value) => (
+                                            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>{value}</span>
+                                        )}
+                                    />
+                                    <Area
                                         type="monotone"
-                                        dataKey="count"
-                                        stroke="#1e293b"
-                                        strokeWidth={3}
-                                        dot={{ r: 4, fill: "#1e293b", strokeWidth: 2, stroke: "#fff" }}
-                                        activeDot={{ r: 6, strokeWidth: 0 }}
+                                        dataKey="completed"
+                                        name="Completed"
+                                        stackId="1"
+                                        stroke="#10b981"
+                                        fill="#10b981"
+                                        fillOpacity={0.3}
+                                        strokeWidth={2}
                                     />
-                                </LineChart>
+                                    <Area
+                                        type="monotone"
+                                        dataKey="scheduled"
+                                        name="Open / In Progress"
+                                        stackId="1"
+                                        stroke="#3b82f6"
+                                        fill="#3b82f6"
+                                        fillOpacity={0.2}
+                                        strokeWidth={2}
+                                    />
+                                </AreaChart>
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
 
-                    <Card className="md:col-span-2 shadow-sm border-sidebar-border overflow-hidden">
-                        <CardHeader className="bg-muted/30 pb-3 border-b">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
-                                    <Layers className="size-4 text-primary" />
-                                    Recent HQ Initiatives
-                                </CardTitle>
-                                <Button variant="link" size="sm" asChild className="text-[10px] font-bold uppercase tracking-widest h-auto p-0">
-                                    <Link href="/projects">View Portfolio</Link>
-                                </Button>
-                            </div>
+                    <Card className="shadow-sm border-sidebar-border">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                <MapPin className="size-4 text-primary" />
+                                Assets by Region
+                            </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="divide-y divide-sidebar-border">
-                                {stats.recentProjects?.length > 0 ? (
-                                    stats.recentProjects.slice(0, 5).map((project: any) => (
-                                        <div key={project.id} className="p-4 hover:bg-muted/20 transition-colors flex items-center justify-between">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-sm">{project.name}</span>
-                                                    <Badge variant="outline" className="text-[9px] uppercase font-black px-1.5 h-4">
-                                                        {project.status.replace('_', ' ')}
-                                                    </Badge>
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground italic">
-                                                    <Building2 className="size-3" />
-                                                    {project.stores?.name || "General HQ"} • {new Date(project.created_at).toLocaleDateString()}
-                                                </div>
-                                            </div>
-                                            <Button variant="ghost" size="icon" asChild className="size-7 rounded-full">
-                                                <Link href={`/projects/${project.id}`}>
-                                                    <ArrowUpRight className="size-4" />
-                                                </Link>
-                                            </Button>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="p-8 text-center text-muted-foreground italic text-sm">
-                                        No active strategic projects found.
-                                    </div>
-                                )}
-                            </div>
+                        <CardContent className="h-[320px] pt-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={data.assetsByRegion}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                    <XAxis
+                                        dataKey="name"
+                                        fontSize={11}
+                                        fontWeight={600}
+                                        stroke="#64748b"
+                                        tickMargin={8}
+                                        tickLine={false}
+                                    />
+                                    <YAxis
+                                        fontSize={10}
+                                        stroke="#94a3b8"
+                                        allowDecimals={false}
+                                        tickLine={false}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                            fontSize: '12px'
+                                        }}
+                                        cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                                        formatter={(value) => [`${value} assets`, 'Count']}
+                                    />
+                                    <Bar dataKey="count" fill="#1e293b" radius={[4, 4, 0, 0]} barSize={32} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Upcoming Maintenance Table */}
+                {data.upcomingMaintenance.length > 0 && (
+                    <Card className="shadow-sm border-sidebar-border">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                                <Clock className="size-4 text-primary" />
+                                Upcoming Scheduled Maintenance (Next 90 Days)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="divide-y">
+                                {data.upcomingMaintenance.map((item, i) => (
+                                    <div key={i} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="font-semibold text-sm">{item.name}</span>
+                                            <span className="text-xs text-muted-foreground">{item.store}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-muted-foreground">{item.due}</span>
+                                            <Badge
+                                                variant={item.daysUntil <= 7 ? "destructive" : item.daysUntil <= 30 ? "secondary" : "outline"}
+                                                className="text-[10px] font-bold tabular-nums"
+                                            >
+                                                {item.daysUntil}d
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </DashboardLayout>
     )
