@@ -68,21 +68,45 @@ describe('AnalyticsPage', () => {
     createChain(mockSelectJobs)
   })
 
-  it('should show loading skeleton initially', () => {
-    // Make queries hang (never resolve)
+  it('should show structured loading skeleton that matches page layout (regression: ISSUE-RPM-7)', () => {
+    // Make queries hang (never resolve) so loading state persists
     mockSelectAssets.mockReturnValue({
       ...assetsChain,
       then: () => new Promise(() => {}),
-      // supabase queries are thenable - simulate pending
     })
-
-    // Actually the Supabase client returns a Promise-like from the final chain call
-    // We need the chain's terminal method to return a pending promise
-    // The simplest approach: make select return a chain where the result never resolves
     assetsChain.select = vi.fn(() => new Promise(() => {}))
 
-    render(<AnalyticsPage />)
+    const { container } = render(<AnalyticsPage />)
     expect(screen.getByTestId('layout')).toBeInTheDocument()
+
+    // The skeleton must use the animate-pulse class for shimmer effect
+    const skeletonRoot = container.querySelector('.animate-pulse')
+    expect(skeletonRoot).toBeInTheDocument()
+
+    // Regression: old skeleton had NO Card components — just flat div placeholders.
+    // The fix uses Card components to mirror the real page structure.
+    // Cards are rendered as divs with the shadcn card class pattern.
+    // We check for at least 9 cards: 4 summary + 2 chart row 1 + 2 chart row 2 + 1 maintenance
+    const cards = skeletonRoot!.querySelectorAll('[class*="border-muted"]')
+    expect(cards.length).toBeGreaterThanOrEqual(9)
+
+    // Regression: old skeleton had no circular chart placeholders.
+    // The fix includes rounded-full elements for pie chart placeholders.
+    const circularPlaceholders = skeletonRoot!.querySelectorAll('.rounded-full')
+    expect(circularPlaceholders.length).toBeGreaterThanOrEqual(2)
+
+    // Regression: old skeleton had no bar chart placeholders.
+    // The fix includes variable-height bar elements for bar chart skeletons.
+    const barPlaceholders = skeletonRoot!.querySelectorAll('.rounded-t')
+    expect(barPlaceholders.length).toBeGreaterThanOrEqual(6)
+
+    // Regression: old skeleton had no maintenance table rows.
+    // The fix includes 4 maintenance row placeholders with badge-like pills.
+    const maintenanceRows = skeletonRoot!.querySelectorAll('.flex.items-center.justify-between')
+    expect(maintenanceRows.length).toBeGreaterThanOrEqual(4)
+
+    // Verify the skeleton uses the same max-width container as the real page
+    expect(skeletonRoot).toHaveClass('max-w-7xl')
   })
 
   it('should show error state when asset fetch fails', async () => {
