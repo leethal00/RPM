@@ -274,18 +274,77 @@ export default function AnalyticsPage() {
     if (loading) {
         return (
             <DashboardLayout>
-                <div className="p-8 animate-pulse space-y-8">
-                    <div className="h-8 w-64 bg-muted rounded" />
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <div className="h-28 bg-muted rounded-lg" />
-                        <div className="h-28 bg-muted rounded-lg" />
-                        <div className="h-28 bg-muted rounded-lg" />
-                        <div className="h-28 bg-muted rounded-lg" />
+                <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto animate-pulse">
+                    {/* Title */}
+                    <div>
+                        <div className="h-9 w-64 bg-muted rounded" />
+                        <div className="h-4 w-96 bg-muted rounded mt-2" />
                     </div>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <Card key={i} className="border-muted">
+                                <CardHeader className="pb-2">
+                                    <div className="h-3 w-24 bg-muted rounded" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="h-8 w-16 bg-muted rounded mt-1" />
+                                    <div className="h-2.5 w-20 bg-muted rounded mt-3" />
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+
+                    {/* Charts Row 1 */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="h-80 bg-muted rounded-lg" />
-                        <div className="h-80 bg-muted rounded-lg" />
+                        {Array.from({ length: 2 }).map((_, i) => (
+                            <Card key={i} className="shadow-sm border-muted">
+                                <CardHeader>
+                                    <div className="h-4 w-40 bg-muted rounded" />
+                                </CardHeader>
+                                <CardContent className="h-[320px] flex items-center justify-center">
+                                    <div className="h-44 w-44 bg-muted rounded-full" />
+                                </CardContent>
+                            </Card>
+                        ))}
                     </div>
+
+                    {/* Charts Row 2 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                            <Card key={i} className="shadow-sm border-muted">
+                                <CardHeader>
+                                    <div className="h-4 w-48 bg-muted rounded" />
+                                </CardHeader>
+                                <CardContent className="h-[320px] flex flex-col justify-end gap-3 pb-8">
+                                    <div className="flex items-end gap-4 h-full">
+                                        {[40, 65, 80, 50, 70, 55].map((h, j) => (
+                                            <div key={j} className="flex-1 bg-muted rounded-t" style={{ height: `${h}%` }} />
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+
+                    {/* Upcoming Maintenance */}
+                    <Card className="shadow-sm border-muted">
+                        <CardHeader>
+                            <div className="h-4 w-72 bg-muted rounded" />
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <div className="space-y-1.5">
+                                        <div className="h-4 w-36 bg-muted rounded" />
+                                        <div className="h-3 w-24 bg-muted rounded" />
+                                    </div>
+                                    <div className="h-5 w-12 bg-muted rounded-full" />
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
                 </div>
             </DashboardLayout>
         )
