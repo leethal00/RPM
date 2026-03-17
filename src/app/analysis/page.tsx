@@ -20,6 +20,7 @@ import {
     Area,
     Legend
 } from "recharts"
+import { Button } from "@/components/ui/button"
 import {
     Activity,
     CheckCircle2,
@@ -80,59 +81,72 @@ interface AnalyticsData {
 export default function AnalyticsPage() {
     const [data, setData] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const supabase = useMemo(() => createClient(), [])
 
-    useEffect(() => {
-        async function fetchAnalytics() {
-            setLoading(true)
-            const now = new Date()
+    const fetchAnalytics = async () => {
+        setLoading(true)
+        setError(null)
+        const now = new Date()
 
-            // Fetch all assets with types, stores, and active jobs
-            const { data: assets, error: assetsError } = await supabase
-                .from('assets')
-                .select(`
-                    *,
-                    asset_types (label),
-                    stores (name, region),
-                    jobs (status)
-                `)
+        // Fetch all assets with types, stores, and active jobs
+        const { data: assets, error: assetsError } = await supabase
+            .from('assets')
+            .select(`
+                *,
+                asset_types (label),
+                stores (name, region),
+                jobs (status)
+            `)
 
-            if (assetsError) console.error('Error fetching assets:', assetsError)
+        if (assetsError) {
+            console.error('Error fetching assets:', assetsError)
+            setError(`Failed to load asset data: ${assetsError.message}`)
+            setLoading(false)
+            return
+        }
 
-            // Fetch upcoming maintenance schedules (next 90 days)
-            const in90Days = new Date(now)
-            in90Days.setDate(in90Days.getDate() + 90)
+        // Fetch upcoming maintenance schedules (next 90 days)
+        const in90Days = new Date(now)
+        in90Days.setDate(in90Days.getDate() + 90)
 
-            const { data: schedules, error: schedulesError } = await supabase
-                .from('maintenance_schedules')
-                .select(`
-                    *,
-                    assets (
-                        name,
-                        stores (name)
-                    )
-                `)
-                .gte('next_due_at', now.toISOString())
-                .lte('next_due_at', in90Days.toISOString())
-                .order('next_due_at', { ascending: true })
+        const { data: schedules, error: schedulesError } = await supabase
+            .from('maintenance_schedules')
+            .select(`
+                *,
+                assets (
+                    name,
+                    stores (name)
+                )
+            `)
+            .gte('next_due_at', now.toISOString())
+            .lte('next_due_at', in90Days.toISOString())
+            .order('next_due_at', { ascending: true })
 
-            if (schedulesError) console.error('Error fetching schedules:', schedulesError)
+        if (schedulesError) {
+            console.error('Error fetching schedules:', schedulesError)
+            // Continue with empty schedules
+        }
 
-            // Fetch jobs for maintenance activity over time (last 6 months)
-            const sixMonthsAgo = new Date(now)
-            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+        // Fetch jobs for maintenance activity over time (last 6 months)
+        const sixMonthsAgo = new Date(now)
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
-            const { data: recentJobs, error: jobsError } = await supabase
-                .from('jobs')
-                .select('status, created_at, resolved_at, job_type')
-                .gte('created_at', sixMonthsAgo.toISOString())
+        const { data: recentJobs, error: jobsError } = await supabase
+            .from('jobs')
+            .select('status, created_at, resolved_at, job_type')
+            .gte('created_at', sixMonthsAgo.toISOString())
 
-            if (jobsError) console.error('Error fetching jobs:', jobsError)
+        if (jobsError) {
+            console.error('Error fetching jobs:', jobsError)
+            // Continue with empty jobs
+        }
 
-            if (!assets) {
-                setLoading(false)
-                return
-            }
+        if (!assets) {
+            setError('No asset data returned')
+            setLoading(false)
+            return
+        }
 
             const typedAssets = assets as AssetWithRelations[]
             const typedSchedules = (schedules || []) as MaintenanceSchedule[]
@@ -253,6 +267,7 @@ export default function AnalyticsPage() {
             setLoading(false)
         }
 
+    useEffect(() => {
         fetchAnalytics()
     }, [supabase])
 
@@ -271,6 +286,23 @@ export default function AnalyticsPage() {
                         <div className="h-80 bg-muted rounded-lg" />
                         <div className="h-80 bg-muted rounded-lg" />
                     </div>
+                </div>
+            </DashboardLayout>
+        )
+    }
+
+    if (error) {
+        return (
+            <DashboardLayout>
+                <div className="p-8 flex flex-col items-center justify-center gap-4 text-center">
+                    <AlertTriangle className="size-10 text-destructive" />
+                    <div>
+                        <h2 className="text-lg font-semibold">Failed to Load Analytics</h2>
+                        <p className="text-sm text-muted-foreground mt-1">{error}</p>
+                    </div>
+                    <Button variant="outline" onClick={() => fetchAnalytics()}>
+                        Try Again
+                    </Button>
                 </div>
             </DashboardLayout>
         )
