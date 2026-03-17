@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/s
 import { AppSidebar } from "@/components/app-sidebar"
 import { Separator } from "@/components/ui/separator"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function DashboardLayout({
     children,
@@ -26,7 +27,7 @@ export default function DashboardLayout({
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
-                            {/* Search / Notifications could go here */}
+                            <ThemeToggle />
                         </div>
                     </header>
                     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
