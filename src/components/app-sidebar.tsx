@@ -17,6 +17,7 @@ import {
     Users,
     UserCog,
     Lightbulb,
+    HelpCircle,
 } from "lucide-react"
 
 import {
@@ -266,6 +267,14 @@ export function AppSidebar() {
                     <SidebarGroupLabel>Support</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="Help & Support" isActive={pathname === '/help'}>
+                                    <Link href="/help">
+                                        <HelpCircle className="size-4" />
+                                        <span>Help & Support</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild tooltip="New Feature Request" isActive={pathname === '/feature-request'}>
                                     <Link href="/feature-request">
