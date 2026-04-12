@@ -15,17 +15,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-
-interface Project {
-    id: string
-    name: string
-    description?: string
-    status: string
-    budget?: number
-    start_date?: string
-    end_date?: string
-    store_id?: string
-}
+import type { Store, Project } from "@/types/database"
 
 interface ProjectFormProps {
     onSuccess: () => void
@@ -47,7 +37,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         store_id: project?.store_id || "none"
     })
 
-    const [stores, setStores] = useState<any[]>([])
+    const [stores, setStores] = useState<Store[]>([])
     const [fetchingStores, setFetchingStores] = useState(true)
 
     useState(() => {

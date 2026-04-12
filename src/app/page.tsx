@@ -5,27 +5,12 @@ import dynamic from "next/dynamic"
 import DashboardLayout from "@/components/dashboard-layout"
 import { StoreList } from "@/components/store-list"
 import { createClient } from "@/lib/supabase/client"
+import type { Store } from "@/types/database"
 
 const StoreMap = dynamic(() => import("@/components/store-map"), {
   ssr: false,
   loading: () => <div className="h-full w-full bg-muted animate-pulse" />
 })
-
-interface Store {
-  id: string
-  name: string
-  address: string
-  lat: number
-  lng: number
-  status: string
-  region: string
-  client?: {
-    name: string
-  }
-  site_photos?: {
-    url: string
-  }[]
-}
 
 export default function MapPage() {
   const [stores, setStores] = useState<Store[]>([])
@@ -41,7 +26,7 @@ export default function MapPage() {
         .select('*, client:clients(name), site_photos(url)')
 
       if (!error && data) {
-        setStores(data as any)
+        setStores(data as Store[])
       }
       setLoading(false)
     }
@@ -49,7 +34,7 @@ export default function MapPage() {
     fetchStores()
   }, [supabase])
 
-  const center: [number, number] = selectedStore
+  const center: [number, number] = selectedStore?.lat != null && selectedStore?.lng != null
     ? [selectedStore.lat, selectedStore.lng]
     : [-40.9006, 174.8860]
 
@@ -57,7 +42,7 @@ export default function MapPage() {
 
   const filteredStores = stores.filter(store =>
     store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    store.address.toLowerCase().includes(searchTerm.toLowerCase())
+    store.address?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (

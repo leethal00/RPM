@@ -30,21 +30,7 @@ const getStatusIcon = (status: string) => {
     })
 }
 
-interface Store {
-    id: string
-    name: string
-    address: string
-    lat: number
-    lng: number
-    status: string
-    region: string
-    brand_st_pierres?: boolean
-    brand_bento_bowl?: boolean
-    brand_k10?: boolean
-    site_photos?: {
-        url: string
-    }[]
-}
+import type { Store } from "@/types/database"
 
 interface StoreMapProps {
     stores: Store[]
@@ -81,7 +67,7 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
 
     return (
         <Marker
-            position={[store.lat, store.lng]}
+            position={[store.lat!, store.lng!]}
             icon={getStatusIcon(store.status)}
             eventHandlers={{
                 mouseover: (e) => {

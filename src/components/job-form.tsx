@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
+import type { Asset, Project, Vendor } from "@/types/database"
 
 interface JobFormProps {
     storeId: string
@@ -29,9 +30,9 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const [fetchingAssets, setFetchingAssets] = useState(true)
     const [fetchingProjects, setFetchingProjects] = useState(true)
     const [fetchingVendors, setFetchingVendors] = useState(true)
-    const [assets, setAssets] = useState<any[]>([])
-    const [projects, setProjects] = useState<any[]>([])
-    const [vendors, setVendors] = useState<any[]>([])
+    const [assets, setAssets] = useState<Asset[]>([])
+    const [projects, setProjects] = useState<Project[]>([])
+    const [vendors, setVendors] = useState<Vendor[]>([])
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [previews, setPreviews] = useState<string[]>([])
 
@@ -177,8 +178,8 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 router.push(`/stores/${storeId}`)
                 router.refresh()
             }
-        } catch (error: any) {
-            toast.error(error.message || "Failed to create job")
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to create job")
         } finally {
             setLoading(false)
         }
@@ -284,7 +285,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="none">Unassigned (Internal / TBD)</SelectItem>
-                            {vendors.map((v: any) => (
+                            {vendors.map((v) => (
                                 <SelectItem key={v.id} value={v.id}>
                                     {v.name} ({v.trade})
                                 </SelectItem>

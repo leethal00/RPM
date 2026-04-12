@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Job } from "@/types/database"
 import { JobTimeline } from "@/components/job-timeline"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
 
 export default function JobLogsPage() {
-    const [jobs, setJobs] = useState<any[]>([])
+    const [jobs, setJobs] = useState<Job[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [error, setError] = useState<string | null>(null)

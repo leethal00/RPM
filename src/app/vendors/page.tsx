@@ -3,6 +3,14 @@
 import { useEffect, useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Vendor, Job } from "@/types/database"
+
+interface VendorWithMetrics extends Vendor {
+    metrics: {
+        openJobs: number
+        avgResolutionHours: number
+    }
+}
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -38,11 +46,11 @@ import {
 
 export default function VendorsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [vendors, setVendors] = useState<any[]>([])
+    const [vendors, setVendors] = useState<VendorWithMetrics[]>([])
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [editingVendor, setEditingVendor] = useState<any>(null)
+    const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
 
     const fetchVendors = async () => {
         setLoading(true)
@@ -71,15 +79,15 @@ export default function VendorsPage() {
             }
 
             // 3. Process metrics
-            const enrichedVendors = (vendorData || []).map((vendor: any) => {
-                const vendorJobs = (jobData || []).filter((j: any) => j.vendor_id === vendor.id)
-                const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
+            const enrichedVendors = (vendorData || []).map((vendor: Vendor) => {
+                const vendorJobs = (jobData || []).filter((j: Job) => j.vendor_id === vendor.id)
+                const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
 
-                const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
+                const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
                 let avgResolutionHours = 0
 
                 if (resolvedJobs.length > 0) {
-                    const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
+                    const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
                         const start = new Date(j.created_at).getTime()
                         const end = new Date(j.resolved_at!).getTime()
                         return acc + (end - start) / (1000 * 60 * 60)
@@ -113,7 +121,7 @@ export default function VendorsPage() {
         v.trade.toLowerCase().includes(search.toLowerCase())
     )
 
-    const tradeColors: any = {
+    const tradeColors: Record<string, string> = {
         HVAC: "bg-blue-100 text-blue-700 border-blue-200",
         Plumbing: "bg-cyan-100 text-cyan-700 border-cyan-200",
         Electrical: "bg-amber-100 text-amber-700 border-amber-200",

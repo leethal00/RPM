@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
 import { Loader2, Plus, Trash2, Users } from "lucide-react"
+import type { Client } from "@/types/database"
 
 export function CustomerManager() {
     const supabase = createClient()
-    const [customers, setCustomers] = useState<any[]>([])
+    const [customers, setCustomers] = useState<Client[]>([])
     const [loading, setLoading] = useState(true)
     const [newCustomer, setNewCustomer] = useState("")
     const [adding, setAdding] = useState(false)

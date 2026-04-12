@@ -36,8 +36,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             if (error) throw error
             setPhotos(data || [])
-        } catch (error: any) {
-            console.error('Error fetching photos:', error.message)
+        } catch (error: unknown) {
+            console.error('Error fetching photos:', error instanceof Error ? error.message : error)
         } finally {
             setLoading(false)
         }
@@ -82,8 +82,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             toast.success("Photo uploaded successfully")
             fetchPhotos()
-        } catch (error: any) {
-            toast.error(`Upload failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
             console.error(error)
         } finally {
             setUploading(false)
@@ -111,8 +111,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             setPhotos(photos.filter(p => p.id !== photo.id))
             toast.success("Photo deleted")
-        } catch (error: any) {
-            toast.error(`Delete failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`)
         }
     }
 

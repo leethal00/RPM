@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Project } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
@@ -17,7 +18,7 @@ import {
 import { ProjectForm } from "@/components/project-form"
 
 export default function ProjectsPage() {
-    const [projects, setProjects] = useState<any[]>([])
+    const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)

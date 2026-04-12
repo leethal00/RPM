@@ -33,11 +33,31 @@ import {
     ArrowUpRight
 } from "lucide-react"
 import Link from "next/link"
+import type { Job, Project, Store } from "@/types/database"
 
 const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981']
 
+interface BrandStat { name: string; count: number }
+interface StoreStat { name: string; count: number }
+interface StatusStat { name: string; value: number; color: string }
+interface TimePoint { date: string; count: number }
+interface ProjectBudgetStat { name: string; budget: number; progress: number; jobCount: number }
+
+interface DashboardStats {
+    totalJobs: number
+    openJobs: number
+    resolvedJobs: number
+    jobsByStore: StoreStat[]
+    jobsByStatus: StatusStat[]
+    jobsOverTime: TimePoint[]
+    jobsByBrand: BrandStat[]
+    projectBudgetStats: ProjectBudgetStat[]
+    totalBudget: number
+    recentProjects?: (Project & { stores: Pick<Store, 'name'> | null })[]
+}
+
 export default function AnalyticsPage() {
-    const [stats, setStats] = useState<any>({
+    const [stats, setStats] = useState<DashboardStats>({
         totalJobs: 0,
         openJobs: 0,
         resolvedJobs: 0,
@@ -75,9 +95,17 @@ export default function AnalyticsPage() {
 
             if (!allJobs || !allProjects) return
 
+            type RawJob = Pick<Job, 'status' | 'created_at' | 'store_id' | 'project_id'> & {
+                stores: Pick<Store, 'name' | 'brand_st_pierres' | 'brand_bento_bowl' | 'brand_k10'> | null
+            }
+            type RawProject = Project & { stores: Pick<Store, 'name'> | null }
+
+            const typedJobs = allJobs as RawJob[]
+            const typedProjects = allProjects as RawProject[]
+
             // 3. Process Brand Distribution
-            const brandStats: any = { 'St Pierre\'s': 0, 'Bento Bowl': 0, 'K10': 0 }
-            allJobs.forEach((job: any) => {
+            const brandStats: Record<string, number> = { 'St Pierre\'s': 0, 'Bento Bowl': 0, 'K10': 0 }
+            typedJobs.forEach((job: RawJob) => {
                 if (job.stores?.brand_st_pierres !== false) brandStats['St Pierre\'s']++
                 if (job.stores?.brand_bento_bowl) brandStats['Bento Bowl']++
                 if (job.stores?.brand_k10) brandStats['K10']++
@@ -85,9 +113,9 @@ export default function AnalyticsPage() {
             const jobsByBrand = Object.entries(brandStats).map(([name, count]) => ({ name, count }))
 
             // 4. Process Project Budget Stats
-            const projectBudgetStats = allProjects.map((p: any) => {
-                const linkedJobs = allJobs.filter((j: any) => j.project_id === p.id)
-                const completedJobs = linkedJobs.filter((j: any) => j.status === 'resolved' || j.status === 'closed').length
+            const projectBudgetStats = typedProjects.map((p: RawProject) => {
+                const linkedJobs = typedJobs.filter((j: RawJob) => j.project_id === p.id)
+                const completedJobs = linkedJobs.filter((j: RawJob) => j.status === 'resolved' || j.status === 'closed').length
                 const progress = linkedJobs.length > 0 ? (completedJobs / linkedJobs.length) * 100 : 0
                 return {
                     name: p.name,
@@ -98,16 +126,16 @@ export default function AnalyticsPage() {
             })
 
             // 5. Process Jobs by Store
-            const storeMap: any = {}
-            allJobs.forEach((job: any) => {
+            const storeMap: Record<string, number> = {}
+            typedJobs.forEach((job: RawJob) => {
                 const storeName = job.stores?.name || 'Unknown'
                 storeMap[storeName] = (storeMap[storeName] || 0) + 1
             })
             const jobsByStore = Object.entries(storeMap).map(([name, count]) => ({ name, count }))
 
             // 3. Process Jobs by Status
-            const statusMap: any = { open: 0, in_progress: 0, resolved: 0, closed: 0 }
-            allJobs.forEach((job: any) => {
+            const statusMap: Record<string, number> = { open: 0, in_progress: 0, resolved: 0, closed: 0 }
+            typedJobs.forEach((job: RawJob) => {
                 statusMap[job.status] = (statusMap[job.status] || 0) + 1
             })
             const jobsByStatus = [
@@ -118,7 +146,7 @@ export default function AnalyticsPage() {
             ].filter(d => d.value > 0)
 
             // 4. Process Jobs Over Time (Last 7 days)
-            const timeMap: any = {}
+            const timeMap: Record<string, number> = {}
             const last7Days = [...Array(7)].map((_, i) => {
                 const d = new Date()
                 d.setDate(d.getDate() - i)
@@ -126,7 +154,7 @@ export default function AnalyticsPage() {
             }).reverse()
 
             last7Days.forEach(date => timeMap[date] = 0)
-            allJobs.forEach((job: any) => {
+            typedJobs.forEach((job: RawJob) => {
                 const date = job.created_at.split('T')[0]
                 if (timeMap[date] !== undefined) {
                     timeMap[date]++
@@ -138,7 +166,7 @@ export default function AnalyticsPage() {
             }))
 
             setStats({
-                totalJobs: allJobs.length,
+                totalJobs: typedJobs.length,
                 openJobs: statusMap.open + statusMap.in_progress,
                 resolvedJobs: statusMap.resolved + statusMap.closed,
                 jobsByStore,
@@ -146,8 +174,8 @@ export default function AnalyticsPage() {
                 jobsOverTime,
                 jobsByBrand,
                 projectBudgetStats,
-                recentProjects: allProjects,
-                totalBudget: allProjects.reduce((acc: number, p: any) => acc + (p.budget || 0), 0)
+                recentProjects: typedProjects,
+                totalBudget: typedProjects.reduce((acc: number, p: RawProject) => acc + (p.budget || 0), 0)
             })
             setLoading(false)
         }
@@ -249,7 +277,7 @@ export default function AnalyticsPage() {
                                         paddingAngle={5}
                                         dataKey="count"
                                     >
-                                        {stats.jobsByBrand.map((entry: any, index: number) => (
+                                        {stats.jobsByBrand.map((entry: BrandStat, index: number) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
@@ -257,7 +285,7 @@ export default function AnalyticsPage() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="flex gap-4 mt-6">
-                                {stats.jobsByBrand.map((s: any, index: number) => (
+                                {stats.jobsByBrand.map((s: BrandStat, index: number) => (
                                     <div key={s.name} className="flex items-center gap-1.5">
                                         <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                                         <span className="text-[10px] font-bold uppercase text-muted-foreground">{s.name}</span>
@@ -307,7 +335,7 @@ export default function AnalyticsPage() {
                                         paddingAngle={5}
                                         dataKey="value"
                                     >
-                                        {stats.jobsByStatus.map((entry: any, index: number) => (
+                                        {stats.jobsByStatus.map((entry: StatusStat, index: number) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
@@ -315,7 +343,7 @@ export default function AnalyticsPage() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="flex gap-4 mt-6">
-                                {stats.jobsByStatus.map((s: any) => (
+                                {stats.jobsByStatus.map((s: StatusStat) => (
                                     <div key={s.name} className="flex items-center gap-1.5">
                                         <div className="size-2 rounded-full" style={{ backgroundColor: s.color }} />
                                         <span className="text-[10px] font-bold uppercase text-muted-foreground">{s.name}</span>
@@ -368,8 +396,8 @@ export default function AnalyticsPage() {
                         </CardHeader>
                         <CardContent className="p-0">
                             <div className="divide-y divide-sidebar-border">
-                                {stats.recentProjects?.length > 0 ? (
-                                    stats.recentProjects.slice(0, 5).map((project: any) => (
+                                {(stats.recentProjects?.length ?? 0) > 0 ? (
+                                    stats.recentProjects!.slice(0, 5).map((project: Project & { stores: Pick<Store, 'name'> | null }) => (
                                         <div key={project.id} className="p-4 hover:bg-muted/20 transition-colors flex items-center justify-between">
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-2">

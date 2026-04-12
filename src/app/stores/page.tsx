@@ -45,20 +45,21 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import type { Store, Vendor, Asset, Job } from "@/types/database"
 
 export default function StoresListPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [stores, setStores] = useState<any[]>([])
+    const [stores, setStores] = useState<Store[]>([])
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
-    const [currentSite, setCurrentSite] = useState<any>(null)
+    const [currentSite, setCurrentSite] = useState<Store | null>(null)
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' })
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
-    const [vendors, setVendors] = useState<any[]>([])
+    const [vendors, setVendors] = useState<Vendor[]>([])
 
     const fetchStores = async () => {
         setLoading(true)
@@ -124,8 +125,8 @@ export default function StoresListPage() {
     }
 
     const sortedStores = [...stores].sort((a, b) => {
-        const aValue = a[sortConfig.key] || ""
-        const bValue = b[sortConfig.key] || ""
+        const aValue = (a as unknown as Record<string, unknown>)[sortConfig.key] || ""
+        const bValue = (b as unknown as Record<string, unknown>)[sortConfig.key] || ""
         if (sortConfig.direction === 'asc') {
             return aValue > bValue ? 1 : -1
         } else {
@@ -145,7 +146,7 @@ export default function StoresListPage() {
 
         // 2. Overdue PM Filter
         if (filterOverdue) {
-            const hasOverdue = s.assets?.some((asset: any) => {
+            const hasOverdue = s.assets?.some((asset: Asset) => {
                 if (!asset.next_service_date) return false
                 return new Date(asset.next_service_date) < new Date()
             })
@@ -154,10 +155,10 @@ export default function StoresListPage() {
 
         // 3. Vendor Assignment Filter
         if (filterVendor !== "all") {
-            const hasVendor = s.jobs?.some((job: any) =>
+            const hasVendor = s.jobs?.some((job: Job) =>
                 job.vendor_id === filterVendor &&
                 job.status !== 'resolved' &&
-                job.status !== 'cancelled'
+                job.status !== 'closed'
             )
             if (!hasVendor) return false
         }
@@ -170,7 +171,7 @@ export default function StoresListPage() {
         return true
     })
 
-    const openEditDialog = (e: React.MouseEvent, site: any) => {
+    const openEditDialog = (e: React.MouseEvent, site: Store) => {
         e.preventDefault()
         e.stopPropagation()
         setCurrentSite(site)

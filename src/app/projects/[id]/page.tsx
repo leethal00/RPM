@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Project, Job } from "@/types/database"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -41,8 +42,8 @@ export default function ProjectDetailPage({
     params: Promise<{ id: string }>
 }) {
     const { id } = use(params)
-    const [project, setProject] = useState<any>(null)
-    const [jobs, setJobs] = useState<any[]>([])
+    const [project, setProject] = useState<Project | null>(null)
+    const [jobs, setJobs] = useState<Job[]>([])
     const [loading, setLoading] = useState(true)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const supabase = createClient()

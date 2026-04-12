@@ -16,6 +16,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import type { Region, Client } from "@/types/database"
+
+interface GeocodeSuggestion {
+    display_name: string
+    lat: string
+    lon: string
+}
 
 interface SiteFormProps {
     site?: any
@@ -26,8 +33,8 @@ interface SiteFormProps {
 export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const [regions, setRegions] = useState<any[]>([])
-    const [customers, setCustomers] = useState<any[]>([])
+    const [regions, setRegions] = useState<Region[]>([])
+    const [customers, setCustomers] = useState<Client[]>([])
     const [clientId, setClientId] = useState<string>(site?.client_id || "")
 
     // Form State
@@ -49,7 +56,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
     // Geocoding State
     const [searching, setSearching] = useState(false)
-    const [suggestions, setSuggestions] = useState<any[]>([])
+    const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
 
     const lookupAddress = async () => {
         if (!formData.address || formData.address.length < 5) {
@@ -70,7 +77,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         }
     }
 
-    const selectAddress = (suggestion: any) => {
+    const selectAddress = (suggestion: GeocodeSuggestion) => {
         setFormData({
             ...formData,
             address: suggestion.display_name,

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Clock, Plus, Trash2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import type { MaintenanceSchedule } from "@/types/database"
 import {
     Dialog,
     DialogContent,
@@ -23,7 +24,7 @@ interface MaintenanceScheduleListProps {
 }
 
 export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProps) {
-    const [schedules, setSchedules] = useState<any[]>([])
+    const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([])
     const [loading, setLoading] = useState(true)
     const [isOpen, setIsOpen] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -75,6 +76,8 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
     }
 
     async function deleteSchedule(id: string) {
+        if (!confirm("Are you sure you want to delete this maintenance schedule?")) return
+
         const { error } = await supabase
             .from('maintenance_schedules')
             .delete()

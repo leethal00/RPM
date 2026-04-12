@@ -21,13 +21,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
+import type { Store, Asset, Job, Project } from "@/types/database"
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
-    const [store, setStore] = useState<any>(null)
-    const [assets, setAssets] = useState<any[]>([])
-    const [jobs, setJobs] = useState<any[]>([])
-    const [projects, setProjects] = useState<any[]>([])
+    const [store, setStore] = useState<Store | null>(null)
+    const [assets, setAssets] = useState<Asset[]>([])
+    const [jobs, setJobs] = useState<Job[]>([])
+    const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
