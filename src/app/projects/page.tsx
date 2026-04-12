@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import type { Project } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar } from "lucide-react"
@@ -21,46 +21,30 @@ import { TablePagination } from "@/components/table-pagination"
 const PAGE_SIZE = 12
 
 export default function ProjectsPage() {
-    const [projects, setProjects] = useState<Project[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [currentPage, setCurrentPage] = useState(1)
-    const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const supabase = useMemo(() => createClient(), [])
 
-    const fetchProjects = useCallback(async () => {
-        setLoading(true)
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
-        const from = (currentPage - 1) * PAGE_SIZE
-        const to = from + PAGE_SIZE - 1
-
-        const { data, error, count } = await supabase
-            .from('projects')
-            .select(`
-                *,
-                jobs (
-                    id,
-                    status,
-                    budget_impact
-                )
-            `, { count: 'exact' })
-            .neq('status', 'archived')
-            .order('created_at', { ascending: false })
-            .range(from, to)
-
-        if (error) {
-            console.error('Error fetching projects:', error)
-        } else {
-            setProjects(data || [])
-            setTotalCount(count || 0)
-        }
-        setLoading(false)
-    }, [supabase, currentPage])
-
-    useEffect(() => {
-        fetchProjects()
-    }, [fetchProjects])
+    const { data: projects, count: totalCount, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<Project[]>(
+        ['projects', 'list', currentPage],
+        (supabase) =>
+            supabase
+                .from('projects')
+                .select(`
+                    *,
+                    jobs (
+                        id,
+                        status,
+                        budget_impact
+                    )
+                `, { count: 'exact' })
+                .neq('status', 'archived')
+                .order('created_at', { ascending: false })
+                .range(from, to)
+    )
 
     return (
         <DashboardLayout>
@@ -114,7 +98,7 @@ export default function ProjectsPage() {
                                 <ProjectForm
                                     onSuccess={() => {
                                         setIsDialogOpen(false)
-                                        fetchProjects()
+                                        mutateProjects()
                                     }}
                                     onCancel={() => setIsDialogOpen(false)}
                                 />
@@ -129,12 +113,12 @@ export default function ProjectsPage() {
                             <div key={i} className="h-[250px] rounded-xl bg-muted animate-pulse border" />
                         ))}
                     </div>
-                ) : projects.length > 0 ? (
+                ) : (projects || []).length > 0 ? (
                     <div className={viewMode === 'grid'
                         ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                         : "flex flex-col gap-4"
                     }>
-                        {projects.map((project) => (
+                        {(projects || []).map((project) => (
                             <ProjectCard
                                 key={project.id}
                                 project={project}
@@ -163,7 +147,7 @@ export default function ProjectsPage() {
 
                 <TablePagination
                     currentPage={currentPage}
-                    totalCount={totalCount}
+                    totalCount={totalCount || 0}
                     pageSize={PAGE_SIZE}
                     onPageChange={setCurrentPage}
                 />

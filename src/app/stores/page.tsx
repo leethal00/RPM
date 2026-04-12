@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -51,12 +52,8 @@ import type { Store, Vendor, Asset, Job } from "@/types/database"
 const PAGE_SIZE = 20
 
 export default function StoresListPage() {
-    const supabase = useMemo(() => createClient(), [])
-    const [stores, setStores] = useState<Store[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [currentSite, setCurrentSite] = useState<Store | null>(null)
@@ -64,15 +61,24 @@ export default function StoresListPage() {
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
-    const [vendors, setVendors] = useState<Vendor[]>([])
 
-    const fetchStores = useCallback(async () => {
-        setLoading(true)
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
-        try {
-            const from = (currentPage - 1) * PAGE_SIZE
-            const to = from + PAGE_SIZE - 1
+    const { data: vendorsData } = useSupabaseQuery<Vendor[]>(
+        ['vendors', 'active-list'],
+        (supabase) =>
+            supabase
+                .from('vendors')
+                .select('id, name')
+                .eq('status', 'active')
+                .order('name')
+    )
+    const vendors = vendorsData || []
 
+    const { data: rawStores, count: serverCount, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<Store[]>(
+        ['stores', 'list', currentPage, search, filterRegion, sortConfig.key, sortConfig.direction],
+        (supabase) => {
             let query = supabase
                 .from('stores')
                 .select(`
@@ -88,7 +94,6 @@ export default function StoresListPage() {
                     )
                 `, { count: 'exact' })
 
-            // Server-side filters
             if (search.trim()) {
                 query = query.or(`name.ilike.%${search.trim()}%,address.ilike.%${search.trim()}%,manager_name.ilike.%${search.trim()}%`)
             }
@@ -100,79 +105,39 @@ export default function StoresListPage() {
             query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
             query = query.range(from, to)
 
-            const { data: storesData, error: storesError, count } = await query
-
-            if (storesError) {
-                // Fallback to simple fetch
-                const { data: simpleData, error: simpleError, count: simpleCount } = await supabase
-                    .from('stores')
-                    .select('*', { count: 'exact' })
-                    .order('name')
-                    .range(from, to)
-
-                if (!simpleError) {
-                    setStores(simpleData || [])
-                    setTotalCount(simpleCount || 0)
-                }
-            } else {
-                // Client-side filters that depend on nested data
-                let filtered = storesData || []
-
-                if (filterOverdue) {
-                    filtered = filtered.filter((s: Store) =>
-                        s.assets?.some((asset: Asset) =>
-                            asset.next_service_date && new Date(asset.next_service_date) < new Date()
-                        )
-                    )
-                }
-
-                if (filterVendor !== "all") {
-                    filtered = filtered.filter((s: Store) =>
-                        s.jobs?.some((job: Job) =>
-                            job.vendor_id === filterVendor &&
-                            job.status !== 'resolved' &&
-                            job.status !== 'closed'
-                        )
-                    )
-                }
-
-                setStores(filtered)
-                // When using client-side nested filters, total from server is approximate
-                // but still useful for pagination controls
-                if (!filterOverdue && filterVendor === "all") {
-                    setTotalCount(count || 0)
-                } else {
-                    setTotalCount(filtered.length)
-                }
-            }
-
-            // Fetch vendors for filter dropdown (only once, not on every page change)
-        } catch (err) {
-            console.error('Unexpected error in fetchStores:', err)
-        } finally {
-            setLoading(false)
+            return query
         }
-    }, [supabase, currentPage, search, filterRegion, filterOverdue, filterVendor, sortConfig])
+    )
 
-    const fetchVendors = useCallback(async () => {
-        const { data: vendorsData } = await supabase
-            .from('vendors')
-            .select('id, name')
-            .eq('status', 'active')
-            .order('name')
+    // Client-side filters that depend on nested data
+    const { stores, totalCount } = useMemo(() => {
+        let filtered = rawStores || []
 
-        setVendors(vendorsData || [])
-    }, [supabase])
+        if (filterOverdue) {
+            filtered = filtered.filter((s: Store) =>
+                s.assets?.some((asset: Asset) =>
+                    asset.next_service_date && new Date(asset.next_service_date) < new Date()
+                )
+            )
+        }
 
-    useEffect(() => {
-        fetchVendors()
-    }, [fetchVendors])
+        if (filterVendor !== "all") {
+            filtered = filtered.filter((s: Store) =>
+                s.jobs?.some((job: Job) =>
+                    job.vendor_id === filterVendor &&
+                    job.status !== 'resolved' &&
+                    job.status !== 'closed'
+                )
+            )
+        }
 
-    useEffect(() => {
-        fetchStores()
-    }, [fetchStores])
+        const count = (!filterOverdue && filterVendor === "all")
+            ? (serverCount || 0)
+            : filtered.length
 
-    // Reset to page 1 when filters change
+        return { stores: filtered, totalCount: count }
+    }, [rawStores, serverCount, filterOverdue, filterVendor])
+
     const handleSearchChange = (value: string) => {
         setSearch(value)
         setCurrentPage(1)
@@ -234,7 +199,7 @@ export default function StoresListPage() {
                             <SiteForm
                                 onSuccess={() => {
                                     setAddDialogOpen(false)
-                                    fetchStores()
+                                    mutateStores()
                                 }}
                                 onCancel={() => setAddDialogOpen(false)}
                             />
@@ -519,7 +484,7 @@ export default function StoresListPage() {
                                 site={currentSite}
                                 onSuccess={() => {
                                     setEditDialogOpen(false)
-                                    fetchStores()
+                                    mutateStores()
                                 }}
                                 onCancel={() => setEditDialogOpen(false)}
                             />

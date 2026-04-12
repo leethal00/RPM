@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import type { Vendor, Job } from "@/types/database"
 
 interface VendorWithMetrics extends Vendor {
@@ -48,23 +49,17 @@ import { TablePagination } from "@/components/table-pagination"
 const PAGE_SIZE = 20
 
 export default function VendorsPage() {
-    const supabase = useMemo(() => createClient(), [])
-    const [vendors, setVendors] = useState<VendorWithMetrics[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
 
-    const fetchVendors = useCallback(async () => {
-        setLoading(true)
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
-        try {
-            const from = (currentPage - 1) * PAGE_SIZE
-            const to = from + PAGE_SIZE - 1
-
-            // 1. Fetch Vendors with server-side search and pagination
+    const { data: vendorData, count: totalCount, isLoading: vendorsLoading, mutate: mutateVendors } = useSupabaseQuery<Vendor[]>(
+        ['vendors', 'list', currentPage, search],
+        (supabase) => {
             let query = supabase
                 .from('vendors')
                 .select('*', { count: 'exact' })
@@ -75,70 +70,47 @@ export default function VendorsPage() {
 
             query = query.order('name').range(from, to)
 
-            const { data: vendorData, error: vendorError, count } = await query
-
-            if (vendorError) {
-                console.error('Error fetching vendors:', vendorError)
-                setLoading(false)
-                return
-            }
-
-            setTotalCount(count || 0)
-
-            // 2. Fetch Jobs to calculate metrics for visible vendors only
-            const vendorIds = (vendorData || []).map((v: Vendor) => v.id)
-
-            let jobData: Job[] = []
-            if (vendorIds.length > 0) {
-                const { data, error: jobError } = await supabase
-                    .from('jobs')
-                    .select('vendor_id, status, created_at, resolved_at')
-                    .in('vendor_id', vendorIds)
-
-                if (jobError) {
-                    console.error('Error fetching jobs for metrics:', jobError)
-                } else {
-                    jobData = data || []
-                }
-            }
-
-            // 3. Process metrics
-            const enrichedVendors = (vendorData || []).map((vendor: Vendor) => {
-                const vendorJobs = jobData.filter((j: Job) => j.vendor_id === vendor.id)
-                const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
-
-                const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
-                let avgResolutionHours = 0
-
-                if (resolvedJobs.length > 0) {
-                    const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
-                        const start = new Date(j.created_at).getTime()
-                        const end = new Date(j.resolved_at!).getTime()
-                        return acc + (end - start) / (1000 * 60 * 60)
-                    }, 0)
-                    avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
-                }
-
-                return {
-                    ...vendor,
-                    metrics: {
-                        openJobs,
-                        avgResolutionHours
-                    }
-                }
-            })
-
-            setVendors(enrichedVendors)
-        } catch (err) {
-            console.error('Unexpected error in fetchVendors:', err)
-        } finally {
-            setLoading(false)
+            return query
         }
-    }, [supabase, currentPage, search])
+    )
 
-    useEffect(() => {
-        fetchVendors()
-    }, [fetchVendors])
+    const vendorIds = useMemo(() => (vendorData || []).map((v) => v.id), [vendorData])
+
+    const { data: jobData } = useSupabaseQuery<Job[]>(
+        vendorIds.length > 0 ? ['vendor-jobs', vendorIds] : null,
+        (supabase) =>
+            supabase
+                .from('jobs')
+                .select('vendor_id, status, created_at, resolved_at')
+                .in('vendor_id', vendorIds)
+    )
+
+    const vendors: VendorWithMetrics[] = useMemo(() => {
+        const jobs = jobData || []
+        return (vendorData || []).map((vendor) => {
+            const vendorJobs = jobs.filter((j: Job) => j.vendor_id === vendor.id)
+            const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
+
+            const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
+            let avgResolutionHours = 0
+
+            if (resolvedJobs.length > 0) {
+                const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
+                    const start = new Date(j.created_at).getTime()
+                    const end = new Date(j.resolved_at!).getTime()
+                    return acc + (end - start) / (1000 * 60 * 60)
+                }, 0)
+                avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
+            }
+
+            return {
+                ...vendor,
+                metrics: { openJobs, avgResolutionHours }
+            }
+        })
+    }, [vendorData, jobData])
+
+    const loading = vendorsLoading
 
     const handleSearchChange = (value: string) => {
         setSearch(value)
@@ -191,7 +163,7 @@ export default function VendorsPage() {
                                 onSuccess={() => {
                                     setIsAddDialogOpen(false)
                                     setEditingVendor(null)
-                                    fetchVendors()
+                                    mutateVendors()
                                 }}
                                 onCancel={() => {
                                     setIsAddDialogOpen(false)
@@ -310,7 +282,7 @@ export default function VendorsPage() {
 
                 <TablePagination
                     currentPage={currentPage}
-                    totalCount={totalCount}
+                    totalCount={totalCount || 0}
                     pageSize={PAGE_SIZE}
                     onPageChange={setCurrentPage}
                 />
