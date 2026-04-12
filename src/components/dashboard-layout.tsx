@@ -1,15 +1,34 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Separator } from "@/components/ui/separator"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { SessionTimeoutDialog } from "@/components/session-timeout-dialog"
+import { createClient } from "@/lib/supabase/client"
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode
 }) {
+    const [sessionExpired, setSessionExpired] = useState(false)
+
+    useEffect(() => {
+        const supabase = createClient()
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+            if (event === 'SIGNED_OUT') {
+                setSessionExpired(true)
+            }
+        })
+
+        return () => {
+            subscription.unsubscribe()
+        }
+    }, [])
+
     return (
         <TooltipProvider>
             <SidebarProvider>
@@ -33,6 +52,7 @@ export default function DashboardLayout({
                         {children}
                     </div>
                 </SidebarInset>
+                <SessionTimeoutDialog open={sessionExpired} />
             </SidebarProvider>
         </TooltipProvider>
     )
