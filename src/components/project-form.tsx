@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import type { Store, Project } from "@/types/database"
+import { projectSchema, getValidationErrors } from "@/lib/validations"
 
 interface ProjectFormProps {
     onSuccess: () => void
@@ -54,8 +55,10 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name) {
-            toast.error("Project name is required")
+        const result = projectSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }

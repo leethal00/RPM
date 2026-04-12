@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { Building2, Lock, Mail, Loader2, ArrowRight } from 'lucide-react'
+import { loginSchema, getValidationErrors } from '@/lib/validations'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -22,6 +23,14 @@ export default function LoginPage() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const result = loginSchema.safeParse({ email, password })
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
+            return
+        }
+
         setLoading(true)
 
         const { error } = await supabase.auth.signInWithPassword({

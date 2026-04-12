@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import type { Vendor } from "@/types/database"
+import { vendorSchema, getValidationErrors } from "@/lib/validations"
 
 interface VendorFormProps {
     vendor?: Vendor | null
@@ -51,8 +52,10 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name) {
-            toast.error("Vendor Name is required")
+        const result = vendorSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }

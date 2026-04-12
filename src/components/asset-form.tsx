@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { Loader2, Search, Camera } from "lucide-react"
 import { AssetPhotoGallery } from "./asset-photo-gallery"
 import type { AssetType, Asset } from "@/types/database"
+import { assetSchema, getValidationErrors } from "@/lib/validations"
 
 interface AssetFormProps {
     storeId: string
@@ -95,8 +96,10 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.asset_type_id) {
-            toast.error("Please select an Asset Type")
+        const result = assetSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }

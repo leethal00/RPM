@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner"
 import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
 import type { Asset, Project, Vendor } from "@/types/database"
+import { jobSchema, getValidationErrors } from "@/lib/validations"
 
 interface JobFormProps {
     storeId: string
@@ -115,6 +116,14 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
+
+        const result = jobSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
+            setLoading(false)
+            return
+        }
 
         try {
             const { data: userData } = await supabase.auth.getUser()

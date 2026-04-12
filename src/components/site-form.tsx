@@ -18,6 +18,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import type { Region, Client } from "@/types/database"
+import { siteSchema, getValidationErrors } from "@/lib/validations"
 
 interface GeocodeSuggestion {
     display_name: string
@@ -153,15 +154,16 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name || !formData.address || !clientId) {
-            if (!clientId) {
-                toast.error("System error: Client ID missing. Please refresh.")
-            } else {
-                const missing = []
-                if (!formData.name) missing.push("Site Name")
-                if (!formData.address) missing.push("Site Address")
-                toast.error(`Required missing: ${missing.join(", ")}`)
-            }
+        if (!clientId) {
+            toast.error("System error: Client ID missing. Please refresh.")
+            setLoading(false)
+            return
+        }
+
+        const result = siteSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
