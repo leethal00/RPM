@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import type { Project } from "@/types/database"
@@ -16,17 +16,26 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { ProjectForm } from "@/components/project-form"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 12
 
 export default function ProjectsPage() {
     const [projects, setProjects] = useState<Project[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [currentPage, setCurrentPage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
-    const fetchProjects = async () => {
+    const fetchProjects = useCallback(async () => {
         setLoading(true)
-        const { data, error } = await supabase
+
+        const from = (currentPage - 1) * PAGE_SIZE
+        const to = from + PAGE_SIZE - 1
+
+        const { data, error, count } = await supabase
             .from('projects')
             .select(`
                 *,
@@ -35,21 +44,23 @@ export default function ProjectsPage() {
                     status,
                     budget_impact
                 )
-            `)
+            `, { count: 'exact' })
             .neq('status', 'archived')
             .order('created_at', { ascending: false })
+            .range(from, to)
 
         if (error) {
             console.error('Error fetching projects:', error)
         } else {
             setProjects(data || [])
+            setTotalCount(count || 0)
         }
         setLoading(false)
-    }
+    }, [supabase, currentPage])
 
     useEffect(() => {
         fetchProjects()
-    }, [])
+    }, [fetchProjects])
 
     return (
         <DashboardLayout>
@@ -149,6 +160,13 @@ export default function ProjectsPage() {
                         </Button>
                     </div>
                 )}
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
             </div>
         </DashboardLayout>
     )

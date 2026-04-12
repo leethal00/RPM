@@ -1,51 +1,66 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import type { Job } from "@/types/database"
 import { JobTimeline } from "@/components/job-timeline"
+import { TablePagination } from "@/components/table-pagination"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
 
+const PAGE_SIZE = 25
+
 export default function JobLogsPage() {
     const [jobs, setJobs] = useState<Job[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [currentPage, setCurrentPage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [error, setError] = useState<string | null>(null)
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
+
+    const fetchJobs = useCallback(async () => {
+        setLoading(true)
+
+        const from = (currentPage - 1) * PAGE_SIZE
+        const to = from + PAGE_SIZE - 1
+
+        let query = supabase
+            .from('jobs')
+            .select(`
+                *,
+                stores ( name )
+            `, { count: 'exact' })
+
+        if (search.trim()) {
+            query = query.or(`title.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
+        }
+
+        query = query.order('created_at', { ascending: false })
+        query = query.range(from, to)
+
+        const { data, error: fetchError, count } = await query
+
+        if (fetchError) {
+            console.error("Fetch error:", fetchError)
+            setError(fetchError.message)
+        } else {
+            setJobs(data || [])
+            setTotalCount(count || 0)
+            setError(null)
+        }
+        setLoading(false)
+    }, [supabase, currentPage, search])
 
     useEffect(() => {
-        async function fetchJobs() {
-            setLoading(true)
-            const { data, error: fetchError } = await supabase
-                .from('jobs')
-                .select(`
-                    *,
-                    stores ( name )
-                `)
-                .order('created_at', { ascending: false })
-
-            if (fetchError) {
-                console.error("Fetch error:", fetchError)
-                setError(fetchError.message)
-            } else {
-                setJobs(data || [])
-                setError(null)
-            }
-            setLoading(false)
-        }
         fetchJobs()
-    }, [supabase])
+    }, [fetchJobs])
 
-    const filteredJobs = jobs.filter(job => {
-        const searchLower = search.toLowerCase()
-        return (
-            job.title?.toLowerCase().includes(searchLower) ||
-            job.description?.toLowerCase().includes(searchLower) ||
-            job.stores?.name?.toLowerCase().includes(searchLower)
-        )
-    })
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
 
     return (
         <DashboardLayout>
@@ -67,7 +82,7 @@ export default function JobLogsPage() {
                             placeholder="Search by issue title or description..."
                             className="pl-10 bg-background border-none"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                         />
                     </div>
                     <button className="flex items-center gap-2 px-4 py-2 bg-background border rounded-lg text-sm font-semibold hover:bg-muted/50 transition-colors">
@@ -92,9 +107,16 @@ export default function JobLogsPage() {
                     </div>
                 ) : (
                     <div className="bg-card p-6 rounded-xl border shadow-sm min-h-[400px]">
-                        <JobTimeline jobs={filteredJobs} />
+                        <JobTimeline jobs={jobs} />
                     </div>
                 )}
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
             </div>
         </DashboardLayout>
     )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
@@ -45,11 +45,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { TablePagination } from "@/components/table-pagination"
 import type { Store, Vendor, Asset, Job } from "@/types/database"
+
+const PAGE_SIZE = 20
 
 export default function StoresListPage() {
     const supabase = useMemo(() => createClient(), [])
     const [stores, setStores] = useState<Store[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -61,13 +66,14 @@ export default function StoresListPage() {
     const [filterRegion, setFilterRegion] = useState<string>("all")
     const [vendors, setVendors] = useState<Vendor[]>([])
 
-    const fetchStores = async () => {
+    const fetchStores = useCallback(async () => {
         setLoading(true)
-        console.log("Fetching stores...")
 
         try {
-            // 1. Fetch Stores with nested Assets and Jobs for filtering
-            const { data: storesData, error: storesError } = await supabase
+            const from = (currentPage - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+
+            let query = supabase
                 .from('stores')
                 .select(`
                     *,
@@ -80,41 +86,97 @@ export default function StoresListPage() {
                         vendor_id,
                         status
                     )
-                `)
-                .order('name')
+                `, { count: 'exact' })
+
+            // Server-side filters
+            if (search.trim()) {
+                query = query.or(`name.ilike.%${search.trim()}%,address.ilike.%${search.trim()}%,manager_name.ilike.%${search.trim()}%`)
+            }
+
+            if (filterRegion !== "all") {
+                query = query.eq('region', filterRegion)
+            }
+
+            query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
+            query = query.range(from, to)
+
+            const { data: storesData, error: storesError, count } = await query
 
             if (storesError) {
-                // Fallback to simple fetch if nested fails (e.g. missing columns or relations)
-                const { data: simpleData, error: simpleError } = await supabase
+                // Fallback to simple fetch
+                const { data: simpleData, error: simpleError, count: simpleCount } = await supabase
                     .from('stores')
-                    .select('*')
+                    .select('*', { count: 'exact' })
                     .order('name')
+                    .range(from, to)
 
                 if (!simpleError) {
                     setStores(simpleData || [])
+                    setTotalCount(simpleCount || 0)
                 }
             } else {
-                setStores(storesData || [])
+                // Client-side filters that depend on nested data
+                let filtered = storesData || []
+
+                if (filterOverdue) {
+                    filtered = filtered.filter((s: Store) =>
+                        s.assets?.some((asset: Asset) =>
+                            asset.next_service_date && new Date(asset.next_service_date) < new Date()
+                        )
+                    )
+                }
+
+                if (filterVendor !== "all") {
+                    filtered = filtered.filter((s: Store) =>
+                        s.jobs?.some((job: Job) =>
+                            job.vendor_id === filterVendor &&
+                            job.status !== 'resolved' &&
+                            job.status !== 'closed'
+                        )
+                    )
+                }
+
+                setStores(filtered)
+                // When using client-side nested filters, total from server is approximate
+                // but still useful for pagination controls
+                if (!filterOverdue && filterVendor === "all") {
+                    setTotalCount(count || 0)
+                } else {
+                    setTotalCount(filtered.length)
+                }
             }
 
-            // 2. Fetch Vendors for filter dropdown
-            const { data: vendorsData, error: vendorsError } = await supabase
-                .from('vendors')
-                .select('id, name')
-                .eq('status', 'active')
-                .order('name')
-
-            setVendors(vendorsData || [])
+            // Fetch vendors for filter dropdown (only once, not on every page change)
         } catch (err) {
             console.error('Unexpected error in fetchStores:', err)
         } finally {
             setLoading(false)
         }
-    }
+    }, [supabase, currentPage, search, filterRegion, filterOverdue, filterVendor, sortConfig])
+
+    const fetchVendors = useCallback(async () => {
+        const { data: vendorsData } = await supabase
+            .from('vendors')
+            .select('id, name')
+            .eq('status', 'active')
+            .order('name')
+
+        setVendors(vendorsData || [])
+    }, [supabase])
+
+    useEffect(() => {
+        fetchVendors()
+    }, [fetchVendors])
 
     useEffect(() => {
         fetchStores()
-    }, [supabase])
+    }, [fetchStores])
+
+    // Reset to page 1 when filters change
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc'
@@ -122,54 +184,23 @@ export default function StoresListPage() {
             direction = 'desc'
         }
         setSortConfig({ key, direction })
+        setCurrentPage(1)
     }
 
-    const sortedStores = [...stores].sort((a, b) => {
-        const aValue = (a as unknown as Record<string, unknown>)[sortConfig.key] || ""
-        const bValue = (b as unknown as Record<string, unknown>)[sortConfig.key] || ""
-        if (sortConfig.direction === 'asc') {
-            return aValue > bValue ? 1 : -1
-        } else {
-            return aValue < bValue ? 1 : -1
-        }
-    })
+    const handleFilterRegionChange = (value: string) => {
+        setFilterRegion(value)
+        setCurrentPage(1)
+    }
 
-    const filteredStores = sortedStores.filter(s => {
-        // 1. Text Search (Robust null checks)
-        const searchLower = search.toLowerCase()
-        const matchesSearch =
-            (s.name || "").toLowerCase().includes(searchLower) ||
-            (s.address || "").toLowerCase().includes(searchLower) ||
-            (s.manager_name || "").toLowerCase().includes(searchLower)
+    const handleFilterVendorChange = (value: string) => {
+        setFilterVendor(value)
+        setCurrentPage(1)
+    }
 
-        if (!matchesSearch) return false
-
-        // 2. Overdue PM Filter
-        if (filterOverdue) {
-            const hasOverdue = s.assets?.some((asset: Asset) => {
-                if (!asset.next_service_date) return false
-                return new Date(asset.next_service_date) < new Date()
-            })
-            if (!hasOverdue) return false
-        }
-
-        // 3. Vendor Assignment Filter
-        if (filterVendor !== "all") {
-            const hasVendor = s.jobs?.some((job: Job) =>
-                job.vendor_id === filterVendor &&
-                job.status !== 'resolved' &&
-                job.status !== 'closed'
-            )
-            if (!hasVendor) return false
-        }
-
-        // 4. Region Filter
-        if (filterRegion !== "all") {
-            if (s.region !== filterRegion) return false
-        }
-
-        return true
-    })
+    const handleFilterOverdueToggle = () => {
+        setFilterOverdue(!filterOverdue)
+        setCurrentPage(1)
+    }
 
     const openEditDialog = (e: React.MouseEvent, site: Store) => {
         e.preventDefault()
@@ -219,7 +250,7 @@ export default function StoresListPage() {
                         </label>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             <div className="flex flex-col gap-1.5">
-                                <Select value={filterVendor} onValueChange={setFilterVendor}>
+                                <Select value={filterVendor} onValueChange={handleFilterVendorChange}>
                                     <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
                                         <div className="flex items-center gap-2">
                                             <SlidersHorizontal className="size-3.5 text-primary" />
@@ -238,7 +269,7 @@ export default function StoresListPage() {
                             </div>
 
                             <div className="flex flex-col gap-1.5">
-                                <Select value={filterRegion} onValueChange={setFilterRegion}>
+                                <Select value={filterRegion} onValueChange={handleFilterRegionChange}>
                                     <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
                                         <div className="flex items-center gap-2">
                                             <MapPin className="size-3.5 text-primary" />
@@ -259,14 +290,14 @@ export default function StoresListPage() {
                             <Button
                                 variant={filterOverdue ? "destructive" : "outline"}
                                 className={`h-10 border-2 font-black uppercase text-[10px] tracking-widest gap-2 ${!filterOverdue && 'bg-white hover:bg-slate-50'}`}
-                                onClick={() => setFilterOverdue(!filterOverdue)}
+                                onClick={handleFilterOverdueToggle}
                             >
                                 <AlertTriangle className={`size-3.5 ${filterOverdue ? 'animate-pulse' : ''}`} />
                                 Overdue maintenance
                                 {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
                             </Button>
 
-                            {(search !== "" || filterOverdue || filterVendor !== "all") && (
+                            {(search !== "" || filterOverdue || filterVendor !== "all" || filterRegion !== "all") && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -275,16 +306,17 @@ export default function StoresListPage() {
                                         setFilterOverdue(false)
                                         setFilterVendor("all")
                                         setFilterRegion("all")
+                                        setCurrentPage(1)
                                     }}
                                     className="h-10 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary gap-2"
                                 >
-                                    Reset {(search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0)} Filters
+                                    Reset {(search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0)} Filters
                                 </Button>
                             )}
                         </div>
                     </div>
                     <div className="hidden lg:flex flex-col items-end gap-1 px-4 border-l border-slate-200">
-                        <span className="text-[24px] font-black text-slate-900 leading-none">{filteredStores.length}</span>
+                        <span className="text-[24px] font-black text-slate-900 leading-none">{totalCount}</span>
                         <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Site Matches</span>
                     </div>
                 </div>
@@ -295,7 +327,7 @@ export default function StoresListPage() {
                         placeholder="Search by name, address, or manager..."
                         className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                     />
                 </div>
 
@@ -332,17 +364,17 @@ export default function StoresListPage() {
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={6} className="h-12 animate-pulse bg-muted/20" />
+                                        <TableCell colSpan={8} className="h-12 animate-pulse bg-muted/20" />
                                     </TableRow>
                                 ))
-                            ) : filteredStores.length === 0 ? (
+                            ) : stores.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground italic">
                                         No sites found matching your search.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredStores.map((store) => (
+                                stores.map((store) => (
                                     <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="font-semibold">
                                             <div className="flex flex-col gap-1.5">
@@ -379,7 +411,7 @@ export default function StoresListPage() {
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-1">
                                                     <MapPin className="size-3 shrink-0" />
-                                                    <span className="truncate max-w-[200px]">{store.address || "—"}</span>
+                                                    <span className="truncate max-w-[200px]">{store.address || "\u2014"}</span>
                                                 </div>
                                                 {store.lat && store.lng && (
                                                     <div className="flex items-center gap-1 text-[9px] text-green-600 font-bold uppercase tracking-tight">
@@ -420,7 +452,7 @@ export default function StoresListPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-sm hidden md:table-cell text-muted-foreground">
-                                            {store.region || "—"}
+                                            {store.region || "\u2014"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden lg:table-cell">
                                             {store.manager_name ? (
@@ -428,18 +460,18 @@ export default function StoresListPage() {
                                                     <User className="size-3" />
                                                     {store.manager_name}
                                                 </div>
-                                            ) : "—"}
+                                            ) : "\u2014"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden xl:table-cell">
                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                 <Clock className="size-3 shrink-0" />
                                                 <span className="truncate max-w-[250px]">
                                                     {(() => {
-                                                        if (!store.hours_of_operation) return "—"
+                                                        if (!store.hours_of_operation) return "\u2014"
                                                         try {
                                                             const hours = JSON.parse(store.hours_of_operation)
                                                             if (hours.type === "daily") {
-                                                                return `All Days: ${hours.hours.start}—${hours.hours.end}`
+                                                                return `All Days: ${hours.hours.start}\u2014${hours.hours.end}`
                                                             } else {
                                                                 return "Custom Weekly Hours"
                                                             }
@@ -468,6 +500,13 @@ export default function StoresListPage() {
                         </TableBody>
                     </Table>
                 </div>
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
 
                 <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
                     <DialogContent className="sm:max-w-[500px]">
