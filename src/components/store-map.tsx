@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import Image from "next/image"
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
@@ -99,17 +100,17 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
                         <div className="flex items-center gap-1 shrink-0">
                             {store.brand_st_pierres !== false && (
                                 <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                    <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                    <Image src="/brands/st-pierres.png" alt="SP" width={32} height={32} className="h-full w-full object-contain" title="St Pierre's Sushi" />
                                 </div>
                             )}
                             {store.brand_bento_bowl && (
                                 <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                    <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                    <Image src="/brands/bento-bowl.png" alt="BB" width={32} height={32} className="h-full w-full object-contain" title="Bento Bowl" />
                                 </div>
                             )}
                             {store.brand_k10 && (
                                 <div className="h-10 w-10 rounded-lg bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                    <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                    <Image src="/brands/k10.png" alt="K10" width={32} height={32} className="h-full w-full object-contain" title="K10 Sushi Train" />
                                 </div>
                             )}
                         </div>
@@ -117,11 +118,14 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
                     <p className="text-xs text-muted-foreground mb-2">{store.address}</p>
 
                     {store.site_photos && store.site_photos.length > 0 && (
-                        <div className="w-full aspect-video rounded-lg overflow-hidden mb-2 border shadow-sm">
-                            <img
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden mb-2 border shadow-sm">
+                            <Image
                                 src={store.site_photos[0].url}
                                 alt={store.name}
-                                className="w-full h-full object-cover"
+                                fill
+                                className="object-cover"
+                                sizes="300px"
+                                loading="lazy"
                             />
                         </div>
                     )}

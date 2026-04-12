@@ -1,3 +1,4 @@
+import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Phone, User, Calendar, Heart } from "lucide-react"
 import type { Store } from "@/types/database"
@@ -26,13 +27,13 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                         {/* Brand Logos */}
                         <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 rounded-2xl border-2 shadow-sm">
                             {store.brand_st_pierres !== false && (
-                                <img src="/brands/st-pierres.png" alt="St Pierre's" className="h-20 w-auto object-contain" title="St Pierre's Sushi" />
+                                <Image src="/brands/st-pierres.png" alt="St Pierre's" width={80} height={80} className="h-20 w-auto object-contain" title="St Pierre's Sushi" />
                             )}
                             {store.brand_bento_bowl && (
-                                <img src="/brands/bento-bowl.png" alt="Bento Bowl" className="h-20 w-auto object-contain" title="Bento Bowl" />
+                                <Image src="/brands/bento-bowl.png" alt="Bento Bowl" width={80} height={80} className="h-20 w-auto object-contain" title="Bento Bowl" />
                             )}
                             {store.brand_k10 && (
-                                <img src="/brands/k10.png" alt="K10" className="h-20 w-auto object-contain" title="K10 Sushi Train" />
+                                <Image src="/brands/k10.png" alt="K10" width={80} height={80} className="h-20 w-auto object-contain" title="K10 Sushi Train" />
                             )}
                         </div>
 

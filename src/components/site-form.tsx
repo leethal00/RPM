@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -266,7 +267,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                         {/* St Pierre's - Always True */}
                         <div className="relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-primary bg-primary/5 cursor-default">
                             <div className="h-10 w-full flex items-center justify-center">
-                                <img src="/brands/st-pierres.png" alt="St Pierres" className="max-h-full max-w-full object-contain" />
+                                <Image src="/brands/st-pierres.png" alt="St Pierres" width={40} height={40} className="max-h-full max-w-full object-contain" />
                             </div>
                             <span className="text-[10px] font-bold text-primary uppercase">Sushi of Japan</span>
                             <div className="absolute -top-2 -right-2 bg-primary text-white rounded-full p-0.5">
@@ -281,9 +282,11 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_bento_bowl ? 'border-[#e67e22] bg-[#e67e22]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
                         >
                             <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100 group">
-                                <img
+                                <Image
                                     src="/brands/bento-bowl.png"
                                     alt="Bento Bowl"
+                                    width={40}
+                                    height={40}
                                     className={`max-h-full max-w-full object-contain ${formData.brand_bento_bowl ? 'grayscale-0 opacity-100' : ''}`}
                                 />
                             </div>
@@ -302,9 +305,11 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_k10 ? 'border-[#a32b2b] bg-[#a32b2b]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
                         >
                             <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100">
-                                <img
+                                <Image
                                     src="/brands/k10.png"
                                     alt="K10"
+                                    width={40}
+                                    height={40}
                                     className={`max-h-full max-w-full object-contain ${formData.brand_k10 ? 'grayscale-0 opacity-100' : ''}`}
                                 />
                             </div>

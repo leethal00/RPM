@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, use } from "react"
+import Image from "next/image"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import type { Job, JobStatus, UserProfile } from "@/types/database"
@@ -192,10 +193,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                                     rel="noopener noreferrer"
                                                     className="relative aspect-square rounded-lg overflow-hidden border bg-muted hover:opacity-80 transition-opacity"
                                                 >
-                                                    <img
+                                                    <Image
                                                         src={url}
                                                         alt={`Fault ${idx + 1}`}
-                                                        className="w-full h-full object-cover"
+                                                        fill
+                                                        className="object-cover"
+                                                        sizes="(max-width: 640px) 50vw, 33vw"
+                                                        loading="lazy"
                                                     />
                                                 </a>
                                             ))}
