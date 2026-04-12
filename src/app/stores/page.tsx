@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -48,9 +49,7 @@ import {
 
 export default function StoresListPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [stores, setStores] = useState<any[]>([])
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [currentSite, setCurrentSite] = useState<any>(null)
@@ -58,62 +57,34 @@ export default function StoresListPage() {
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
-    const [vendors, setVendors] = useState<any[]>([])
 
-    const fetchStores = async () => {
-        setLoading(true)
-        console.log("Fetching stores...")
+    const { data: stores = [], isLoading: loading, mutate: mutateStores } = useSupabaseQuery<any[]>(
+        'stores-list',
+        () => supabase
+            .from('stores')
+            .select(`
+                *,
+                assets (
+                    id,
+                    next_service_date
+                ),
+                jobs (
+                    id,
+                    vendor_id,
+                    status
+                )
+            `)
+            .order('name')
+    )
 
-        try {
-            // 1. Fetch Stores with nested Assets and Jobs for filtering
-            const { data: storesData, error: storesError } = await supabase
-                .from('stores')
-                .select(`
-                    *,
-                    assets (
-                        id,
-                        next_service_date
-                    ),
-                    jobs (
-                        id,
-                        vendor_id,
-                        status
-                    )
-                `)
-                .order('name')
-
-            if (storesError) {
-                // Fallback to simple fetch if nested fails (e.g. missing columns or relations)
-                const { data: simpleData, error: simpleError } = await supabase
-                    .from('stores')
-                    .select('*')
-                    .order('name')
-
-                if (!simpleError) {
-                    setStores(simpleData || [])
-                }
-            } else {
-                setStores(storesData || [])
-            }
-
-            // 2. Fetch Vendors for filter dropdown
-            const { data: vendorsData, error: vendorsError } = await supabase
-                .from('vendors')
-                .select('id, name')
-                .eq('status', 'active')
-                .order('name')
-
-            setVendors(vendorsData || [])
-        } catch (err) {
-            console.error('Unexpected error in fetchStores:', err)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        fetchStores()
-    }, [supabase])
+    const { data: vendors = [] } = useSupabaseQuery<any[]>(
+        'vendors-active',
+        () => supabase
+            .from('vendors')
+            .select('id, name')
+            .eq('status', 'active')
+            .order('name')
+    )
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc'
@@ -134,7 +105,6 @@ export default function StoresListPage() {
     })
 
     const filteredStores = sortedStores.filter(s => {
-        // 1. Text Search (Robust null checks)
         const searchLower = search.toLowerCase()
         const matchesSearch =
             (s.name || "").toLowerCase().includes(searchLower) ||
@@ -143,7 +113,6 @@ export default function StoresListPage() {
 
         if (!matchesSearch) return false
 
-        // 2. Overdue PM Filter
         if (filterOverdue) {
             const hasOverdue = s.assets?.some((asset: any) => {
                 if (!asset.next_service_date) return false
@@ -152,7 +121,6 @@ export default function StoresListPage() {
             if (!hasOverdue) return false
         }
 
-        // 3. Vendor Assignment Filter
         if (filterVendor !== "all") {
             const hasVendor = s.jobs?.some((job: any) =>
                 job.vendor_id === filterVendor &&
@@ -162,7 +130,6 @@ export default function StoresListPage() {
             if (!hasVendor) return false
         }
 
-        // 4. Region Filter
         if (filterRegion !== "all") {
             if (s.region !== filterRegion) return false
         }
@@ -202,7 +169,7 @@ export default function StoresListPage() {
                             <SiteForm
                                 onSuccess={() => {
                                     setAddDialogOpen(false)
-                                    fetchStores()
+                                    mutateStores()
                                 }}
                                 onCancel={() => setAddDialogOpen(false)}
                             />
@@ -378,7 +345,7 @@ export default function StoresListPage() {
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-1">
                                                     <MapPin className="size-3 shrink-0" />
-                                                    <span className="truncate max-w-[200px]">{store.address || "—"}</span>
+                                                    <span className="truncate max-w-[200px]">{store.address || "\u2014"}</span>
                                                 </div>
                                                 {store.lat && store.lng && (
                                                     <div className="flex items-center gap-1 text-[9px] text-green-600 font-bold uppercase tracking-tight">
@@ -419,7 +386,7 @@ export default function StoresListPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-sm hidden md:table-cell text-muted-foreground">
-                                            {store.region || "—"}
+                                            {store.region || "\u2014"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden lg:table-cell">
                                             {store.manager_name ? (
@@ -427,18 +394,18 @@ export default function StoresListPage() {
                                                     <User className="size-3" />
                                                     {store.manager_name}
                                                 </div>
-                                            ) : "—"}
+                                            ) : "\u2014"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden xl:table-cell">
                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                 <Clock className="size-3 shrink-0" />
                                                 <span className="truncate max-w-[250px]">
                                                     {(() => {
-                                                        if (!store.hours_of_operation) return "—"
+                                                        if (!store.hours_of_operation) return "\u2014"
                                                         try {
                                                             const hours = JSON.parse(store.hours_of_operation)
                                                             if (hours.type === "daily") {
-                                                                return `All Days: ${hours.hours.start}—${hours.hours.end}`
+                                                                return `All Days: ${hours.hours.start}\u2014${hours.hours.end}`
                                                             } else {
                                                                 return "Custom Weekly Hours"
                                                             }
@@ -479,7 +446,7 @@ export default function StoresListPage() {
                                 site={currentSite}
                                 onSuccess={() => {
                                     setEditDialogOpen(false)
-                                    fetchStores()
+                                    mutateStores()
                                 }}
                                 onCancel={() => setEditDialogOpen(false)}
                             />

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -14,7 +15,6 @@ import {
     Edit2,
     HardHat,
     Briefcase,
-    Loader2,
     Clock,
     BarChart3
 } from "lucide-react"
@@ -38,75 +38,48 @@ import {
 
 export default function VendorsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [vendors, setVendors] = useState<any[]>([])
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<any>(null)
 
-    const fetchVendors = async () => {
-        setLoading(true)
+    const { data: vendorData = [], isLoading: vendorsLoading, mutate: mutateVendors } = useSupabaseQuery<any[]>(
+        'vendors-list',
+        () => supabase.from('vendors').select('*').order('name')
+    )
 
-        try {
-            // 1. Fetch Vendors
-            const { data: vendorData, error: vendorError } = await supabase
-                .from('vendors')
-                .select('*')
-                .order('name')
+    const { data: jobData = [], isLoading: jobsLoading } = useSupabaseQuery<any[]>(
+        'vendor-jobs-metrics',
+        () => supabase.from('jobs').select('vendor_id, status, created_at, resolved_at').not('vendor_id', 'is', null)
+    )
 
-            if (vendorError) {
-                console.error('Error fetching vendors:', vendorError)
-                setLoading(false)
-                return
+    const loading = vendorsLoading || jobsLoading
+
+    const vendors = useMemo(() => {
+        return vendorData.map((vendor: any) => {
+            const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
+            const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
+
+            const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
+            let avgResolutionHours = 0
+
+            if (resolvedJobs.length > 0) {
+                const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
+                    const start = new Date(j.created_at).getTime()
+                    const end = new Date(j.resolved_at!).getTime()
+                    return acc + (end - start) / (1000 * 60 * 60)
+                }, 0)
+                avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
             }
 
-            // 2. Fetch Jobs to calculate metrics
-            const { data: jobData, error: jobError } = await supabase
-                .from('jobs')
-                .select('vendor_id, status, created_at, resolved_at')
-                .not('vendor_id', 'is', null)
-
-            if (jobError) {
-                console.error('Error fetching jobs for metrics:', jobError)
+            return {
+                ...vendor,
+                metrics: {
+                    openJobs,
+                    avgResolutionHours
+                }
             }
-
-            // 3. Process metrics
-            const enrichedVendors = (vendorData || []).map((vendor: any) => {
-                const vendorJobs = (jobData || []).filter((j: any) => j.vendor_id === vendor.id)
-                const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
-
-                const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
-                let avgResolutionHours = 0
-
-                if (resolvedJobs.length > 0) {
-                    const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
-                        const start = new Date(j.created_at).getTime()
-                        const end = new Date(j.resolved_at!).getTime()
-                        return acc + (end - start) / (1000 * 60 * 60)
-                    }, 0)
-                    avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
-                }
-
-                return {
-                    ...vendor,
-                    metrics: {
-                        openJobs,
-                        avgResolutionHours
-                    }
-                }
-            })
-
-            setVendors(enrichedVendors)
-        } catch (err) {
-            console.error('Unexpected error in fetchVendors:', err)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        fetchVendors()
-    }, [])
+        })
+    }, [vendorData, jobData])
 
     const filteredVendors = vendors.filter(v =>
         v.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -159,7 +132,7 @@ export default function VendorsPage() {
                                 onSuccess={() => {
                                     setIsAddDialogOpen(false)
                                     setEditingVendor(null)
-                                    fetchVendors()
+                                    mutateVendors()
                                 }}
                                 onCancel={() => {
                                     setIsAddDialogOpen(false)

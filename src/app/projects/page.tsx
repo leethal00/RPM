@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
-import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar } from "lucide-react"
+import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
 import {
     Dialog,
@@ -17,15 +18,13 @@ import {
 import { ProjectForm } from "@/components/project-form"
 
 export default function ProjectsPage() {
-    const [projects, setProjects] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const supabase = createClient()
 
-    const fetchProjects = async () => {
-        setLoading(true)
-        const { data, error } = await supabase
+    const { data: projects = [], isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<any[]>(
+        'projects-list',
+        () => supabase
             .from('projects')
             .select(`
                 *,
@@ -37,18 +36,7 @@ export default function ProjectsPage() {
             `)
             .neq('status', 'archived')
             .order('created_at', { ascending: false })
-
-        if (error) {
-            console.error('Error fetching projects:', error)
-        } else {
-            setProjects(data || [])
-        }
-        setLoading(false)
-    }
-
-    useEffect(() => {
-        fetchProjects()
-    }, [])
+    )
 
     return (
         <DashboardLayout>
@@ -102,7 +90,7 @@ export default function ProjectsPage() {
                                 <ProjectForm
                                     onSuccess={() => {
                                         setIsDialogOpen(false)
-                                        fetchProjects()
+                                        mutateProjects()
                                     }}
                                     onCancel={() => setIsDialogOpen(false)}
                                 />

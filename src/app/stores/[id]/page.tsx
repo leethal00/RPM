@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { useState, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
@@ -24,72 +25,56 @@ import Link from "next/link"
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
-    const [store, setStore] = useState<any>(null)
-    const [assets, setAssets] = useState<any[]>([])
-    const [jobs, setJobs] = useState<any[]>([])
-    const [projects, setProjects] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
     const supabase = createClient()
 
-    const fetchData = async () => {
-        // Fetch Store
-        const { data: storeData } = await supabase
-            .from('stores')
-            .select('*')
-            .eq('id', id)
-            .single()
+    const { data: store, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery<any>(
+        `store-detail-${id}`,
+        () => supabase.from('stores').select('*').eq('id', id).single()
+    )
 
-        // Fetch Assets
-        const { data: assetData } = await supabase
-            .from('assets')
-            .select(`
-                *,
-                asset_types (
-                    label
-                ),
-                jobs (
-                    status
-                ),
-                asset_photos (
-                    id
-                )
-            `)
-            .eq('store_id', id)
+    const { data: assets = [], isLoading: assetsLoading, mutate: mutateAssets } = useSupabaseQuery<any[]>(
+        `store-assets-${id}`,
+        () => supabase.from('assets').select(`
+            *,
+            asset_types (
+                label
+            ),
+            jobs (
+                status
+            ),
+            asset_photos (
+                id
+            )
+        `).eq('store_id', id)
+    )
 
-        // Fetch Jobs
-        const { data: jobData } = await supabase
-            .from('jobs')
-            .select('*')
-            .eq('store_id', id)
-            .order('created_at', { ascending: false })
+    const { data: jobs = [], isLoading: jobsLoading, mutate: mutateJobs } = useSupabaseQuery<any[]>(
+        `store-jobs-${id}`,
+        () => supabase.from('jobs').select('*').eq('store_id', id).order('created_at', { ascending: false })
+    )
 
-        // Fetch Projects linked to this store
-        const { data: projectData } = await supabase
-            .from('projects')
-            .select(`
-                *,
-                jobs (
-                    id,
-                    status,
-                    budget_impact
-                )
-            `)
-            .eq('store_id', id)
-            .neq('status', 'archived')
-            .order('created_at', { ascending: false })
+    const { data: projects = [], isLoading: projectsLoading, mutate: mutateProjects } = useSupabaseQuery<any[]>(
+        `store-projects-${id}`,
+        () => supabase.from('projects').select(`
+            *,
+            jobs (
+                id,
+                status,
+                budget_impact
+            )
+        `).eq('store_id', id).neq('status', 'archived').order('created_at', { ascending: false })
+    )
 
-        setStore(storeData)
-        setAssets(assetData || [])
-        setJobs(jobData || [])
-        setProjects(projectData || [])
-        setLoading(false)
+    const loading = storeLoading || assetsLoading || jobsLoading || projectsLoading
+
+    const mutateAll = () => {
+        mutateStore()
+        mutateAssets()
+        mutateJobs()
+        mutateProjects()
     }
-
-    useEffect(() => {
-        fetchData()
-    }, [id, supabase])
 
     if (loading) {
         return (
@@ -175,7 +160,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         storeId={id}
                                         onSuccess={() => {
                                             setAssetDialogOpen(false)
-                                            fetchData()
+                                            mutateAll()
                                         }}
                                         onCancel={() => setAssetDialogOpen(false)}
                                     />
@@ -198,7 +183,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         site={store}
                                         onSuccess={() => {
                                             setEditSiteDialogOpen(false)
-                                            fetchData()
+                                            mutateAll()
                                         }}
                                         onCancel={() => setEditSiteDialogOpen(false)}
                                     />

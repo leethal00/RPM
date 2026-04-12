@@ -1,41 +1,28 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { JobTimeline } from "@/components/job-timeline"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
 
+const supabase = createClient()
+
 export default function JobLogsPage() {
-    const [jobs, setJobs] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
-    const [error, setError] = useState<string | null>(null)
-    const supabase = createClient()
 
-    useEffect(() => {
-        async function fetchJobs() {
-            setLoading(true)
-            const { data, error: fetchError } = await supabase
-                .from('jobs')
-                .select(`
-                    *,
-                    stores ( name )
-                `)
-                .order('created_at', { ascending: false })
-
-            if (fetchError) {
-                console.error("Fetch error:", fetchError)
-                setError(fetchError.message)
-            } else {
-                setJobs(data || [])
-                setError(null)
-            }
-            setLoading(false)
-        }
-        fetchJobs()
-    }, [supabase])
+    const { data: jobs = [], isLoading: loading, error } = useSupabaseQuery<any[]>(
+        'jobs-list',
+        () => supabase
+            .from('jobs')
+            .select(`
+                *,
+                stores ( name )
+            `)
+            .order('created_at', { ascending: false })
+    )
 
     const filteredJobs = jobs.filter(job => {
         const searchLower = search.toLowerCase()
@@ -84,7 +71,7 @@ export default function JobLogsPage() {
                 ) : error ? (
                     <div className="bg-destructive/10 border border-destructive/20 p-8 rounded-xl text-center">
                         <h2 className="text-destructive font-bold text-lg mb-2">Technical Error</h2>
-                        <p className="text-muted-foreground mb-4">{error}</p>
+                        <p className="text-muted-foreground mb-4">{(error as Error).message}</p>
                         <p className="text-xs text-muted-foreground font-mono bg-background/50 p-2 rounded">
                             HINT: This is usually caused by Supabase Row-Level Security (RLS) blocking the read.
                         </p>
