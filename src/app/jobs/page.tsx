@@ -1,50 +1,104 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { JobTimeline } from "@/components/job-timeline"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 25
 
 export default function JobLogsPage() {
+    const supabase = useMemo(() => createClient(), [])
     const [jobs, setJobs] = useState<any[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [page, setPage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [severityFilter, setSeverityFilter] = useState<string>("all")
     const [error, setError] = useState<string | null>(null)
-    const supabase = createClient()
 
-    useEffect(() => {
-        async function fetchJobs() {
-            setLoading(true)
-            const { data, error: fetchError } = await supabase
+    const fetchJobs = useCallback(async () => {
+        setLoading(true)
+
+        try {
+            let query = supabase
                 .from('jobs')
                 .select(`
                     *,
                     stores ( name )
-                `)
-                .order('created_at', { ascending: false })
+                `, { count: "exact" })
+
+            // Server-side search filter
+            if (search.trim()) {
+                const term = `%${search.trim()}%`
+                query = query.or(`title.ilike.${term},description.ilike.${term}`)
+            }
+
+            // Server-side status filter
+            if (statusFilter !== "all") {
+                query = query.eq("status", statusFilter)
+            }
+
+            // Server-side severity filter
+            if (severityFilter !== "all") {
+                query = query.eq("severity", severityFilter)
+            }
+
+            query = query.order('created_at', { ascending: false })
+
+            // Pagination range
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
+
+            const { data, error: fetchError, count } = await query
 
             if (fetchError) {
                 console.error("Fetch error:", fetchError)
                 setError(fetchError.message)
             } else {
                 setJobs(data || [])
+                setTotalCount(count ?? 0)
                 setError(null)
             }
+        } catch (err) {
+            console.error('Unexpected error in fetchJobs:', err)
+        } finally {
             setLoading(false)
         }
-        fetchJobs()
-    }, [supabase])
+    }, [supabase, search, statusFilter, severityFilter, page])
 
-    const filteredJobs = jobs.filter(job => {
-        const searchLower = search.toLowerCase()
-        return (
-            job.title?.toLowerCase().includes(searchLower) ||
-            job.description?.toLowerCase().includes(searchLower) ||
-            job.stores?.name?.toLowerCase().includes(searchLower)
-        )
-    })
+    useEffect(() => {
+        fetchJobs()
+    }, [fetchJobs])
+
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setPage(1)
+    }
+
+    const handleStatusChange = (value: string) => {
+        setStatusFilter(value)
+        setPage(1)
+    }
+
+    const handleSeverityChange = (value: string) => {
+        setSeverityFilter(value)
+        setPage(1)
+    }
+
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
     return (
         <DashboardLayout>
@@ -54,25 +108,51 @@ export default function JobLogsPage() {
                         <h1 className="text-3xl font-bold tracking-tight">Job Logs</h1>
                         <p className="text-muted-foreground italic">Central archive of all audit and maintenance tickets.</p>
                     </div>
-                    <div className="p-3 bg-primary/10 rounded-xl">
-                        <ClipboardList className="size-6 text-primary" />
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-muted-foreground">{totalCount} total</span>
+                        <div className="p-3 bg-primary/10 rounded-xl">
+                            <ClipboardList className="size-6 text-primary" />
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
-                    <div className="relative flex-1">
+                <div className="flex flex-col md:flex-row items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
+                    <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                             placeholder="Search by issue title or description..."
                             className="pl-10 bg-background border-none"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                         />
                     </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-background border rounded-lg text-sm font-semibold hover:bg-muted/50 transition-colors">
-                        <Filter className="size-4" />
-                        Region
-                    </button>
+                    <Select value={statusFilter} onValueChange={handleStatusChange}>
+                        <SelectTrigger className="w-[160px] bg-background border">
+                            <div className="flex items-center gap-2">
+                                <Filter className="size-3.5" />
+                                <SelectValue placeholder="Status" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select value={severityFilter} onValueChange={handleSeverityChange}>
+                        <SelectTrigger className="w-[160px] bg-background border">
+                            <SelectValue placeholder="Severity" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Severities</SelectItem>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="critical">Critical</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 {loading ? (
@@ -91,7 +171,14 @@ export default function JobLogsPage() {
                     </div>
                 ) : (
                     <div className="bg-card p-6 rounded-xl border shadow-sm min-h-[400px]">
-                        <JobTimeline jobs={filteredJobs} />
+                        <JobTimeline jobs={jobs} />
+                        <TablePagination
+                            page={page}
+                            pageCount={pageCount}
+                            onPageChange={setPage}
+                            totalItems={totalCount}
+                            pageSize={PAGE_SIZE}
+                        />
                     </div>
                 )}
             </div>
