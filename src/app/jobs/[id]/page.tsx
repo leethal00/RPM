@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -187,10 +188,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                                     rel="noopener noreferrer"
                                                     className="relative aspect-square rounded-lg overflow-hidden border bg-muted hover:opacity-80 transition-opacity"
                                                 >
-                                                    <img
+                                                    <Image
                                                         src={url}
                                                         alt={`Fault ${idx + 1}`}
-                                                        className="w-full h-full object-cover"
+                                                        fill
+                                                        className="object-cover"
+                                                        loading="lazy"
                                                     />
                                                 </a>
                                             ))}

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -319,17 +320,17 @@ export default function StoresListPage() {
                                                     <div className="flex items-center gap-1">
                                                         {store.brand_st_pierres !== false && (
                                                             <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                                                <Image src="/brands/st-pierres.png" alt="SP" width={48} height={48} className="h-full w-full object-contain" title="St Pierre's Sushi" />
                                                             </div>
                                                         )}
                                                         {store.brand_bento_bowl && (
                                                             <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                                                <Image src="/brands/bento-bowl.png" alt="BB" width={48} height={48} className="h-full w-full object-contain" title="Bento Bowl" />
                                                             </div>
                                                         )}
                                                         {store.brand_k10 && (
                                                             <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                                                <Image src="/brands/k10.png" alt="K10" width={48} height={48} className="h-full w-full object-contain" title="K10 Sushi Train" />
                                                             </div>
                                                         )}
                                                     </div>

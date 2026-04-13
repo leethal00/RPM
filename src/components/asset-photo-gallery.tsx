@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
+import Image from "next/image"
 import { toast } from "sonner"
 
 interface AssetPhoto {
@@ -158,10 +159,12 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                     {photos.map((photo) => (
                         <div key={photo.id} className="group relative aspect-square rounded-lg overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all">
-                            <img
+                            <Image
                                 src={photo.url}
                                 alt={photo.caption}
-                                className="object-cover w-full h-full"
+                                fill
+                                className="object-cover"
+                                loading="lazy"
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <Button

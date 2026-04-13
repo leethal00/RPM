@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -323,7 +324,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 <div className="flex flex-wrap gap-4 mt-2">
                     {previews.map((url, index) => (
                         <div key={url} className="relative group w-24 h-24 border rounded-lg overflow-hidden bg-muted">
-                            <img src={url} alt="Preview" className="w-full h-full object-cover" />
+                            <Image src={url} alt="Preview" fill className="object-cover" unoptimized />
                             <button
                                 type="button"
                                 onClick={() => removeFile(index)}
