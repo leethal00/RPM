@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
@@ -35,24 +35,43 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 20
 
 export default function VendorsPage() {
     const supabase = useMemo(() => createClient(), [])
     const [vendors, setVendors] = useState<any[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<any>(null)
 
-    const fetchVendors = async () => {
+    const fetchVendors = useCallback(async () => {
         setLoading(true)
 
         try {
-            // 1. Fetch Vendors
-            const { data: vendorData, error: vendorError } = await supabase
+            // 1. Fetch Vendors with server-side pagination and filtering
+            let query = supabase
                 .from('vendors')
-                .select('*')
-                .order('name')
+                .select('*', { count: "exact" })
+
+            // Server-side search filter
+            if (search.trim()) {
+                const term = `%${search.trim()}%`
+                query = query.or(`name.ilike.${term},trade.ilike.${term}`)
+            }
+
+            query = query.order('name')
+
+            // Pagination range
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
+
+            const { data: vendorData, error: vendorError, count } = await query
 
             if (vendorError) {
                 console.error('Error fetching vendors:', vendorError)
@@ -60,19 +79,28 @@ export default function VendorsPage() {
                 return
             }
 
-            // 2. Fetch Jobs to calculate metrics
-            const { data: jobData, error: jobError } = await supabase
-                .from('jobs')
-                .select('vendor_id, status, created_at, resolved_at')
-                .not('vendor_id', 'is', null)
+            setTotalCount(count ?? 0)
 
-            if (jobError) {
-                console.error('Error fetching jobs for metrics:', jobError)
+            // 2. Fetch Jobs to calculate metrics for current page vendors
+            const vendorIds = (vendorData || []).map((v: any) => v.id)
+            let jobData: any[] = []
+
+            if (vendorIds.length > 0) {
+                const { data: jobs, error: jobError } = await supabase
+                    .from('jobs')
+                    .select('vendor_id, status, created_at, resolved_at')
+                    .in('vendor_id', vendorIds)
+
+                if (jobError) {
+                    console.error('Error fetching jobs for metrics:', jobError)
+                } else {
+                    jobData = jobs || []
+                }
             }
 
             // 3. Process metrics
             const enrichedVendors = (vendorData || []).map((vendor: any) => {
-                const vendorJobs = (jobData || []).filter((j: any) => j.vendor_id === vendor.id)
+                const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
                 const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
 
                 const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
@@ -102,16 +130,18 @@ export default function VendorsPage() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [supabase, search, page])
 
     useEffect(() => {
         fetchVendors()
-    }, [])
+    }, [fetchVendors])
 
-    const filteredVendors = vendors.filter(v =>
-        v.name.toLowerCase().includes(search.toLowerCase()) ||
-        v.trade.toLowerCase().includes(search.toLowerCase())
-    )
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setPage(1)
+    }
+
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
     const tradeColors: any = {
         HVAC: "bg-blue-100 text-blue-700 border-blue-200",
@@ -176,7 +206,7 @@ export default function VendorsPage() {
                         placeholder="Search vendors by name or trade..."
                         className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                     />
                 </div>
 
@@ -199,7 +229,7 @@ export default function VendorsPage() {
                                         <TableCell colSpan={6} className="h-16 animate-pulse bg-muted/10" />
                                     </TableRow>
                                 ))
-                            ) : filteredVendors.length === 0 ? (
+                            ) : vendors.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-48 text-center">
                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -209,7 +239,7 @@ export default function VendorsPage() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredVendors.map((vendor) => (
+                                vendors.map((vendor) => (
                                     <TableRow key={vendor.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell>
                                             <div className="flex flex-col">
@@ -274,6 +304,13 @@ export default function VendorsPage() {
                             )}
                         </TableBody>
                     </Table>
+                    <TablePagination
+                        page={page}
+                        pageCount={pageCount}
+                        onPageChange={setPage}
+                        totalItems={totalCount}
+                        pageSize={PAGE_SIZE}
+                    />
                 </div>
             </div>
         </DashboardLayout>

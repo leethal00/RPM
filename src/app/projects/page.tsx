@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar } from "lucide-react"
+import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar, Filter } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
 import {
     Dialog,
@@ -15,40 +15,80 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { ProjectForm } from "@/components/project-form"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 12
 
 export default function ProjectsPage() {
+    const supabase = useMemo(() => createClient(), [])
     const [projects, setProjects] = useState<any[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [page, setPage] = useState(1)
+    const [statusFilter, setStatusFilter] = useState<string>("all")
     const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const supabase = createClient()
 
-    const fetchProjects = async () => {
+    const fetchProjects = useCallback(async () => {
         setLoading(true)
-        const { data, error } = await supabase
-            .from('projects')
-            .select(`
-                *,
-                jobs (
-                    id,
-                    status,
-                    budget_impact
-                )
-            `)
-            .neq('status', 'archived')
-            .order('created_at', { ascending: false })
 
-        if (error) {
-            console.error('Error fetching projects:', error)
-        } else {
-            setProjects(data || [])
+        try {
+            let query = supabase
+                .from('projects')
+                .select(`
+                    *,
+                    jobs (
+                        id,
+                        status,
+                        budget_impact
+                    )
+                `, { count: "exact" })
+                .neq('status', 'archived')
+
+            // Server-side status filter
+            if (statusFilter !== "all") {
+                query = query.eq('status', statusFilter)
+            }
+
+            query = query.order('created_at', { ascending: false })
+
+            // Pagination range
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
+
+            const { data, error, count } = await query
+
+            if (error) {
+                console.error('Error fetching projects:', error)
+            } else {
+                setProjects(data || [])
+                setTotalCount(count ?? 0)
+            }
+        } catch (err) {
+            console.error('Unexpected error in fetchProjects:', err)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
-    }
+    }, [supabase, statusFilter, page])
 
     useEffect(() => {
         fetchProjects()
-    }, [])
+    }, [fetchProjects])
+
+    const handleStatusChange = (value: string) => {
+        setStatusFilter(value)
+        setPage(1)
+    }
+
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
     return (
         <DashboardLayout>
@@ -66,6 +106,21 @@ export default function ProjectsPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
+                        <Select value={statusFilter} onValueChange={handleStatusChange}>
+                            <SelectTrigger className="w-[160px] bg-background border">
+                                <div className="flex items-center gap-2">
+                                    <Filter className="size-3.5" />
+                                    <SelectValue placeholder="Status" />
+                                </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                <SelectItem value="planning">Planning</SelectItem>
+                                <SelectItem value="in_progress">In Progress</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                            </SelectContent>
+                        </Select>
+
                         <div className="flex items-center border rounded-lg p-1 bg-muted/30">
                             <Button
                                 variant={viewMode === 'grid' ? "secondary" : "ghost"}
@@ -118,18 +173,29 @@ export default function ProjectsPage() {
                         ))}
                     </div>
                 ) : projects.length > 0 ? (
-                    <div className={viewMode === 'grid'
-                        ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                        : "flex flex-col gap-4"
-                    }>
-                        {projects.map((project) => (
-                            <ProjectCard
-                                key={project.id}
-                                project={project}
-                                viewMode={viewMode}
+                    <>
+                        <div className={viewMode === 'grid'
+                            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                            : "flex flex-col gap-4"
+                        }>
+                            {projects.map((project) => (
+                                <ProjectCard
+                                    key={project.id}
+                                    project={project}
+                                    viewMode={viewMode}
+                                />
+                            ))}
+                        </div>
+                        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                            <TablePagination
+                                page={page}
+                                pageCount={pageCount}
+                                onPageChange={setPage}
+                                totalItems={totalCount}
+                                pageSize={PAGE_SIZE}
                             />
-                        ))}
-                    </div>
+                        </div>
+                    </>
                 ) : (
                     <div className="py-24 text-center border-2 border-dashed rounded-2xl bg-muted/10">
                         <div className="size-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
