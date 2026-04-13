@@ -15,6 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { jobSchema } from "@/lib/validations"
 import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
 
 interface JobFormProps {
@@ -113,6 +114,18 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
+
+        const validationResult = jobSchema.safeParse({
+            title: formData.title,
+            description: formData.description || undefined,
+            severity: formData.severity,
+            job_type: formData.job_type,
+        })
+        if (!validationResult.success) {
+            toast.error(validationResult.error.issues[0].message)
+            setLoading(false)
+            return
+        }
 
         try {
             const { data: userData } = await supabase.auth.getUser()

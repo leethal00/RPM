@@ -14,6 +14,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { projectSchema } from "@/lib/validations"
 import { Loader2 } from "lucide-react"
 
 interface Project {
@@ -64,8 +65,14 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name) {
-            toast.error("Project name is required")
+        const result = projectSchema.safeParse({
+            name: formData.name,
+            budget: formData.budget ? parseFloat(formData.budget) : undefined,
+            start_date: formData.start_date || undefined,
+            end_date: formData.end_date || undefined,
+        })
+        if (!result.success) {
+            toast.error(result.error.issues[0].message)
             setLoading(false)
             return
         }

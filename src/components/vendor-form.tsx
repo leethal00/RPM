@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { vendorSchema } from "@/lib/validations"
 import { Loader2 } from "lucide-react"
 
 interface Vendor {
@@ -60,8 +61,14 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name) {
-            toast.error("Vendor Name is required")
+        const result = vendorSchema.safeParse({
+            name: formData.name,
+            trade: formData.trade,
+            email: formData.email || undefined,
+            phone: formData.phone || undefined,
+        })
+        if (!result.success) {
+            toast.error(result.error.issues[0].message)
             setLoading(false)
             return
         }

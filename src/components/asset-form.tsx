@@ -14,6 +14,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { assetSchema } from "@/lib/validations"
 import { Loader2, Search, Camera } from "lucide-react"
 import { AssetPhotoGallery } from "./asset-photo-gallery"
 
@@ -106,8 +107,12 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.asset_type_id) {
-            toast.error("Please select an Asset Type")
+        const result = assetSchema.safeParse({
+            asset_type_id: formData.asset_type_id || undefined,
+            install_date: formData.install_date || undefined,
+        })
+        if (!result.success) {
+            toast.error(result.error.issues[0].message)
             setLoading(false)
             return
         }

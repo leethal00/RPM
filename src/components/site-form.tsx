@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
+import { siteSchema } from "@/lib/validations"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Search, MapPin, Globe } from "lucide-react"
 import {
@@ -145,15 +146,21 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        if (!formData.name || !formData.address || !clientId) {
-            if (!clientId) {
-                toast.error("System error: Client ID missing. Please refresh.")
-            } else {
-                const missing = []
-                if (!formData.name) missing.push("Site Name")
-                if (!formData.address) missing.push("Site Address")
-                toast.error(`Required missing: ${missing.join(", ")}`)
-            }
+        if (!clientId) {
+            toast.error("System error: Client ID missing. Please refresh.")
+            setLoading(false)
+            return
+        }
+
+        const result = siteSchema.safeParse({
+            name: formData.name,
+            address: formData.address,
+            lat: formData.lat,
+            lng: formData.lng,
+            manager_phone: formData.manager_phone,
+        })
+        if (!result.success) {
+            toast.error(result.error.issues[0].message)
             setLoading(false)
             return
         }

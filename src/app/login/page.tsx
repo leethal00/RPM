@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { loginSchema } from '@/lib/validations'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,13 @@ export default function LoginPage() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const result = loginSchema.safeParse({ email, password })
+        if (!result.success) {
+            toast.error(result.error.issues[0].message)
+            return
+        }
+
         setLoading(true)
 
         const { error } = await supabase.auth.signInWithPassword({
