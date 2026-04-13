@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -41,24 +42,20 @@ const PAGE_SIZE = 20
 
 export default function VendorsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [vendors, setVendors] = useState<any[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<any>(null)
 
-    const fetchVendors = useCallback(async () => {
-        setLoading(true)
+    const vendorsKey = `vendors-${page}-${search}`
 
-        try {
-            // 1. Fetch Vendors with server-side pagination and filtering
+    const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: any[], count: number }>(
+        vendorsKey,
+        async () => {
             let query = supabase
                 .from('vendors')
                 .select('*', { count: "exact" })
 
-            // Server-side search filter
             if (search.trim()) {
                 const term = `%${search.trim()}%`
                 query = query.or(`name.ilike.${term},trade.ilike.${term}`)
@@ -66,22 +63,15 @@ export default function VendorsPage() {
 
             query = query.order('name')
 
-            // Pagination range
             const from = (page - 1) * PAGE_SIZE
             const to = from + PAGE_SIZE - 1
             query = query.range(from, to)
 
             const { data: vendorData, error: vendorError, count } = await query
 
-            if (vendorError) {
-                console.error('Error fetching vendors:', vendorError)
-                setLoading(false)
-                return
-            }
+            if (vendorError) throw vendorError
 
-            setTotalCount(count ?? 0)
-
-            // 2. Fetch Jobs to calculate metrics for current page vendors
+            // Fetch Jobs to calculate metrics for current page vendors
             const vendorIds = (vendorData || []).map((v: any) => v.id)
             let jobData: any[] = []
 
@@ -91,14 +81,11 @@ export default function VendorsPage() {
                     .select('vendor_id, status, created_at, resolved_at')
                     .in('vendor_id', vendorIds)
 
-                if (jobError) {
-                    console.error('Error fetching jobs for metrics:', jobError)
-                } else {
+                if (!jobError) {
                     jobData = jobs || []
                 }
             }
 
-            // 3. Process metrics
             const enrichedVendors = (vendorData || []).map((vendor: any) => {
                 const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
                 const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
@@ -117,24 +104,18 @@ export default function VendorsPage() {
 
                 return {
                     ...vendor,
-                    metrics: {
-                        openJobs,
-                        avgResolutionHours
-                    }
+                    metrics: { openJobs, avgResolutionHours }
                 }
             })
 
-            setVendors(enrichedVendors)
-        } catch (err) {
-            console.error('Unexpected error in fetchVendors:', err)
-        } finally {
-            setLoading(false)
+            return { data: { items: enrichedVendors, count: count ?? 0 }, error: null }
         }
-    }, [supabase, search, page])
+    )
 
-    useEffect(() => {
-        fetchVendors()
-    }, [fetchVendors])
+    const vendors = vendorsResult?.items || []
+    const totalCount = vendorsResult?.count ?? 0
+
+    const fetchVendors = () => mutateVendors()
 
     const handleSearchChange = (value: string) => {
         setSearch(value)

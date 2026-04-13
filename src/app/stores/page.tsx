@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -51,11 +52,8 @@ const PAGE_SIZE = 20
 
 export default function StoresListPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [stores, setStores] = useState<any[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [currentSite, setCurrentSite] = useState<any>(null)
@@ -63,12 +61,12 @@ export default function StoresListPage() {
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
-    const [vendors, setVendors] = useState<any[]>([])
 
-    const fetchStores = useCallback(async () => {
-        setLoading(true)
+    const storesKey = `stores-${page}-${search}-${filterRegion}-${sortConfig.key}-${sortConfig.direction}`
 
-        try {
+    const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: any[], count: number }>(
+        storesKey,
+        async () => {
             let query = supabase
                 .from('stores')
                 .select(`
@@ -84,21 +82,17 @@ export default function StoresListPage() {
                     )
                 `, { count: "exact" })
 
-            // Server-side search filter
             if (search.trim()) {
                 const term = `%${search.trim()}%`
                 query = query.or(`name.ilike.${term},address.ilike.${term},manager_name.ilike.${term}`)
             }
 
-            // Server-side region filter
             if (filterRegion !== "all") {
                 query = query.eq("region", filterRegion)
             }
 
-            // Sort
             query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
 
-            // Pagination range
             const from = (page - 1) * PAGE_SIZE
             const to = from + PAGE_SIZE - 1
             query = query.range(from, to)
@@ -106,7 +100,6 @@ export default function StoresListPage() {
             const { data: storesData, error: storesError, count } = await query
 
             if (storesError) {
-                // Fallback to simple fetch if nested fails
                 const fallback = supabase
                     .from('stores')
                     .select('*', { count: "exact" })
@@ -114,37 +107,22 @@ export default function StoresListPage() {
                     .range(from, to)
 
                 const { data: simpleData, count: simpleCount } = await fallback
-
-                setStores(simpleData || [])
-                setTotalCount(simpleCount ?? 0)
-            } else {
-                setStores(storesData || [])
-                setTotalCount(count ?? 0)
+                return { data: { items: simpleData || [], count: simpleCount ?? 0 }, error: null }
             }
-        } catch (err) {
-            console.error('Unexpected error in fetchStores:', err)
-        } finally {
-            setLoading(false)
+
+            return { data: { items: storesData || [], count: count ?? 0 }, error: null }
         }
-    }, [supabase, search, filterRegion, sortConfig, page])
+    )
 
-    const fetchVendors = useCallback(async () => {
-        const { data: vendorsData } = await supabase
-            .from('vendors')
-            .select('id, name')
-            .eq('status', 'active')
-            .order('name')
+    const stores = storesResult?.items || []
+    const totalCount = storesResult?.count ?? 0
 
-        setVendors(vendorsData || [])
-    }, [supabase])
+    const { data: vendors } = useSupabaseQuery<any[]>(
+        'vendors-active',
+        () => supabase.from('vendors').select('id, name').eq('status', 'active').order('name')
+    )
 
-    useEffect(() => {
-        fetchStores()
-    }, [fetchStores])
-
-    useEffect(() => {
-        fetchVendors()
-    }, [fetchVendors])
+    const fetchStores = () => mutateStores()
 
     // Client-side filters that require nested data (overdue, vendor)
     const filteredStores = stores.filter(s => {
@@ -265,7 +243,7 @@ export default function StoresListPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all" className="font-bold">All Contractors</SelectItem>
-                                        {vendors.map((vendor) => (
+                                        {(vendors || []).map((vendor) => (
                                             <SelectItem key={vendor.id} value={vendor.id}>
                                                 {vendor.name}
                                             </SelectItem>

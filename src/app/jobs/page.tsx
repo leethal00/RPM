@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { JobTimeline } from "@/components/job-timeline"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
@@ -19,19 +20,16 @@ const PAGE_SIZE = 25
 
 export default function JobLogsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [jobs, setJobs] = useState<any[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [page, setPage] = useState(1)
-    const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [severityFilter, setSeverityFilter] = useState<string>("all")
-    const [error, setError] = useState<string | null>(null)
 
-    const fetchJobs = useCallback(async () => {
-        setLoading(true)
+    const jobsKey = `jobs-${page}-${search}-${statusFilter}-${severityFilter}`
 
-        try {
+    const { data: jobsResult, isLoading: loading, error: swrError } = useSupabaseQuery<{ items: any[], count: number }>(
+        jobsKey,
+        async () => {
             let query = supabase
                 .from('jobs')
                 .select(`
@@ -39,49 +37,36 @@ export default function JobLogsPage() {
                     stores ( name )
                 `, { count: "exact" })
 
-            // Server-side search filter
             if (search.trim()) {
                 const term = `%${search.trim()}%`
                 query = query.or(`title.ilike.${term},description.ilike.${term}`)
             }
 
-            // Server-side status filter
             if (statusFilter !== "all") {
                 query = query.eq("status", statusFilter)
             }
 
-            // Server-side severity filter
             if (severityFilter !== "all") {
                 query = query.eq("severity", severityFilter)
             }
 
             query = query.order('created_at', { ascending: false })
 
-            // Pagination range
             const from = (page - 1) * PAGE_SIZE
             const to = from + PAGE_SIZE - 1
             query = query.range(from, to)
 
             const { data, error: fetchError, count } = await query
 
-            if (fetchError) {
-                console.error("Fetch error:", fetchError)
-                setError(fetchError.message)
-            } else {
-                setJobs(data || [])
-                setTotalCount(count ?? 0)
-                setError(null)
-            }
-        } catch (err) {
-            console.error('Unexpected error in fetchJobs:', err)
-        } finally {
-            setLoading(false)
-        }
-    }, [supabase, search, statusFilter, severityFilter, page])
+            if (fetchError) throw fetchError
 
-    useEffect(() => {
-        fetchJobs()
-    }, [fetchJobs])
+            return { data: { items: data || [], count: count ?? 0 }, error: null }
+        }
+    )
+
+    const jobs = jobsResult?.items || []
+    const totalCount = jobsResult?.count ?? 0
+    const error = swrError?.message ?? null
 
     const handleSearchChange = (value: string) => {
         setSearch(value)

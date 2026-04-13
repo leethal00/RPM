@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
 import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar, Filter } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
@@ -28,18 +29,16 @@ const PAGE_SIZE = 12
 
 export default function ProjectsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [projects, setProjects] = useState<any[]>([])
-    const [totalCount, setTotalCount] = useState(0)
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>("all")
-    const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-    const fetchProjects = useCallback(async () => {
-        setLoading(true)
+    const projectsKey = `projects-${page}-${statusFilter}`
 
-        try {
+    const { data: projectsResult, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<{ items: any[], count: number }>(
+        projectsKey,
+        async () => {
             let query = supabase
                 .from('projects')
                 .select(`
@@ -52,36 +51,28 @@ export default function ProjectsPage() {
                 `, { count: "exact" })
                 .neq('status', 'archived')
 
-            // Server-side status filter
             if (statusFilter !== "all") {
                 query = query.eq('status', statusFilter)
             }
 
             query = query.order('created_at', { ascending: false })
 
-            // Pagination range
             const from = (page - 1) * PAGE_SIZE
             const to = from + PAGE_SIZE - 1
             query = query.range(from, to)
 
             const { data, error, count } = await query
 
-            if (error) {
-                console.error('Error fetching projects:', error)
-            } else {
-                setProjects(data || [])
-                setTotalCount(count ?? 0)
-            }
-        } catch (err) {
-            console.error('Unexpected error in fetchProjects:', err)
-        } finally {
-            setLoading(false)
-        }
-    }, [supabase, statusFilter, page])
+            if (error) throw error
 
-    useEffect(() => {
-        fetchProjects()
-    }, [fetchProjects])
+            return { data: { items: data || [], count: count ?? 0 }, error: null }
+        }
+    )
+
+    const projects = projectsResult?.items || []
+    const totalCount = projectsResult?.count ?? 0
+
+    const fetchProjects = () => mutateProjects()
 
     const handleStatusChange = (value: string) => {
         setStatusFilter(value)
