@@ -1,58 +1,60 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { loginSchema } from '@/lib/validations'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Building2, Lock, Loader2 } from 'lucide-react'
 
-import Link from 'next/link'
-import { Building2, Lock, Mail, Loader2, ArrowRight } from 'lucide-react'
-
-export default function LoginPage() {
-    const [email, setEmail] = useState('')
+export default function ResetPasswordPage() {
     const [password, setPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const validatePassword = (pw: string): string | null => {
+        if (pw.length < 8) return 'Password must be at least 8 characters'
+        if (!/[a-z]/.test(pw)) return 'Password must contain a lowercase letter'
+        if (!/[A-Z]/.test(pw)) return 'Password must contain an uppercase letter'
+        if (!/[0-9]/.test(pw)) return 'Password must contain a number'
+        return null
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        const result = loginSchema.safeParse({ email, password })
-        if (!result.success) {
-            toast.error(result.error.issues[0].message)
+        const validationError = validatePassword(password)
+        if (validationError) {
+            toast.error(validationError)
+            return
+        }
+
+        if (password !== confirmPassword) {
+            toast.error('Passwords do not match')
             return
         }
 
         setLoading(true)
 
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        })
+        const { error } = await supabase.auth.updateUser({ password })
+
+        setLoading(false)
 
         if (error) {
-            toast.error('Login Failed', {
-                description: error.message,
-            })
+            toast.error('Error', { description: error.message })
         } else {
-            toast.success('Welcome back!')
-            router.push('/')
-            router.refresh()
+            toast.success('Password updated successfully!')
+            router.push('/login')
         }
-        setLoading(false)
     }
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] relative overflow-hidden font-primary">
-            {/* Background elements */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px]" />
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
 
@@ -62,39 +64,22 @@ export default function LoginPage() {
                         <Building2 className="size-8" />
                     </div>
                     <div className="space-y-1">
-                        <CardTitle className="text-3xl font-bold tracking-tight">RPM Portal</CardTitle>
-                        <CardDescription className="text-gray-400 italic">
-                            Rodier Property Maintenance
+                        <CardTitle className="text-3xl font-bold tracking-tight">New Password</CardTitle>
+                        <CardDescription className="text-gray-400">
+                            Enter your new password below
                         </CardDescription>
                     </div>
                 </CardHeader>
-                <form onSubmit={handleLogin}>
+                <form onSubmit={handleSubmit}>
                     <CardContent className="space-y-5 pt-8">
                         <div className="space-y-2">
-                            <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-gray-400">Email Address</Label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="your@email.com"
-                                    className="bg-white/5 border-white/10 pl-10 h-11 focus:border-primary/50 focus:ring-primary/20 transition-all"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-gray-400">Password</Label>
-                                <Link href="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
-                            </div>
+                            <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-gray-400">New Password</Label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
                                 <Input
                                     id="password"
                                     type="password"
+                                    placeholder="Min 8 chars, mixed case + number"
                                     className="bg-white/5 border-white/10 pl-10 h-11 focus:border-primary/50 focus:ring-primary/20 transition-all"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -102,20 +87,37 @@ export default function LoginPage() {
                                 />
                             </div>
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="confirmPassword" className="text-xs font-bold uppercase tracking-wider text-gray-400">Confirm Password</Label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
+                                <Input
+                                    id="confirmPassword"
+                                    type="password"
+                                    placeholder="Repeat your new password"
+                                    className="bg-white/5 border-white/10 pl-10 h-11 focus:border-primary/50 focus:ring-primary/20 transition-all"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <ul className="text-xs text-gray-500 space-y-1 pl-1">
+                            <li className={password.length >= 8 ? 'text-green-400' : ''}>At least 8 characters</li>
+                            <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'text-green-400' : ''}>Mixed case (upper and lower)</li>
+                            <li className={/[0-9]/.test(password) ? 'text-green-400' : ''}>At least one number</li>
+                        </ul>
                     </CardContent>
                     <CardFooter className="pb-8">
                         <Button
-                            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg shadow-lg shadow-primary/20 transition-all group"
+                            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg shadow-lg shadow-primary/20 transition-all"
                             type="submit"
                             disabled={loading}
                         >
                             {loading ? (
                                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                             ) : (
-                                <>
-                                    Log In
-                                    <ArrowRight className="ml-2 size-5 group-hover:translate-x-1 transition-transform" />
-                                </>
+                                'Update Password'
                             )}
                         </Button>
                     </CardFooter>
