@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import type { Project } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
@@ -16,26 +16,34 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { ProjectForm } from "@/components/project-form"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 12
 
 export default function ProjectsPage() {
+    const [currentPage, setCurrentPage] = useState(1)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const supabase = createClient()
 
-    const { data: projects = [], isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<any[]>(
-        'projects-list',
-        () => supabase
-            .from('projects')
-            .select(`
-                *,
-                jobs (
-                    id,
-                    status,
-                    budget_impact
-                )
-            `)
-            .neq('status', 'archived')
-            .order('created_at', { ascending: false })
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+
+    const { data: projects, count: totalCount, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<Project[]>(
+        ['projects', 'list', currentPage],
+        (supabase) =>
+            supabase
+                .from('projects')
+                .select(`
+                    *,
+                    jobs (
+                        id,
+                        status,
+                        budget_impact
+                    )
+                `, { count: 'exact' })
+                .neq('status', 'archived')
+                .order('created_at', { ascending: false })
+                .range(from, to)
     )
 
     return (
@@ -105,12 +113,12 @@ export default function ProjectsPage() {
                             <div key={i} className="h-[250px] rounded-xl bg-muted animate-pulse border" />
                         ))}
                     </div>
-                ) : projects.length > 0 ? (
+                ) : (projects || []).length > 0 ? (
                     <div className={viewMode === 'grid'
                         ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                         : "flex flex-col gap-4"
                     }>
-                        {projects.map((project) => (
+                        {(projects || []).map((project) => (
                             <ProjectCard
                                 key={project.id}
                                 project={project}
@@ -125,7 +133,7 @@ export default function ProjectsPage() {
                         </div>
                         <h3 className="text-xl font-bold">No High-Level Projects</h3>
                         <p className="text-muted-foreground max-w-sm mx-auto mt-2 italic">
-                            You haven't initiated any capital projects or major site refurbs yet.
+                            You haven&apos;t initiated any capital projects or major site refurbs yet.
                         </p>
                         <Button
                             variant="outline"
@@ -136,6 +144,13 @@ export default function ProjectsPage() {
                         </Button>
                     </div>
                 )}
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount || 0}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
             </div>
         </DashboardLayout>
     )

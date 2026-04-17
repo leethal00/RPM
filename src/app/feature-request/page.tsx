@@ -66,10 +66,10 @@ export default function FeatureRequestPage() {
       setDescription("")
       setPriority("medium")
       setAiAutoBuild(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       setSubmitStatus({
         type: "error",
-        message: error.message || "Failed to submit feature request. Please try again.",
+        message: error instanceof Error ? error.message : "Failed to submit feature request. Please try again.",
       })
     } finally {
       setIsSubmitting(false)

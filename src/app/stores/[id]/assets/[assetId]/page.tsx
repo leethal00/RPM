@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import type { Asset, Job } from "@/types/database"
 
 export default function AssetDetailPage({
     params
@@ -31,8 +32,8 @@ export default function AssetDetailPage({
 }) {
     const { id, assetId } = use(params)
     const router = useRouter()
-    const [asset, setAsset] = useState<any>(null)
-    const [jobs, setJobs] = useState<any[]>([])
+    const [asset, setAsset] = useState<Asset | null>(null)
+    const [jobs, setJobs] = useState<Job[]>([])
     const [loading, setLoading] = useState(true)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const supabase = createClient()
@@ -66,9 +67,8 @@ export default function AssetDetailPage({
         setLoading(false)
     }
 
-    useEffect(() => {
-        fetchData()
-    }, [assetId, supabase])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchData() }, [assetId, supabase])
 
     const handleDelete = async () => {
         if (!confirm("Are you sure you want to delete this asset? This will also affect any linked maintenance schedules.")) return

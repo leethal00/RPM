@@ -5,18 +5,19 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, DollarSign, ClipboardList, TrendingUp } from "lucide-react"
 import Link from "next/link"
+import type { Job, Project, Store } from "@/types/database"
 
 interface ProjectCardProps {
-    project: any
+    project: Project & { stores?: Store | null; jobs?: Pick<Job, 'status'>[] }
     viewMode: 'grid' | 'list'
 }
 
 export function ProjectCard({ project, viewMode }: ProjectCardProps) {
     const jobs = project.jobs || []
-    const completedJobs = jobs.filter((j: any) => j.status === 'resolved' || j.status === 'closed').length
+    const completedJobs = jobs.filter((j: Pick<Job, 'status'>) => j.status === 'resolved' || j.status === 'closed').length
     const progress = jobs.length > 0 ? (completedJobs / jobs.length) * 100 : 0
 
-    const statusColors: any = {
+    const statusColors: Record<string, string> = {
         planning: "bg-blue-500",
         in_progress: "bg-amber-500",
         completed: "bg-green-500",

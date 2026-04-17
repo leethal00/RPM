@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
-import Image from "next/image"
 import { toast } from "sonner"
 
 interface SitePhoto {
@@ -37,8 +37,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             if (error) throw error
             setPhotos(data || [])
-        } catch (error: any) {
-            console.error('Error fetching photos:', error.message)
+        } catch (error: unknown) {
+            console.error('Error fetching photos:', error instanceof Error ? error.message : error)
         } finally {
             setLoading(false)
         }
@@ -46,6 +46,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
     useEffect(() => {
         fetchPhotos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId])
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,8 +84,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             toast.success("Photo uploaded successfully")
             fetchPhotos()
-        } catch (error: any) {
-            toast.error(`Upload failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
             console.error(error)
         } finally {
             setUploading(false)
@@ -112,8 +113,8 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
             setPhotos(photos.filter(p => p.id !== photo.id))
             toast.success("Photo deleted")
-        } catch (error: any) {
-            toast.error(`Delete failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`)
         }
     }
 
@@ -168,6 +169,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                 alt={photo.caption}
                                 fill
                                 className="object-cover"
+                                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                                 loading="lazy"
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">

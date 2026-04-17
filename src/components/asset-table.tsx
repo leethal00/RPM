@@ -8,25 +8,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-
-interface Asset {
-    id: string
-    asset_group: 'internal' | 'external'
-    asset_details?: string
-    asset_dimensions?: string
-    status: string
-    last_service_date: string
-    next_service_date?: string
-    asset_types: {
-        label: string
-    }
-    jobs?: {
-        status: string
-    }[]
-    asset_photos?: {
-        id: string
-    }[]
-}
+import type { Asset } from "@/types/database"
 
 interface AssetTableProps {
     assets: Asset[]
@@ -64,7 +46,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
         )
     }
 
-    const getQuarterLabel = (dateString?: string) => {
+    const getQuarterLabel = (dateString?: string | null) => {
         if (!dateString) return "TBD"
         const date = new Date(dateString)
         const month = date.getMonth()

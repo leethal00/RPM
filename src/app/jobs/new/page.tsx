@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { JobForm } from "@/components/job-form"
 import { createClient } from "@/lib/supabase/client"
+import type { Store } from "@/types/database"
 import {
     Select,
     SelectContent,
@@ -16,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { MapPin } from "lucide-react"
 
 export default function GlobalNewJobPage() {
-    const [stores, setStores] = useState<any[]>([])
+    const [stores, setStores] = useState<Store[]>([])
     const [selectedStoreId, setSelectedStoreId] = useState<string>("")
     const [loading, setLoading] = useState(true)
     const supabase = createClient()

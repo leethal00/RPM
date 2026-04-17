@@ -14,21 +14,10 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { assetSchema } from "@/lib/validations"
-import { Loader2, Search, Camera } from "lucide-react"
+import { Loader2, Camera } from "lucide-react"
 import { AssetPhotoGallery } from "./asset-photo-gallery"
-
-interface Asset {
-    id: string
-    asset_group?: 'internal' | 'external'
-    asset_type_id: string
-    install_date?: string
-    status?: string
-    asset_details?: string
-    asset_dimensions?: string
-    last_service_date?: string
-    next_service_date?: string
-}
+import type { AssetType, Asset } from "@/types/database"
+import { assetSchema, getValidationErrors } from "@/lib/validations"
 
 interface AssetFormProps {
     storeId: string
@@ -40,7 +29,7 @@ interface AssetFormProps {
 export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const [assetTypes, setAssetTypes] = useState<any[]>([])
+    const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
 
     // Form State
     const [formData, setFormData] = useState({
@@ -107,17 +96,15 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         e.preventDefault()
         setLoading(true)
 
-        const result = assetSchema.safeParse({
-            asset_type_id: formData.asset_type_id || undefined,
-            install_date: formData.install_date || undefined,
-        })
+        const result = assetSchema.safeParse(formData)
         if (!result.success) {
-            toast.error(result.error.issues[0].message)
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
 
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             store_id: storeId,
             asset_group: formData.asset_group,
             asset_type_id: formData.asset_type_id,
@@ -160,7 +147,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                         <Label htmlFor="asset_group" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Group *</Label>
                         <Select
                             value={formData.asset_group}
-                            onValueChange={(v: any) => setFormData({ ...formData, asset_group: v })}
+                            onValueChange={(v: string) => setFormData({ ...formData, asset_group: v })}
                         >
                             <SelectTrigger id="asset_group">
                                 <SelectValue placeholder="Select group" />

@@ -2,36 +2,47 @@
 
 import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import type { Job } from "@/types/database"
 import { JobTimeline } from "@/components/job-timeline"
+import { TablePagination } from "@/components/table-pagination"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
 
-const supabase = createClient()
+const PAGE_SIZE = 25
 
 export default function JobLogsPage() {
+    const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
 
-    const { data: jobs = [], isLoading: loading, error } = useSupabaseQuery<any[]>(
-        'jobs-list',
-        () => supabase
-            .from('jobs')
-            .select(`
-                *,
-                stores ( name )
-            `)
-            .order('created_at', { ascending: false })
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+
+    const { data: jobs, count: totalCount, isLoading: loading, error } = useSupabaseQuery<Job[]>(
+        ['jobs', 'list', currentPage, search],
+        (supabase) => {
+            let query = supabase
+                .from('jobs')
+                .select(`
+                    *,
+                    stores ( name )
+                `, { count: 'exact' })
+
+            if (search.trim()) {
+                query = query.or(`title.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
+            }
+
+            query = query.order('created_at', { ascending: false })
+            query = query.range(from, to)
+
+            return query
+        }
     )
 
-    const filteredJobs = jobs.filter(job => {
-        const searchLower = search.toLowerCase()
-        return (
-            job.title?.toLowerCase().includes(searchLower) ||
-            job.description?.toLowerCase().includes(searchLower) ||
-            job.stores?.name?.toLowerCase().includes(searchLower)
-        )
-    })
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
 
     return (
         <DashboardLayout>
@@ -53,7 +64,7 @@ export default function JobLogsPage() {
                             placeholder="Search by issue title or description..."
                             className="pl-10 bg-background border-none"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                         />
                     </div>
                     <button className="flex items-center gap-2 px-4 py-2 bg-background border rounded-lg text-sm font-semibold hover:bg-muted/50 transition-colors">
@@ -71,16 +82,23 @@ export default function JobLogsPage() {
                 ) : error ? (
                     <div className="bg-destructive/10 border border-destructive/20 p-8 rounded-xl text-center">
                         <h2 className="text-destructive font-bold text-lg mb-2">Technical Error</h2>
-                        <p className="text-muted-foreground mb-4">{(error as Error).message}</p>
+                        <p className="text-muted-foreground mb-4">{error instanceof Error ? error.message : "An unexpected error occurred"}</p>
                         <p className="text-xs text-muted-foreground font-mono bg-background/50 p-2 rounded">
                             HINT: This is usually caused by Supabase Row-Level Security (RLS) blocking the read.
                         </p>
                     </div>
                 ) : (
                     <div className="bg-card p-6 rounded-xl border shadow-sm min-h-[400px]">
-                        <JobTimeline jobs={filteredJobs} />
+                        <JobTimeline jobs={jobs || []} />
                     </div>
                 )}
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount || 0}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
             </div>
         </DashboardLayout>
     )

@@ -14,19 +14,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { projectSchema } from "@/lib/validations"
 import { Loader2 } from "lucide-react"
-
-interface Project {
-    id: string
-    name: string
-    description?: string
-    status: string
-    budget?: number
-    start_date?: string
-    end_date?: string
-    store_id?: string
-}
+import type { Store, Project } from "@/types/database"
+import { projectSchema, getValidationErrors } from "@/lib/validations"
 
 interface ProjectFormProps {
     onSuccess: () => void
@@ -48,7 +38,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         store_id: project?.store_id || "none"
     })
 
-    const [stores, setStores] = useState<any[]>([])
+    const [stores, setStores] = useState<Store[]>([])
     const [fetchingStores, setFetchingStores] = useState(true)
 
     useState(() => {
@@ -65,21 +55,17 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         e.preventDefault()
         setLoading(true)
 
-        const result = projectSchema.safeParse({
-            name: formData.name,
-            budget: formData.budget ? parseFloat(formData.budget) : undefined,
-            start_date: formData.start_date || undefined,
-            end_date: formData.end_date || undefined,
-        })
+        const result = projectSchema.safeParse(formData)
         if (!result.success) {
-            toast.error(result.error.issues[0].message)
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
 
         const { data: userData } = await supabase.auth.getUser()
 
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             name: formData.name,
             description: formData.description,
             status: formData.status,

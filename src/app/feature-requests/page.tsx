@@ -53,8 +53,8 @@ export default function FeatureRequestsPage() {
       }
 
       setRequests(data.feature_requests)
-    } catch (err: any) {
-      setError(err.message || "Failed to load feature requests")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load feature requests")
     } finally {
       setIsLoading(false)
     }

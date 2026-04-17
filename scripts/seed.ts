@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
-import * as fs from 'fs'
-import * as path from 'path'
 
 dotenv.config({ path: '.env.local' })
 
@@ -43,7 +41,7 @@ async function seed() {
         { label: 'Internal Lightbox', icon_name: 'Box' },
     ]
 
-    const { data: createdAssetTypes, error: assetTypeError } = await supabase
+    const { error: assetTypeError } = await supabase
         .from('asset_types')
         .insert(assetTypes)
         .select()
@@ -78,7 +76,7 @@ async function seed() {
         },
     ]
 
-    const { data: createdStores, error: storeError } = await supabase
+    const { error: storeError } = await supabase
         .from('stores')
         .insert(stores)
         .select()

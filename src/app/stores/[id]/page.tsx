@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, use } from "react"
+import { use } from "react"
+import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
@@ -22,58 +22,77 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
+import type { Store, Asset, Job, Project } from "@/types/database"
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
-    const supabase = createClient()
 
-    const { data: store, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery<any>(
-        `store-detail-${id}`,
-        () => supabase.from('stores').select('*').eq('id', id).single()
+    const { data: store, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery<Store>(
+        ['store', id],
+        (supabase) =>
+            supabase
+                .from('stores')
+                .select('*')
+                .eq('id', id)
+                .single()
     )
 
-    const { data: assets = [], isLoading: assetsLoading, mutate: mutateAssets } = useSupabaseQuery<any[]>(
-        `store-assets-${id}`,
-        () => supabase.from('assets').select(`
-            *,
-            asset_types (
-                label
-            ),
-            jobs (
-                status
-            ),
-            asset_photos (
-                id
-            )
-        `).eq('store_id', id)
+    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<Asset[]>(
+        ['store-assets', id],
+        (supabase) =>
+            supabase
+                .from('assets')
+                .select(`
+                    *,
+                    asset_types (
+                        label
+                    ),
+                    jobs (
+                        status
+                    ),
+                    asset_photos (
+                        id
+                    )
+                `)
+                .eq('store_id', id)
     )
 
-    const { data: jobs = [], isLoading: jobsLoading, mutate: mutateJobs } = useSupabaseQuery<any[]>(
-        `store-jobs-${id}`,
-        () => supabase.from('jobs').select('*').eq('store_id', id).order('created_at', { ascending: false })
+    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<Job[]>(
+        ['store-jobs', id],
+        (supabase) =>
+            supabase
+                .from('jobs')
+                .select('*')
+                .eq('store_id', id)
+                .order('created_at', { ascending: false })
     )
 
-    const { data: projects = [], isLoading: projectsLoading, mutate: mutateProjects } = useSupabaseQuery<any[]>(
-        `store-projects-${id}`,
-        () => supabase.from('projects').select(`
-            *,
-            jobs (
-                id,
-                status,
-                budget_impact
-            )
-        `).eq('store_id', id).neq('status', 'archived').order('created_at', { ascending: false })
+    const { data: projects } = useSupabaseQuery<Project[]>(
+        ['store-projects', id],
+        (supabase) =>
+            supabase
+                .from('projects')
+                .select(`
+                    *,
+                    jobs (
+                        id,
+                        status,
+                        budget_impact
+                    )
+                `)
+                .eq('store_id', id)
+                .neq('status', 'archived')
+                .order('created_at', { ascending: false })
     )
 
-    const loading = storeLoading || assetsLoading || jobsLoading || projectsLoading
+    const loading = storeLoading
 
     const mutateAll = () => {
         mutateStore()
         mutateAssets()
         mutateJobs()
-        mutateProjects()
     }
 
     if (loading) {
@@ -134,7 +153,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 value="projects"
                                 className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
                             >
-                                {projects.length > 0 && (
+                                {(projects || []).length > 0 && (
                                     <span className="absolute top-2 right-1 flex h-2 w-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
@@ -160,7 +179,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         storeId={id}
                                         onSuccess={() => {
                                             setAssetDialogOpen(false)
-                                            mutateAll()
+                                            mutateAssets()
                                         }}
                                         onCancel={() => setAssetDialogOpen(false)}
                                     />
@@ -200,23 +219,23 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
 
                     <TabsContent value="assets" className="pt-6">
-                        <AssetTable assets={assets} storeId={id} />
+                        <AssetTable assets={assets || []} storeId={id} />
                     </TabsContent>
 
                     <TabsContent value="jobs" className="pt-6">
-                        <JobTimeline jobs={jobs} />
+                        <JobTimeline jobs={jobs || []} />
                     </TabsContent>
 
                     <TabsContent value="projects" className="pt-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {projects.map((project) => (
+                            {(projects || []).map((project) => (
                                 <ProjectCard
                                     key={project.id}
                                     project={project}
                                     viewMode="grid"
                                 />
                             ))}
-                            {projects.length === 0 && (
+                            {(projects || []).length === 0 && (
                                 <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
                                     <p className="text-muted-foreground italic">No strategic HQ projects linked to this site.</p>
                                 </div>

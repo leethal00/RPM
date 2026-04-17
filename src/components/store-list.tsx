@@ -1,27 +1,11 @@
 "use client"
 
+import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, MapPin } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
-import Image from "next/image"
-
-interface Store {
-    id: string
-    name: string
-    address: string
-    lat: number
-    lng: number
-    status: string
-    region: string
-    brand_st_pierres?: boolean
-    brand_bento_bowl?: boolean
-    brand_k10?: boolean
-    client?: {
-        name: string
-    }
-}
+import type { Store } from "@/types/database"
 
 interface StoreListProps {
     stores: Store[]
@@ -66,9 +50,9 @@ export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, o
                             <div className="p-3 border-b border-muted/50">
                                 <div className="flex items-start justify-between gap-2 mb-1">
                                     <div className="flex flex-col gap-0.5 min-w-0">
-                                        {store.client?.name && (
+                                        {store.clients?.name && (
                                             <span className="text-[10px] font-black uppercase text-primary tracking-wider truncate mb-0.5">
-                                                {store.client.name}
+                                                {store.clients.name}
                                             </span>
                                         )}
                                         <h3 className="font-bold text-sm tracking-tight leading-tight break-words pr-2">{store.name}</h3>

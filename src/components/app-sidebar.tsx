@@ -3,7 +3,6 @@
 import * as React from "react"
 import {
     Map,
-    LayoutDashboard,
     ClipboardList,
     BarChart3,
     Settings,
@@ -47,6 +46,8 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
+import type { User } from "@supabase/supabase-js"
+import type { UserProfile } from "@/types/database"
 
 const navItems = [
     {
@@ -101,8 +102,8 @@ export function AppSidebar() {
     const supabase = createClient()
     const router = useRouter()
     const pathname = usePathname()
-    const [user, setUser] = React.useState<any>(null)
-    const [profile, setProfile] = React.useState<any>(null)
+    const [user, setUser] = React.useState<User | null>(null)
+    const [profile, setProfile] = React.useState<UserProfile | null>(null)
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
@@ -154,10 +155,10 @@ export function AppSidebar() {
                             asChild
                             className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-bold shadow-sm"
                         >
-                            <a href="/jobs/new" className="flex items-center gap-2">
+                            <Link href="/jobs/new" className="flex items-center gap-2">
                                 <PlusCircle className="size-4" />
                                 <span>Report Fault</span>
-                            </a>
+                            </Link>
                         </SidebarMenuButton>
                     </div>
                     <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>

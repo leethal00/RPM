@@ -1,18 +1,7 @@
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, AlertTriangle, Hammer } from "lucide-react"
+import { Clock, AlertTriangle, Hammer } from "lucide-react"
 import Link from "next/link"
-
-interface Job {
-    id: string
-    title: string
-    job_type: "fault" | "maintenance" | "project"
-    status: string
-    created_at: string
-    description?: string
-    stores?: {
-        name: string
-    }
-}
+import type { Job } from "@/types/database"
 
 interface JobTimelineProps {
     jobs: Job[]

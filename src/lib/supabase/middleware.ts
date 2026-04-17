@@ -57,18 +57,21 @@ export async function updateSession(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     // Public routes that don't require authentication
-    const publicRoutes = ['/login', '/forgot-password', '/reset-password']
-    const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))
+    const publicPaths = ['/login', '/forgot-password', '/reset-password']
+    const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
     // Protected route logic
-    if (!user && !isPublicRoute) {
+    if (!user && !isPublicPath) {
         // no user, potentially respond by redirecting the user to the login page
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         return NextResponse.redirect(url)
     }
 
-    if (user && request.nextUrl.pathname === '/login') {
+    const redirectAwayPaths = ['/login', '/forgot-password']
+    const shouldRedirectAway = redirectAwayPaths.some(path => request.nextUrl.pathname.startsWith(path))
+
+    if (user && shouldRedirectAway) {
         // user is already logged in, redirect to home
         const url = request.nextUrl.clone()
         url.pathname = '/'

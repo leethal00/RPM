@@ -98,10 +98,10 @@ ${description}
       html_url: issueData.html_url,
       message: "Feature request created successfully",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating GitHub issue:", error)
     return NextResponse.json(
-      { error: error.message || "An unexpected error occurred" },
+      { error: error instanceof Error ? error.message : "An unexpected error occurred" },
       { status: 500 }
     )
   }

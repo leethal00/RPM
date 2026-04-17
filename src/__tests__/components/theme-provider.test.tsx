@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 
 // Mock next-themes ThemeProvider
 vi.mock('next-themes', () => ({
-  ThemeProvider: ({ children, ...props }: any) => (
+  ThemeProvider: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
     <div data-testid="next-themes-provider" data-props={JSON.stringify(props)}>
       {children}
     </div>

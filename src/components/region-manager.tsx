@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
 import { Loader2, Plus, Trash2, MapPin } from "lucide-react"
+import type { Region } from "@/types/database"
 
 export function RegionManager() {
     const supabase = createClient()
-    const [regions, setRegions] = useState<any[]>([])
+    const [regions, setRegions] = useState<Region[]>([])
     const [loading, setLoading] = useState(true)
     const [newRegion, setNewRegion] = useState("")
     const [adding, setAdding] = useState(false)
@@ -30,9 +31,8 @@ export function RegionManager() {
         setLoading(false)
     }
 
-    useEffect(() => {
-        fetchRegions()
-    }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchRegions() }, [])
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault()

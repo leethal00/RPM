@@ -2,15 +2,19 @@
 
 import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import type { Vendor, Job } from "@/types/database"
+
+interface VendorWithMetrics extends Vendor {
+    metrics: {
+        openJobs: number
+        avgResolutionHours: number
+    }
+}
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
-    Users,
-    Mail,
-    Phone,
     Plus,
     Edit2,
     HardHat,
@@ -35,35 +39,58 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table"
+import { TablePagination } from "@/components/table-pagination"
+
+const PAGE_SIZE = 20
 
 export default function VendorsPage() {
-    const supabase = useMemo(() => createClient(), [])
+    const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [editingVendor, setEditingVendor] = useState<any>(null)
+    const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
 
-    const { data: vendorData = [], isLoading: vendorsLoading, mutate: mutateVendors } = useSupabaseQuery<any[]>(
-        'vendors-list',
-        () => supabase.from('vendors').select('*').order('name')
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+
+    const { data: vendorData, count: totalCount, isLoading: vendorsLoading, mutate: mutateVendors } = useSupabaseQuery<Vendor[]>(
+        ['vendors', 'list', currentPage, search],
+        (supabase) => {
+            let query = supabase
+                .from('vendors')
+                .select('*', { count: 'exact' })
+
+            if (search.trim()) {
+                query = query.or(`name.ilike.%${search.trim()}%,trade.ilike.%${search.trim()}%`)
+            }
+
+            query = query.order('name').range(from, to)
+
+            return query
+        }
     )
 
-    const { data: jobData = [], isLoading: jobsLoading } = useSupabaseQuery<any[]>(
-        'vendor-jobs-metrics',
-        () => supabase.from('jobs').select('vendor_id, status, created_at, resolved_at').not('vendor_id', 'is', null)
+    const vendorIds = useMemo(() => (vendorData || []).map((v) => v.id), [vendorData])
+
+    const { data: jobData } = useSupabaseQuery<Job[]>(
+        vendorIds.length > 0 ? ['vendor-jobs', vendorIds] : null,
+        (supabase) =>
+            supabase
+                .from('jobs')
+                .select('vendor_id, status, created_at, resolved_at')
+                .in('vendor_id', vendorIds)
     )
 
-    const loading = vendorsLoading || jobsLoading
+    const vendors: VendorWithMetrics[] = useMemo(() => {
+        const jobs = jobData || []
+        return (vendorData || []).map((vendor) => {
+            const vendorJobs = jobs.filter((j: Job) => j.vendor_id === vendor.id)
+            const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
 
-    const vendors = useMemo(() => {
-        return vendorData.map((vendor: any) => {
-            const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
-            const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
-
-            const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
+            const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
             let avgResolutionHours = 0
 
             if (resolvedJobs.length > 0) {
-                const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
+                const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
                     const start = new Date(j.created_at).getTime()
                     const end = new Date(j.resolved_at!).getTime()
                     return acc + (end - start) / (1000 * 60 * 60)
@@ -73,20 +100,19 @@ export default function VendorsPage() {
 
             return {
                 ...vendor,
-                metrics: {
-                    openJobs,
-                    avgResolutionHours
-                }
+                metrics: { openJobs, avgResolutionHours }
             }
         })
     }, [vendorData, jobData])
 
-    const filteredVendors = vendors.filter(v =>
-        v.name.toLowerCase().includes(search.toLowerCase()) ||
-        v.trade.toLowerCase().includes(search.toLowerCase())
-    )
+    const loading = vendorsLoading
 
-    const tradeColors: any = {
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
+
+    const tradeColors: Record<string, string> = {
         HVAC: "bg-blue-100 text-blue-700 border-blue-200",
         Plumbing: "bg-cyan-100 text-cyan-700 border-cyan-200",
         Electrical: "bg-amber-100 text-amber-700 border-amber-200",
@@ -149,7 +175,7 @@ export default function VendorsPage() {
                         placeholder="Search vendors by name or trade..."
                         className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                     />
                 </div>
 
@@ -172,7 +198,7 @@ export default function VendorsPage() {
                                         <TableCell colSpan={6} className="h-16 animate-pulse bg-muted/10" />
                                     </TableRow>
                                 ))
-                            ) : filteredVendors.length === 0 ? (
+                            ) : vendors.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-48 text-center">
                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -182,14 +208,14 @@ export default function VendorsPage() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredVendors.map((vendor) => (
+                                vendors.map((vendor) => (
                                     <TableRow key={vendor.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell>
                                             <div className="flex flex-col">
                                                 <div className="font-bold text-sm tracking-tight">{vendor.name}</div>
                                                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-tighter mt-0.5">
                                                     {vendor.email && <span>{vendor.email}</span>}
-                                                    {vendor.email && vendor.phone && <span>•</span>}
+                                                    {vendor.email && vendor.phone && <span>&bull;</span>}
                                                     {vendor.phone && <span>{vendor.phone}</span>}
                                                 </div>
                                             </div>
@@ -248,6 +274,13 @@ export default function VendorsPage() {
                         </TableBody>
                     </Table>
                 </div>
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount || 0}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
             </div>
         </DashboardLayout>
     )

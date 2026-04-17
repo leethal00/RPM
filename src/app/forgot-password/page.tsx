@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Building2, Mail, Loader2, ArrowLeft } from 'lucide-react'
+import { Building2, Mail, Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react'
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('')
@@ -36,7 +36,6 @@ export default function ForgotPasswordPage() {
             toast.error('Error', { description: error.message })
         } else {
             setSent(true)
-            toast.success('Reset link sent! Check your email.')
         }
     }
 
@@ -53,28 +52,21 @@ export default function ForgotPasswordPage() {
                     <div className="space-y-1">
                         <CardTitle className="text-3xl font-bold tracking-tight">Reset Password</CardTitle>
                         <CardDescription className="text-gray-400">
-                            Enter your email to receive a password reset link
+                            {sent
+                                ? 'Check your email for a reset link'
+                                : 'Enter your email to receive a password reset link'}
                         </CardDescription>
                     </div>
                 </CardHeader>
 
                 {sent ? (
-                    <CardContent className="pt-8 pb-8 text-center space-y-4">
-                        <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-primary/10">
-                            <Mail className="size-8 text-primary" />
-                        </div>
-                        <div className="space-y-2">
-                            <p className="text-gray-300">Check your email for a reset link.</p>
-                            <p className="text-sm text-gray-500">
-                                If you don&apos;t see it, check your spam folder.
+                    <CardContent className="pt-8 pb-4">
+                        <div className="flex flex-col items-center gap-4 text-center">
+                            <CheckCircle2 className="size-12 text-primary" />
+                            <p className="text-sm text-gray-400">
+                                If an account exists for <span className="text-white font-medium">{email}</span>, you will receive a password reset email shortly.
                             </p>
                         </div>
-                        <Link href="/login">
-                            <Button variant="outline" className="mt-4 border-white/10 hover:bg-white/5">
-                                <ArrowLeft className="mr-2 size-4" />
-                                Back to Login
-                            </Button>
-                        </Link>
                     </CardContent>
                 ) : (
                     <form onSubmit={handleSubmit}>
@@ -95,7 +87,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                             </div>
                         </CardContent>
-                        <CardFooter className="pb-8 flex flex-col gap-4">
+                        <CardFooter className="pb-4">
                             <Button
                                 className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg shadow-lg shadow-primary/20 transition-all"
                                 type="submit"
@@ -107,15 +99,19 @@ export default function ForgotPasswordPage() {
                                     'Send Reset Link'
                                 )}
                             </Button>
-                            <Link href="/login" className="text-sm text-gray-400 hover:text-primary transition-colors">
-                                <span className="flex items-center gap-1">
-                                    <ArrowLeft className="size-3" />
-                                    Back to Login
-                                </span>
-                            </Link>
                         </CardFooter>
                     </form>
                 )}
+
+                <div className="px-6 pb-8">
+                    <Link
+                        href="/login"
+                        className="flex items-center justify-center gap-2 text-sm text-primary hover:underline"
+                    >
+                        <ArrowLeft className="size-4" />
+                        Back to login
+                    </Link>
+                </div>
             </Card>
 
             <div className="absolute bottom-6 text-gray-500 text-xs tracking-widest uppercase">

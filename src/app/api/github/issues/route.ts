@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 const GITHUB_REPO_OWNER = "leethal00"
 const GITHUB_REPO_NAME = "RPM"
 
-export async function GET(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
   try {
     const githubToken = process.env.GITHUB_TOKEN
 
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     const issues = await response.json()
 
     // Transform issues to include useful metadata
-    const featureRequests = issues.map((issue: any) => ({
+    const featureRequests = issues.map((issue: Record<string, unknown> & { number: number; title: string; body: string; state: string; created_at: string; updated_at: string; closed_at: string | null; user: { login: string; avatar_url: string }; labels: { name: string; color: string }[]; html_url: string; comments: number; pull_request?: unknown }) => ({
       id: issue.number,
       title: issue.title,
       description: issue.body,
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
         login: issue.user.login,
         avatar_url: issue.user.avatar_url,
       },
-      labels: issue.labels.map((label: any) => ({
+      labels: issue.labels.map((label: { name: string; color: string }) => ({
         name: label.name,
         color: label.color,
       })),
@@ -64,10 +65,10 @@ export async function GET(request: NextRequest) {
       feature_requests: featureRequests,
       total: featureRequests.length,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching GitHub issues:", error)
     return NextResponse.json(
-      { error: error.message || "An unexpected error occurred" },
+      { error: error instanceof Error ? error.message : "An unexpected error occurred" },
       { status: 500 }
     )
   }

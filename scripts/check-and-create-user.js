@@ -4,6 +4,7 @@
  * Check existing users and create a new user in Supabase dev
  */
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createClient } = require('@supabase/supabase-js');
 
 // Dev configuration
@@ -78,7 +79,7 @@ async function main() {
     .single();
 
   // Create user in public.users table
-  const { data: publicUser, error: publicUserError } = await supabase
+  const { error: publicUserError } = await supabase
     .from('users')
     .insert({
       id: authUser.user.id,

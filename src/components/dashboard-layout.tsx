@@ -8,7 +8,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SessionTimeoutDialog } from "@/components/session-timeout-dialog"
 import { createClient } from "@/lib/supabase/client"
-import type { AuthChangeEvent } from "@supabase/supabase-js"
 
 export default function DashboardLayout({
     children,
@@ -19,7 +18,8 @@ export default function DashboardLayout({
 
     useEffect(() => {
         const supabase = createClient()
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
             if (event === 'SIGNED_OUT') {
                 setSessionExpired(true)
             }
@@ -53,8 +53,8 @@ export default function DashboardLayout({
                         {children}
                     </div>
                 </SidebarInset>
+                <SessionTimeoutDialog open={sessionExpired} />
             </SidebarProvider>
-            <SessionTimeoutDialog open={sessionExpired} />
         </TooltipProvider>
     )
 }

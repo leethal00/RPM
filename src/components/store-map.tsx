@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import Image from "next/image"
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import Link from "next/link"
-import Image from "next/image"
 
 // Fix for default marker icons in Leaflet with Next.js
 const DefaultIcon = L.icon({
@@ -31,21 +31,7 @@ const getStatusIcon = (status: string) => {
     })
 }
 
-interface Store {
-    id: string
-    name: string
-    address: string
-    lat: number
-    lng: number
-    status: string
-    region: string
-    brand_st_pierres?: boolean
-    brand_bento_bowl?: boolean
-    brand_k10?: boolean
-    site_photos?: {
-        url: string
-    }[]
-}
+import type { Store } from "@/types/database"
 
 interface StoreMapProps {
     stores: Store[]
@@ -82,7 +68,7 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
 
     return (
         <Marker
-            position={[store.lat, store.lng]}
+            position={[store.lat!, store.lng!]}
             icon={getStatusIcon(store.status)}
             eventHandlers={{
                 mouseover: (e) => {
@@ -138,6 +124,7 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
                                 alt={store.name}
                                 fill
                                 className="object-cover"
+                                sizes="300px"
                                 loading="lazy"
                             />
                         </div>
@@ -170,9 +157,10 @@ export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom =
     const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
-        setIsMounted(true)
+        setIsMounted(true) // eslint-disable-line react-hooks/set-state-in-effect
+        const timer = closeTimerRef.current
         return () => {
-            if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+            if (timer) clearTimeout(timer)
         }
     }, [])
 

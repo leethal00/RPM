@@ -4,6 +4,7 @@
  * Apply migrations and seed data to Supabase dev database
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
@@ -27,7 +28,7 @@ async function executeSqlFile(client, filePath, description) {
 
   try {
     // Execute via Supabase RPC (for raw SQL)
-    const { data, error } = await client.rpc('exec_sql', { sql_query: sql });
+    const { error } = await client.rpc('exec_sql', { sql_query: sql });
 
     if (error) {
       // If exec_sql doesn't exist, we need to execute via REST API

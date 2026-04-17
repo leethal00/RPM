@@ -1,22 +1,48 @@
-import useSWR, { type SWRConfiguration } from 'swr'
-import { createClient } from '@/lib/supabase/client'
+"use client"
 
-const supabase = createClient()
+import useSWR, { type SWRConfiguration, type KeyedMutator } from "swr"
+import { useMemo } from "react"
+import { createClient } from "@/lib/supabase/client"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
-export function useSupabaseQuery<T>(
-  key: string | null,
-  query: () => Promise<{ data: T | null; error: any }>,
-  config?: SWRConfiguration
-) {
-  return useSWR<T>(
-    key,
-    async () => {
-      const { data, error } = await query()
-      if (error) throw error
-      return data as T
-    },
-    config
-  )
+type SupabaseQueryBuilder = (client: SupabaseClient) => PromiseLike<{ data: unknown; error: unknown; count?: number | null }>
+
+interface UseSupabaseQueryResult<T> {
+  data: T | undefined
+  count: number | null
+  error: unknown
+  isLoading: boolean
+  isValidating: boolean
+  mutate: KeyedMutator<{ data: T; count: number | null }>
 }
 
-export { supabase }
+export function useSupabaseQuery<T = unknown>(
+  key: string | readonly unknown[] | null,
+  queryFn: SupabaseQueryBuilder,
+  config?: SWRConfiguration
+): UseSupabaseQueryResult<T> {
+  const supabase = useMemo(() => createClient(), [])
+
+  const { data: result, error: swrError, isLoading, isValidating, mutate } = useSWR(
+    key,
+    async () => {
+      const { data, error, count } = await queryFn(supabase)
+      if (error) throw error
+      return { data: data as T, count: count ?? null }
+    },
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 2000,
+      ...config,
+    }
+  )
+
+  return {
+    data: result?.data,
+    count: result?.count ?? null,
+    error: swrError,
+    isLoading,
+    isValidating,
+    mutate,
+  }
+}

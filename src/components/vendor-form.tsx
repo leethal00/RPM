@@ -13,21 +13,12 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { vendorSchema } from "@/lib/validations"
 import { Loader2 } from "lucide-react"
-
-interface Vendor {
-    id?: string
-    name: string
-    trade: string
-    email?: string
-    phone?: string
-    account_code?: string
-    status: string
-}
+import type { Vendor } from "@/types/database"
+import { vendorSchema, getValidationErrors } from "@/lib/validations"
 
 interface VendorFormProps {
-    vendor?: Vendor
+    vendor?: Vendor | null
     onSuccess: () => void
     onCancel: () => void
 }
@@ -61,14 +52,10 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        const result = vendorSchema.safeParse({
-            name: formData.name,
-            trade: formData.trade,
-            email: formData.email || undefined,
-            phone: formData.phone || undefined,
-        })
+        const result = vendorSchema.safeParse(formData)
         if (!result.success) {
-            toast.error(result.error.issues[0].message)
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
@@ -82,7 +69,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
             .eq('id', user?.id)
             .single()
 
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             ...formData,
             client_id: userData?.client_id
         }

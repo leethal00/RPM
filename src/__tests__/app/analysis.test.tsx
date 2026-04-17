@@ -9,13 +9,13 @@ vi.mock('@/components/dashboard-layout', () => ({
 
 // Mock recharts to avoid canvas/SVG issues in jsdom
 vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
-  PieChart: ({ children }: any) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Pie: () => <div />,
   Cell: () => <div />,
-  BarChart: ({ children }: any) => <div>{children}</div>,
+  BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Bar: () => <div />,
-  AreaChart: ({ children }: any) => <div>{children}</div>,
+  AreaChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Area: () => <div />,
   XAxis: () => <div />,
   YAxis: () => <div />,
@@ -30,7 +30,7 @@ const mockSelectSchedules = vi.fn()
 const mockSelectJobs = vi.fn()
 
 function createChain(selectFn: ReturnType<typeof vi.fn>) {
-  const chain: any = {}
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {}
   chain.select = selectFn
   chain.gte = vi.fn(() => chain)
   chain.lte = vi.fn(() => chain)
@@ -41,8 +41,8 @@ function createChain(selectFn: ReturnType<typeof vi.fn>) {
 }
 
 const assetsChain = createChain(mockSelectAssets)
-const schedulesChain = createChain(mockSelectSchedules)
-const jobsChain = createChain(mockSelectJobs)
+createChain(mockSelectSchedules)
+createChain(mockSelectJobs)
 
 const mockFrom = vi.fn((table: string) => {
   if (table === 'assets') return { select: mockSelectAssets }

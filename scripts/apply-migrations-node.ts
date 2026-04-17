@@ -24,7 +24,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     }
 })
 
-async function executeSql(sql: string, description: string) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _executeSql(_sql: string, description: string) {
     console.log(`\n🔄 Executing: ${description}`)
 
     // Split SQL into individual statements
@@ -39,7 +40,7 @@ async function executeSql(sql: string, description: string) {
 
         try {
             // Use rpc if available, otherwise try raw query
-            const { data, error } = await supabase.rpc('exec_sql', {
+            const { error } = await supabase.rpc('exec_sql', {
                 sql_query: statement + ';'
             }).catch(async () => {
                 // If exec_sql doesn't exist, we need to use Postgres connection
@@ -51,11 +52,11 @@ async function executeSql(sql: string, description: string) {
                 console.error(`   ❌ Error in statement ${i + 1}:`, error.message)
                 // Continue with other statements
             }
-        } catch (err: any) {
-            if (err.message.includes('exec_sql function not available')) {
+        } catch (err: unknown) {
+            if (err instanceof Error && err.message.includes('exec_sql function not available')) {
                 throw err
             }
-            console.error(`   ⚠️  Warning in statement ${i + 1}:`, err.message)
+            console.error(`   ⚠️  Warning in statement ${i + 1}:`, err instanceof Error ? err.message : err)
         }
     }
 }

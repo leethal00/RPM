@@ -1,16 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import Image from "next/image"
 import { toast } from "sonner"
-import { siteSchema } from "@/lib/validations"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Search, MapPin, Globe } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import {
     Select,
     SelectContent,
@@ -18,9 +16,17 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import type { Region, Client, Store } from "@/types/database"
+import { siteSchema, getValidationErrors } from "@/lib/validations"
+
+interface GeocodeSuggestion {
+    display_name: string
+    lat: string
+    lon: string
+}
 
 interface SiteFormProps {
-    site?: any
+    site?: Store
     onSuccess: () => void
     onCancel: () => void
 }
@@ -28,8 +34,8 @@ interface SiteFormProps {
 export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const [regions, setRegions] = useState<any[]>([])
-    const [customers, setCustomers] = useState<any[]>([])
+    const [regions, setRegions] = useState<Region[]>([])
+    const [customers, setCustomers] = useState<Client[]>([])
     const [clientId, setClientId] = useState<string>(site?.client_id || "")
 
     // Form State
@@ -40,9 +46,9 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         manager_name: site?.manager_name || "",
         manager_phone: site?.manager_phone || "",
         status: site?.status || "active",
-        brand_st_pierres: site?.brand_st_pierres ?? site?.st_pierres ?? true,
-        brand_bento_bowl: site?.brand_bento_bowl ?? site?.bento_bowl ?? false,
-        brand_k10: site?.brand_k10 ?? site?.k10 ?? false,
+        brand_st_pierres: site?.brand_st_pierres ?? true,
+        brand_bento_bowl: site?.brand_bento_bowl ?? false,
+        brand_k10: site?.brand_k10 ?? false,
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
         lat: site?.lat || null,
@@ -51,7 +57,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
     // Geocoding State
     const [searching, setSearching] = useState(false)
-    const [suggestions, setSuggestions] = useState<any[]>([])
+    const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
 
     const lookupAddress = async () => {
         if (!formData.address || formData.address.length < 5) {
@@ -65,14 +71,14 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             const data = await response.json()
             setSuggestions(data)
             if (data.length === 0) toast.error("No locations found. Try adding more detail.")
-        } catch (error) {
+        } catch {
             toast.error("Error connecting to geocoding service")
         } finally {
             setSearching(false)
         }
     }
 
-    const selectAddress = (suggestion: any) => {
+    const selectAddress = (suggestion: GeocodeSuggestion) => {
         setFormData({
             ...formData,
             address: suggestion.display_name,
@@ -130,6 +136,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             }
         }
         fetchCustomers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase, site?.id])
 
     useEffect(() => {
@@ -153,15 +160,10 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             return
         }
 
-        const result = siteSchema.safeParse({
-            name: formData.name,
-            address: formData.address,
-            lat: formData.lat,
-            lng: formData.lng,
-            manager_phone: formData.manager_phone,
-        })
+        const result = siteSchema.safeParse(formData)
         if (!result.success) {
-            toast.error(result.error.issues[0].message)
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
@@ -347,6 +349,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                     <button
                         type="button"
                         role="switch"
+                        aria-checked={formData.has_drive_thru}
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${formData.has_drive_thru ? 'bg-primary' : 'bg-input'}`}
                         onClick={() => setFormData({ ...formData, has_drive_thru: !formData.has_drive_thru })}
                     >

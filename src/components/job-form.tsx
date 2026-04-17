@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,8 +16,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { jobSchema } from "@/lib/validations"
-import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
+import { Loader2, Camera, X } from "lucide-react"
+import type { Asset, Project, Vendor } from "@/types/database"
+import { jobSchema, getValidationErrors } from "@/lib/validations"
 
 interface JobFormProps {
     storeId: string
@@ -31,9 +32,9 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     const [fetchingAssets, setFetchingAssets] = useState(true)
     const [fetchingProjects, setFetchingProjects] = useState(true)
     const [fetchingVendors, setFetchingVendors] = useState(true)
-    const [assets, setAssets] = useState<any[]>([])
-    const [projects, setProjects] = useState<any[]>([])
-    const [vendors, setVendors] = useState<any[]>([])
+    const [assets, setAssets] = useState<Asset[]>([])
+    const [projects, setProjects] = useState<Project[]>([])
+    const [vendors, setVendors] = useState<Vendor[]>([])
     const [selectedFiles, setSelectedFiles] = useState<File[]>([])
     const [previews, setPreviews] = useState<string[]>([])
 
@@ -116,14 +117,10 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
         e.preventDefault()
         setLoading(true)
 
-        const validationResult = jobSchema.safeParse({
-            title: formData.title,
-            description: formData.description || undefined,
-            severity: formData.severity,
-            job_type: formData.job_type,
-        })
-        if (!validationResult.success) {
-            toast.error(validationResult.error.issues[0].message)
+        const result = jobSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
             setLoading(false)
             return
         }
@@ -157,7 +154,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             }
 
             // 2. Insert Job
-            const insertData: any = {
+            const insertData: Record<string, unknown> = {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
                 project_id: formData.project_id === 'none' ? null : (formData.project_id || null),
@@ -191,8 +188,8 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 router.push(`/stores/${storeId}`)
                 router.refresh()
             }
-        } catch (error: any) {
-            toast.error(error.message || "Failed to create job")
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to create job")
         } finally {
             setLoading(false)
         }
@@ -298,7 +295,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="none">Unassigned (Internal / TBD)</SelectItem>
-                            {vendors.map((v: any) => (
+                            {vendors.map((v) => (
                                 <SelectItem key={v.id} value={v.id}>
                                     {v.name} ({v.trade})
                                 </SelectItem>
@@ -324,7 +321,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 <div className="flex flex-wrap gap-4 mt-2">
                     {previews.map((url, index) => (
                         <div key={url} className="relative group w-24 h-24 border rounded-lg overflow-hidden bg-muted">
-                            <Image src={url} alt="Preview" fill className="object-cover" unoptimized />
+                            <Image src={url} alt="Preview" fill sizes="96px" className="object-cover" unoptimized />
                             <button
                                 type="button"
                                 onClick={() => removeFile(index)}

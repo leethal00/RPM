@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Project, Job } from "@/types/database"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -41,8 +42,8 @@ export default function ProjectDetailPage({
     params: Promise<{ id: string }>
 }) {
     const { id } = use(params)
-    const [project, setProject] = useState<any>(null)
-    const [jobs, setJobs] = useState<any[]>([])
+    const [project, setProject] = useState<Project | null>(null)
+    const [jobs, setJobs] = useState<Job[]>([])
     const [loading, setLoading] = useState(true)
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const supabase = createClient()
@@ -74,9 +75,8 @@ export default function ProjectDetailPage({
         setLoading(false)
     }
 
-    useEffect(() => {
-        fetchData()
-    }, [id, supabase])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchData() }, [id, supabase])
 
     const handleArchiveProject = async () => {
         if (!confirm("Are you sure you want to archive this project? Linked jobs will be preserved but the project will be hidden from active views.")) return
@@ -124,10 +124,7 @@ export default function ProjectDetailPage({
     const completedJobs = jobs.filter(j => j.status === 'resolved' || j.status === 'closed').length
     const progress = jobs.length > 0 ? (completedJobs / jobs.length) * 100 : 0
 
-    // Simple budget utilization for now (sum of jobs if we had a cost field, for now we'll just show the budget)
-    const budgetUsed = 0 // Placeholder for future cost tracking per job
-
-    const statusColors: any = {
+    const statusColors: Record<string, string> = {
         planning: "bg-blue-500",
         in_progress: "bg-amber-500",
         completed: "bg-green-500",

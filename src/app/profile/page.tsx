@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { type User as SupabaseUser } from "@supabase/supabase-js"
+import type { UserProfile } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,8 +19,8 @@ export default function ProfilePage() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [user, setUser] = useState<any>(null)
-    const [profile, setProfile] = useState<any>(null)
+    const [user, setUser] = useState<SupabaseUser | null>(null)
+    const [profile, setProfile] = useState<UserProfile | null>(null)
     const [formData, setFormData] = useState({
         full_name: "",
         phone: "",
@@ -53,6 +55,7 @@ export default function ProfilePage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!user) return
         setSaving(true)
 
         const { error } = await supabase

@@ -1,9 +1,16 @@
-"use client"
+'use client'
 
-import { useRouter } from "next/navigation"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { LogIn } from "lucide-react"
+import { useRouter } from 'next/navigation'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { LogIn } from 'lucide-react'
 
 interface SessionTimeoutDialogProps {
     open: boolean
@@ -13,11 +20,12 @@ export function SessionTimeoutDialog({ open }: SessionTimeoutDialogProps) {
     const router = useRouter()
 
     return (
-        <Dialog open={open}>
+        <Dialog open={open} modal>
             <DialogContent
                 showCloseButton={false}
-                onInteractOutside={(e) => e.preventDefault()}
+                onPointerDownOutside={(e) => e.preventDefault()}
                 onEscapeKeyDown={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
             >
                 <DialogHeader>
                     <DialogTitle>Session Expired</DialogTitle>
@@ -26,7 +34,7 @@ export function SessionTimeoutDialog({ open }: SessionTimeoutDialogProps) {
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button onClick={() => router.push("/login")}>
+                    <Button onClick={() => router.push('/login')}>
                         <LogIn className="mr-2 size-4" />
                         Sign In
                     </Button>

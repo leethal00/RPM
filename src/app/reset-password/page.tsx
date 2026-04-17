@@ -10,20 +10,20 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, Lock, Loader2 } from 'lucide-react'
 
+function validatePassword(password: string): string | null {
+    if (password.length < 8) return 'Password must be at least 8 characters'
+    if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter'
+    if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter'
+    if (!/[0-9]/.test(password)) return 'Password must contain a number'
+    return null
+}
+
 export default function ResetPasswordPage() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     const supabase = createClient()
-
-    const validatePassword = (pw: string): string | null => {
-        if (pw.length < 8) return 'Password must be at least 8 characters'
-        if (!/[a-z]/.test(pw)) return 'Password must contain a lowercase letter'
-        if (!/[A-Z]/.test(pw)) return 'Password must contain an uppercase letter'
-        if (!/[0-9]/.test(pw)) return 'Password must contain a number'
-        return null
-    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -86,6 +86,11 @@ export default function ResetPasswordPage() {
                                     required
                                 />
                             </div>
+                            <ul className="text-xs text-gray-500 space-y-1 pl-1">
+                                <li className={password.length >= 8 ? 'text-green-400' : ''}>At least 8 characters</li>
+                                <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'text-green-400' : ''}>Mixed case (upper and lower)</li>
+                                <li className={/[0-9]/.test(password) ? 'text-green-400' : ''}>At least one number</li>
+                            </ul>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="confirmPassword" className="text-xs font-bold uppercase tracking-wider text-gray-400">Confirm Password</Label>
@@ -102,11 +107,6 @@ export default function ResetPasswordPage() {
                                 />
                             </div>
                         </div>
-                        <ul className="text-xs text-gray-500 space-y-1 pl-1">
-                            <li className={password.length >= 8 ? 'text-green-400' : ''}>At least 8 characters</li>
-                            <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'text-green-400' : ''}>Mixed case (upper and lower)</li>
-                            <li className={/[0-9]/.test(password) ? 'text-green-400' : ''}>At least one number</li>
-                        </ul>
                     </CardContent>
                     <CardFooter className="pb-8">
                         <Button

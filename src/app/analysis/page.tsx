@@ -217,7 +217,7 @@ export default function AnalyticsPage() {
 
             const monthKeys = Object.keys(monthBuckets)
 
-            ;(recentJobs || []).forEach((job: any) => {
+            ;(recentJobs || []).forEach((job: { created_at: string; job_type: string; status: string }) => {
                 const created = new Date(job.created_at)
                 const key = created.toLocaleDateString('en-NZ', { month: 'short', year: '2-digit' })
                 if (monthBuckets[key]) {
@@ -269,6 +269,7 @@ export default function AnalyticsPage() {
 
     useEffect(() => {
         fetchAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase])
 
     if (loading) {

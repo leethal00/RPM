@@ -1,15 +1,13 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import DashboardLayout from "@/components/dashboard-layout"
-import { createClient } from "@/lib/supabase/client"
-import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import Image from "next/image"
+import DashboardLayout from "@/components/dashboard-layout"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
-    Building2,
     MapPin,
     ChevronRight,
     Plus,
@@ -47,45 +45,102 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { TablePagination } from "@/components/table-pagination"
+import type { Store, Vendor, Asset, Job } from "@/types/database"
+
+const PAGE_SIZE = 20
 
 export default function StoresListPage() {
-    const supabase = useMemo(() => createClient(), [])
+    const [currentPage, setCurrentPage] = useState(1)
     const [search, setSearch] = useState("")
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
-    const [currentSite, setCurrentSite] = useState<any>(null)
+    const [currentSite, setCurrentSite] = useState<Store | null>(null)
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' })
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
 
-    const { data: stores = [], isLoading: loading, mutate: mutateStores } = useSupabaseQuery<any[]>(
-        'stores-list',
-        () => supabase
-            .from('stores')
-            .select(`
-                *,
-                assets (
-                    id,
-                    next_service_date
-                ),
-                jobs (
-                    id,
-                    vendor_id,
-                    status
-                )
-            `)
-            .order('name')
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+
+    const { data: vendorsData } = useSupabaseQuery<Vendor[]>(
+        ['vendors', 'active-list'],
+        (supabase) =>
+            supabase
+                .from('vendors')
+                .select('id, name')
+                .eq('status', 'active')
+                .order('name')
+    )
+    const vendors = vendorsData || []
+
+    const { data: rawStores, count: serverCount, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<Store[]>(
+        ['stores', 'list', currentPage, search, filterRegion, sortConfig.key, sortConfig.direction],
+        (supabase) => {
+            let query = supabase
+                .from('stores')
+                .select(`
+                    *,
+                    assets (
+                        id,
+                        next_service_date
+                    ),
+                    jobs (
+                        id,
+                        vendor_id,
+                        status
+                    )
+                `, { count: 'exact' })
+
+            if (search.trim()) {
+                query = query.or(`name.ilike.%${search.trim()}%,address.ilike.%${search.trim()}%,manager_name.ilike.%${search.trim()}%`)
+            }
+
+            if (filterRegion !== "all") {
+                query = query.eq('region', filterRegion)
+            }
+
+            query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
+            query = query.range(from, to)
+
+            return query
+        }
     )
 
-    const { data: vendors = [] } = useSupabaseQuery<any[]>(
-        'vendors-active',
-        () => supabase
-            .from('vendors')
-            .select('id, name')
-            .eq('status', 'active')
-            .order('name')
-    )
+    // Client-side filters that depend on nested data
+    const { stores, totalCount } = useMemo(() => {
+        let filtered = rawStores || []
+
+        if (filterOverdue) {
+            filtered = filtered.filter((s: Store) =>
+                s.assets?.some((asset: Asset) =>
+                    asset.next_service_date && new Date(asset.next_service_date) < new Date()
+                )
+            )
+        }
+
+        if (filterVendor !== "all") {
+            filtered = filtered.filter((s: Store) =>
+                s.jobs?.some((job: Job) =>
+                    job.vendor_id === filterVendor &&
+                    job.status !== 'resolved' &&
+                    job.status !== 'closed'
+                )
+            )
+        }
+
+        const count = (!filterOverdue && filterVendor === "all")
+            ? (serverCount || 0)
+            : filtered.length
+
+        return { stores: filtered, totalCount: count }
+    }, [rawStores, serverCount, filterOverdue, filterVendor])
+
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc'
@@ -93,52 +148,25 @@ export default function StoresListPage() {
             direction = 'desc'
         }
         setSortConfig({ key, direction })
+        setCurrentPage(1)
     }
 
-    const sortedStores = [...stores].sort((a, b) => {
-        const aValue = a[sortConfig.key] || ""
-        const bValue = b[sortConfig.key] || ""
-        if (sortConfig.direction === 'asc') {
-            return aValue > bValue ? 1 : -1
-        } else {
-            return aValue < bValue ? 1 : -1
-        }
-    })
+    const handleFilterRegionChange = (value: string) => {
+        setFilterRegion(value)
+        setCurrentPage(1)
+    }
 
-    const filteredStores = sortedStores.filter(s => {
-        const searchLower = search.toLowerCase()
-        const matchesSearch =
-            (s.name || "").toLowerCase().includes(searchLower) ||
-            (s.address || "").toLowerCase().includes(searchLower) ||
-            (s.manager_name || "").toLowerCase().includes(searchLower)
+    const handleFilterVendorChange = (value: string) => {
+        setFilterVendor(value)
+        setCurrentPage(1)
+    }
 
-        if (!matchesSearch) return false
+    const handleFilterOverdueToggle = () => {
+        setFilterOverdue(!filterOverdue)
+        setCurrentPage(1)
+    }
 
-        if (filterOverdue) {
-            const hasOverdue = s.assets?.some((asset: any) => {
-                if (!asset.next_service_date) return false
-                return new Date(asset.next_service_date) < new Date()
-            })
-            if (!hasOverdue) return false
-        }
-
-        if (filterVendor !== "all") {
-            const hasVendor = s.jobs?.some((job: any) =>
-                job.vendor_id === filterVendor &&
-                job.status !== 'resolved' &&
-                job.status !== 'cancelled'
-            )
-            if (!hasVendor) return false
-        }
-
-        if (filterRegion !== "all") {
-            if (s.region !== filterRegion) return false
-        }
-
-        return true
-    })
-
-    const openEditDialog = (e: React.MouseEvent, site: any) => {
+    const openEditDialog = (e: React.MouseEvent, site: Store) => {
         e.preventDefault()
         e.stopPropagation()
         setCurrentSite(site)
@@ -186,7 +214,7 @@ export default function StoresListPage() {
                         </label>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             <div className="flex flex-col gap-1.5">
-                                <Select value={filterVendor} onValueChange={setFilterVendor}>
+                                <Select value={filterVendor} onValueChange={handleFilterVendorChange}>
                                     <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
                                         <div className="flex items-center gap-2">
                                             <SlidersHorizontal className="size-3.5 text-primary" />
@@ -205,7 +233,7 @@ export default function StoresListPage() {
                             </div>
 
                             <div className="flex flex-col gap-1.5">
-                                <Select value={filterRegion} onValueChange={setFilterRegion}>
+                                <Select value={filterRegion} onValueChange={handleFilterRegionChange}>
                                     <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
                                         <div className="flex items-center gap-2">
                                             <MapPin className="size-3.5 text-primary" />
@@ -226,14 +254,14 @@ export default function StoresListPage() {
                             <Button
                                 variant={filterOverdue ? "destructive" : "outline"}
                                 className={`h-10 border-2 font-black uppercase text-[10px] tracking-widest gap-2 ${!filterOverdue && 'bg-white hover:bg-slate-50'}`}
-                                onClick={() => setFilterOverdue(!filterOverdue)}
+                                onClick={handleFilterOverdueToggle}
                             >
                                 <AlertTriangle className={`size-3.5 ${filterOverdue ? 'animate-pulse' : ''}`} />
                                 Overdue maintenance
                                 {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
                             </Button>
 
-                            {(search !== "" || filterOverdue || filterVendor !== "all") && (
+                            {(search !== "" || filterOverdue || filterVendor !== "all" || filterRegion !== "all") && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -242,16 +270,17 @@ export default function StoresListPage() {
                                         setFilterOverdue(false)
                                         setFilterVendor("all")
                                         setFilterRegion("all")
+                                        setCurrentPage(1)
                                     }}
                                     className="h-10 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary gap-2"
                                 >
-                                    Reset {(search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0)} Filters
+                                    Reset {(search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0)} Filters
                                 </Button>
                             )}
                         </div>
                     </div>
                     <div className="hidden lg:flex flex-col items-end gap-1 px-4 border-l border-slate-200">
-                        <span className="text-[24px] font-black text-slate-900 leading-none">{filteredStores.length}</span>
+                        <span className="text-[24px] font-black text-slate-900 leading-none">{totalCount}</span>
                         <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Site Matches</span>
                     </div>
                 </div>
@@ -262,7 +291,7 @@ export default function StoresListPage() {
                         placeholder="Search by name, address, or manager..."
                         className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                     />
                 </div>
 
@@ -299,17 +328,17 @@ export default function StoresListPage() {
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={6} className="h-12 animate-pulse bg-muted/20" />
+                                        <TableCell colSpan={8} className="h-12 animate-pulse bg-muted/20" />
                                     </TableRow>
                                 ))
-                            ) : filteredStores.length === 0 ? (
+                            ) : stores.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground italic">
                                         No sites found matching your search.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredStores.map((store) => (
+                                stores.map((store) => (
                                     <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="font-semibold">
                                             <div className="flex flex-col gap-1.5">
@@ -435,6 +464,13 @@ export default function StoresListPage() {
                         </TableBody>
                     </Table>
                 </div>
+
+                <TablePagination
+                    currentPage={currentPage}
+                    totalCount={totalCount}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setCurrentPage}
+                />
 
                 <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
                     <DialogContent className="sm:max-w-[500px]">
