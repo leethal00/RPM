@@ -1,0 +1,26 @@
+# swarm-trigger.yml — Add this to each project repo at .github/workflows/swarm-trigger.yml
+# Triggers the agent-swarm pipeline when the 'swarm' label is added to an issue.
+
+name: Trigger Swarm Pipeline
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  dispatch-to-swarm:
+    if: github.event.label.name == 'swarm'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch to agent-swarm
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.SWARM_PAT }}
+          repository: leethal00/agent-swarm
+          event-type: swarm-trigger
+          client-payload: |
+            {
+              "issue_number": "${{ github.event.issue.number }}",
+              "repo_name": "${{ github.event.repository.name }}",
+              "repo_owner": "${{ github.event.repository.owner.login }}"
+            }

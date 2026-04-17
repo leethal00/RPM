@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import type { Asset, Job } from "@/types/database"
 
 export default function AssetDetailPage({
     params
@@ -31,8 +32,8 @@ export default function AssetDetailPage({
 }) {
     const { id, assetId } = use(params)
     const router = useRouter()
-    const [asset, setAsset] = useState<any>(null)
-    const [jobs, setJobs] = useState<any[]>([])
+    const [asset, setAsset] = useState<Asset | null>(null)
+    const [jobs, setJobs] = useState<Job[]>([])
     const [loading, setLoading] = useState(true)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const supabase = createClient()

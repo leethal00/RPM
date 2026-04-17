@@ -19,9 +19,16 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import type { Asset, Store, AssetType, Job } from "@/types/database"
+
+type PMAsset = Asset & {
+    stores: Pick<Store, 'id' | 'name' | 'brand_st_pierres' | 'brand_bento_bowl' | 'brand_k10'>
+    asset_types: Pick<AssetType, 'label'> | null
+    jobs: Pick<Job, 'status'>[]
+}
 
 export default function PMSchedulerPage() {
-    const [pmAssets, setPmAssets] = useState<any[]>([])
+    const [pmAssets, setPmAssets] = useState<PMAsset[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
 
@@ -62,9 +69,9 @@ export default function PMSchedulerPage() {
         setLoading(false)
     }
 
-    const getStatusColor = (asset: any) => {
+    const getStatusColor = (asset: PMAsset) => {
         // Red if active fault
-        const activeFaults = asset.jobs?.filter((j: any) => j.status === 'open' || j.status === 'in_progress')
+        const activeFaults = asset.jobs?.filter((j: Pick<Job, 'status'>) => j.status === 'open' || j.status === 'in_progress')
         if (activeFaults && activeFaults.length > 0) return "bg-red-50 text-red-600"
 
         if (!asset.next_service_date) return "bg-slate-100 text-slate-600"
@@ -76,7 +83,7 @@ export default function PMSchedulerPage() {
         return "bg-emerald-50 text-emerald-600"
     }
 
-    const getStoreBrand = (store: any) => {
+    const getStoreBrand = (store: Pick<Store, 'brand_st_pierres' | 'brand_bento_bowl' | 'brand_k10'>) => {
         if (store.brand_bento_bowl) return "Bento Bowl"
         if (store.brand_k10) return "K10"
         return "St Pierre's"
@@ -98,7 +105,7 @@ export default function PMSchedulerPage() {
         return new Date(year, targetMonth, 1).toISOString().split('T')[0]
     }
 
-    const getQuarterLabel = (dateString: string) => {
+    const getQuarterLabel = (dateString: string | null) => {
         if (!dateString) return "TBD"
         const date = new Date(dateString)
         const month = date.getMonth()
@@ -107,7 +114,7 @@ export default function PMSchedulerPage() {
         return `Q${quarter} ${year}`
     }
 
-    const generatePMJob = async (asset: any) => {
+    const generatePMJob = async (asset: PMAsset) => {
         const { data: userData } = await supabase.auth.getUser()
 
         const { error: jobError } = await supabase

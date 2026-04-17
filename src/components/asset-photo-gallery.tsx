@@ -36,8 +36,8 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
 
             if (error) throw error
             setPhotos(data || [])
-        } catch (error: any) {
-            console.error('Error fetching asset photos:', error.message)
+        } catch (error: unknown) {
+            console.error('Error fetching asset photos:', error instanceof Error ? error.message : error)
         } finally {
             setLoading(false)
         }
@@ -82,8 +82,8 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
 
             toast.success("Asset photo uploaded successfully")
             fetchPhotos()
-        } catch (error: any) {
-            toast.error(`Upload failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
             console.error(error)
         } finally {
             setUploading(false)
@@ -111,8 +111,8 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
 
             setPhotos(photos.filter(p => p.id !== photo.id))
             toast.success("Asset photo deleted")
-        } catch (error: any) {
-            toast.error(`Delete failed: ${error.message}`)
+        } catch (error: unknown) {
+            toast.error(`Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`)
         }
     }
 

@@ -1,23 +1,9 @@
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Phone, User, Calendar, Heart } from "lucide-react"
+import type { Store } from "@/types/database"
 
 interface StoreHeaderProps {
-    store: {
-        name: string
-        address: string
-        region: string
-        status: string
-        manager_name?: string
-        manager_phone?: string
-        site_category?: string
-        has_drive_thru?: boolean
-        brand_st_pierres?: boolean
-        brand_bento_bowl?: boolean
-        brand_k10?: boolean
-        lat?: number
-        lng?: number
-        maintenance_score?: number
-    }
+    store: Store
 }
 
 export function StoreHeader({ store }: StoreHeaderProps) {

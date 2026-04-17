@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import type { Job, JobStatus, UserProfile } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,8 +29,8 @@ import {
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
-    const [job, setJob] = useState<any>(null)
-    const [technicians, setTechnicians] = useState<any[]>([])
+    const [job, setJob] = useState<Job | null>(null)
+    const [technicians, setTechnicians] = useState<UserProfile[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
 
@@ -63,11 +64,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         fetchData()
     }, [id, supabase])
 
-    const updateJobStatus = async (newStatus: string) => {
-        const updateData: any = { status: newStatus }
+    const updateJobStatus = async (newStatus: JobStatus) => {
+        if (!job) return
+
+        const updateData: Record<string, string | null> = { status: newStatus }
 
         // SLA Tracking: Record when a job is first responded to (e.g., in_progress or assigned)
-        if ((newStatus === 'in_progress' || newStatus === 'assigned') && !job.responded_at) {
+        if (newStatus === 'in_progress' && !job.responded_at) {
             updateData.responded_at = new Date().toISOString()
         }
 
@@ -92,6 +95,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
 
     const assignTechnician = async (userId: string) => {
+        if (!job) return
+
         const { error } = await supabase
             .from('jobs')
             .update({ assigned_to: userId })
@@ -102,7 +107,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         } else {
             const tech = technicians.find(t => t.id === userId)
             toast.success(`Assigned to ${tech?.name}`)
-            setJob({ ...job, assigned_to: userId, assignee: { name: tech?.name } })
+            setJob({ ...job, assigned_to: userId })
         }
     }
 

@@ -14,19 +14,10 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-
-interface Vendor {
-    id?: string
-    name: string
-    trade: string
-    email?: string
-    phone?: string
-    account_code?: string
-    status: string
-}
+import type { Vendor } from "@/types/database"
 
 interface VendorFormProps {
-    vendor?: Vendor
+    vendor?: Vendor | null
     onSuccess: () => void
     onCancel: () => void
 }

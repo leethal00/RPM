@@ -47,6 +47,8 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
+import type { User } from "@supabase/supabase-js"
+import type { UserProfile } from "@/types/database"
 
 const navItems = [
     {
@@ -101,8 +103,8 @@ export function AppSidebar() {
     const supabase = createClient()
     const router = useRouter()
     const pathname = usePathname()
-    const [user, setUser] = React.useState<any>(null)
-    const [profile, setProfile] = React.useState<any>(null)
+    const [user, setUser] = React.useState<User | null>(null)
+    const [profile, setProfile] = React.useState<UserProfile | null>(null)
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {

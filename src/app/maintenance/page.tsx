@@ -16,9 +16,24 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import type { Asset, Store, AssetType } from "@/types/database"
+
+interface DueScheduleItem {
+    id: string
+    asset_id: string
+    task_name: string
+    next_due_at: string
+    frequency_days: number
+    assets: {
+        name: string
+        id: string
+        stores: Pick<Store, 'name' | 'id'>
+    }
+    isAssetLevel?: boolean
+}
 
 export default function MaintenanceDashboard() {
-    const [dueSchedules, setDueSchedules] = useState<any[]>([])
+    const [dueSchedules, setDueSchedules] = useState<DueScheduleItem[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
 
@@ -63,7 +78,7 @@ export default function MaintenanceDashboard() {
             .lte('next_service_date', now.toISOString())
 
         // Map overdue assets
-        const overdueAssets = (assetsData || []).map((asset: any) => {
+        const overdueAssets = (assetsData || []).map((asset: Asset & { stores: Pick<Store, 'name' | 'id'>, asset_types: Pick<AssetType, 'label'> | null }) => {
             return {
                 id: `asset-pm-${asset.id}`,
                 asset_id: asset.id,
@@ -87,7 +102,7 @@ export default function MaintenanceDashboard() {
         setLoading(false)
     }
 
-    async function createJobFromMaintenance(item: any) {
+    async function createJobFromMaintenance(item: DueScheduleItem) {
         const { error: jobError } = await supabase
             .from('jobs')
             .insert({

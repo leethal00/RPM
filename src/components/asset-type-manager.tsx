@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
 import { Loader2, Plus, Trash2, Layers, Search, Pencil } from "lucide-react"
+import type { AssetType } from "@/types/database"
 import {
     Dialog,
     DialogContent,
@@ -18,7 +19,7 @@ import { Label } from "@/components/ui/label"
 
 export function AssetTypeManager() {
     const supabase = createClient()
-    const [assetTypes, setAssetTypes] = useState<any[]>([])
+    const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
     const [loading, setLoading] = useState(true)
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
@@ -84,7 +85,7 @@ export function AssetTypeManager() {
         setSaving(false)
     }
 
-    const handleEdit = (type: any) => {
+    const handleEdit = (type: AssetType) => {
         setEditingId(type.id)
         setFormData({
             label: type.label,
