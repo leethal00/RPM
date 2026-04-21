@@ -1,8 +1,8 @@
 "use client"
 
-import { use } from "react"
-import { useState } from "react"
+import { useState, useMemo, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
+import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
@@ -22,77 +22,49 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
-import type { Store, Asset, Job, Project } from "@/types/database"
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
+    const supabase = useMemo(() => createClient(), [])
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
 
-    const { data: store, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery<Store>(
-        ['store', id],
-        (supabase) =>
-            supabase
-                .from('stores')
-                .select('*')
-                .eq('id', id)
-                .single()
+    const { data: storeData, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery(
+        `store-${id}`,
+        () => supabase.from('stores').select('*').eq('id', id).single()
     )
 
-    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<Asset[]>(
-        ['store-assets', id],
-        (supabase) =>
-            supabase
-                .from('assets')
-                .select(`
-                    *,
-                    asset_types (
-                        label
-                    ),
-                    jobs (
-                        status
-                    ),
-                    asset_photos (
-                        id
-                    )
-                `)
-                .eq('store_id', id)
+    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<any[]>(
+        `store-${id}-assets`,
+        () => supabase.from('assets').select(`
+            *,
+            asset_types ( label ),
+            jobs ( status ),
+            asset_photos ( id )
+        `).eq('store_id', id)
     )
 
-    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<Job[]>(
-        ['store-jobs', id],
-        (supabase) =>
-            supabase
-                .from('jobs')
-                .select('*')
-                .eq('store_id', id)
-                .order('created_at', { ascending: false })
+    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<any[]>(
+        `store-${id}-jobs`,
+        () => supabase.from('jobs').select('*').eq('store_id', id).order('created_at', { ascending: false })
     )
 
-    const { data: projects } = useSupabaseQuery<Project[]>(
-        ['store-projects', id],
-        (supabase) =>
-            supabase
-                .from('projects')
-                .select(`
-                    *,
-                    jobs (
-                        id,
-                        status,
-                        budget_impact
-                    )
-                `)
-                .eq('store_id', id)
-                .neq('status', 'archived')
-                .order('created_at', { ascending: false })
+    const { data: projects, mutate: mutateProjects } = useSupabaseQuery<any[]>(
+        `store-${id}-projects`,
+        () => supabase.from('projects').select(`
+            *,
+            jobs ( id, status, budget_impact )
+        `).eq('store_id', id).neq('status', 'archived').order('created_at', { ascending: false })
     )
 
+    const store = storeData as any ?? null
     const loading = storeLoading
 
-    const mutateAll = () => {
+    const fetchData = () => {
         mutateStore()
         mutateAssets()
         mutateJobs()
+        mutateProjects()
     }
 
     if (loading) {
@@ -179,7 +151,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         storeId={id}
                                         onSuccess={() => {
                                             setAssetDialogOpen(false)
-                                            mutateAssets()
+                                            fetchData()
                                         }}
                                         onCancel={() => setAssetDialogOpen(false)}
                                     />
@@ -202,7 +174,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                         site={store}
                                         onSuccess={() => {
                                             setEditSiteDialogOpen(false)
-                                            mutateAll()
+                                            fetchData()
                                         }}
                                         onCancel={() => setEditSiteDialogOpen(false)}
                                     />

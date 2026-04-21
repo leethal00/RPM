@@ -2,23 +2,20 @@
 
 import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
+import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import type { Vendor, Job } from "@/types/database"
-
-interface VendorWithMetrics extends Vendor {
-    metrics: {
-        openJobs: number
-        avgResolutionHours: number
-    }
-}
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
+    Users,
+    Mail,
+    Phone,
     Plus,
     Edit2,
     HardHat,
     Briefcase,
+    Loader2,
     Clock,
     BarChart3
 } from "lucide-react"
@@ -44,75 +41,90 @@ import { TablePagination } from "@/components/table-pagination"
 const PAGE_SIZE = 20
 
 export default function VendorsPage() {
-    const [currentPage, setCurrentPage] = useState(1)
+    const supabase = useMemo(() => createClient(), [])
+    const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
+    const [editingVendor, setEditingVendor] = useState<any>(null)
 
-    const from = (currentPage - 1) * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
+    const vendorsKey = `vendors-${page}-${search}`
 
-    const { data: vendorData, count: totalCount, isLoading: vendorsLoading, mutate: mutateVendors } = useSupabaseQuery<Vendor[]>(
-        ['vendors', 'list', currentPage, search],
-        (supabase) => {
+    const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: any[], count: number }>(
+        vendorsKey,
+        async () => {
             let query = supabase
                 .from('vendors')
-                .select('*', { count: 'exact' })
+                .select('*', { count: "exact" })
 
             if (search.trim()) {
-                query = query.or(`name.ilike.%${search.trim()}%,trade.ilike.%${search.trim()}%`)
+                const term = `%${search.trim()}%`
+                query = query.or(`name.ilike.${term},trade.ilike.${term}`)
             }
 
-            query = query.order('name').range(from, to)
+            query = query.order('name')
 
-            return query
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
+
+            const { data: vendorData, error: vendorError, count } = await query
+
+            if (vendorError) throw vendorError
+
+            // Fetch Jobs to calculate metrics for current page vendors
+            const vendorIds = (vendorData || []).map((v: any) => v.id)
+            let jobData: any[] = []
+
+            if (vendorIds.length > 0) {
+                const { data: jobs, error: jobError } = await supabase
+                    .from('jobs')
+                    .select('vendor_id, status, created_at, resolved_at')
+                    .in('vendor_id', vendorIds)
+
+                if (!jobError) {
+                    jobData = jobs || []
+                }
+            }
+
+            const enrichedVendors = (vendorData || []).map((vendor: any) => {
+                const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
+                const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
+
+                const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
+                let avgResolutionHours = 0
+
+                if (resolvedJobs.length > 0) {
+                    const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
+                        const start = new Date(j.created_at).getTime()
+                        const end = new Date(j.resolved_at!).getTime()
+                        return acc + (end - start) / (1000 * 60 * 60)
+                    }, 0)
+                    avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
+                }
+
+                return {
+                    ...vendor,
+                    metrics: { openJobs, avgResolutionHours }
+                }
+            })
+
+            return { data: { items: enrichedVendors, count: count ?? 0 }, error: null }
         }
     )
 
-    const vendorIds = useMemo(() => (vendorData || []).map((v) => v.id), [vendorData])
+    const vendors = vendorsResult?.items || []
+    const totalCount = vendorsResult?.count ?? 0
 
-    const { data: jobData } = useSupabaseQuery<Job[]>(
-        vendorIds.length > 0 ? ['vendor-jobs', vendorIds] : null,
-        (supabase) =>
-            supabase
-                .from('jobs')
-                .select('vendor_id, status, created_at, resolved_at')
-                .in('vendor_id', vendorIds)
-    )
-
-    const vendors: VendorWithMetrics[] = useMemo(() => {
-        const jobs = jobData || []
-        return (vendorData || []).map((vendor) => {
-            const vendorJobs = jobs.filter((j: Job) => j.vendor_id === vendor.id)
-            const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
-
-            const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
-            let avgResolutionHours = 0
-
-            if (resolvedJobs.length > 0) {
-                const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
-                    const start = new Date(j.created_at).getTime()
-                    const end = new Date(j.resolved_at!).getTime()
-                    return acc + (end - start) / (1000 * 60 * 60)
-                }, 0)
-                avgResolutionHours = Math.round(totalHours / resolvedJobs.length)
-            }
-
-            return {
-                ...vendor,
-                metrics: { openJobs, avgResolutionHours }
-            }
-        })
-    }, [vendorData, jobData])
-
-    const loading = vendorsLoading
+    const fetchVendors = () => mutateVendors()
 
     const handleSearchChange = (value: string) => {
         setSearch(value)
-        setCurrentPage(1)
+        setPage(1)
     }
 
-    const tradeColors: Record<string, string> = {
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
+
+    const tradeColors: any = {
         HVAC: "bg-blue-100 text-blue-700 border-blue-200",
         Plumbing: "bg-cyan-100 text-cyan-700 border-cyan-200",
         Electrical: "bg-amber-100 text-amber-700 border-amber-200",
@@ -158,7 +170,7 @@ export default function VendorsPage() {
                                 onSuccess={() => {
                                     setIsAddDialogOpen(false)
                                     setEditingVendor(null)
-                                    mutateVendors()
+                                    fetchVendors()
                                 }}
                                 onCancel={() => {
                                     setIsAddDialogOpen(false)
@@ -215,7 +227,7 @@ export default function VendorsPage() {
                                                 <div className="font-bold text-sm tracking-tight">{vendor.name}</div>
                                                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-tighter mt-0.5">
                                                     {vendor.email && <span>{vendor.email}</span>}
-                                                    {vendor.email && vendor.phone && <span>&bull;</span>}
+                                                    {vendor.email && vendor.phone && <span>•</span>}
                                                     {vendor.phone && <span>{vendor.phone}</span>}
                                                 </div>
                                             </div>
@@ -273,14 +285,14 @@ export default function VendorsPage() {
                             )}
                         </TableBody>
                     </Table>
+                    <TablePagination
+                        page={page}
+                        pageCount={pageCount}
+                        onPageChange={setPage}
+                        totalItems={totalCount}
+                        pageSize={PAGE_SIZE}
+                    />
                 </div>
-
-                <TablePagination
-                    currentPage={currentPage}
-                    totalCount={totalCount || 0}
-                    pageSize={PAGE_SIZE}
-                    onPageChange={setCurrentPage}
-                />
             </div>
         </DashboardLayout>
     )

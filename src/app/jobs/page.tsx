@@ -1,48 +1,89 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
+import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import type { Job } from "@/types/database"
 import { JobTimeline } from "@/components/job-timeline"
-import { TablePagination } from "@/components/table-pagination"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, ClipboardList } from "lucide-react"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { TablePagination } from "@/components/table-pagination"
 
 const PAGE_SIZE = 25
 
 export default function JobLogsPage() {
-    const [currentPage, setCurrentPage] = useState(1)
+    const supabase = useMemo(() => createClient(), [])
+    const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [severityFilter, setSeverityFilter] = useState<string>("all")
 
-    const from = (currentPage - 1) * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
+    const jobsKey = `jobs-${page}-${search}-${statusFilter}-${severityFilter}`
 
-    const { data: jobs, count: totalCount, isLoading: loading, error } = useSupabaseQuery<Job[]>(
-        ['jobs', 'list', currentPage, search],
-        (supabase) => {
+    const { data: jobsResult, isLoading: loading, error: swrError } = useSupabaseQuery<{ items: any[], count: number }>(
+        jobsKey,
+        async () => {
             let query = supabase
                 .from('jobs')
                 .select(`
                     *,
                     stores ( name )
-                `, { count: 'exact' })
+                `, { count: "exact" })
 
             if (search.trim()) {
-                query = query.or(`title.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
+                const term = `%${search.trim()}%`
+                query = query.or(`title.ilike.${term},description.ilike.${term}`)
+            }
+
+            if (statusFilter !== "all") {
+                query = query.eq("status", statusFilter)
+            }
+
+            if (severityFilter !== "all") {
+                query = query.eq("severity", severityFilter)
             }
 
             query = query.order('created_at', { ascending: false })
+
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
             query = query.range(from, to)
 
-            return query
+            const { data, error: fetchError, count } = await query
+
+            if (fetchError) throw fetchError
+
+            return { data: { items: data || [], count: count ?? 0 }, error: null }
         }
     )
 
+    const jobs = jobsResult?.items || []
+    const totalCount = jobsResult?.count ?? 0
+    const error = swrError?.message ?? null
+
     const handleSearchChange = (value: string) => {
         setSearch(value)
-        setCurrentPage(1)
+        setPage(1)
     }
+
+    const handleStatusChange = (value: string) => {
+        setStatusFilter(value)
+        setPage(1)
+    }
+
+    const handleSeverityChange = (value: string) => {
+        setSeverityFilter(value)
+        setPage(1)
+    }
+
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
     return (
         <DashboardLayout>
@@ -52,13 +93,16 @@ export default function JobLogsPage() {
                         <h1 className="text-3xl font-bold tracking-tight">Job Logs</h1>
                         <p className="text-muted-foreground italic">Central archive of all audit and maintenance tickets.</p>
                     </div>
-                    <div className="p-3 bg-primary/10 rounded-xl">
-                        <ClipboardList className="size-6 text-primary" />
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-muted-foreground">{totalCount} total</span>
+                        <div className="p-3 bg-primary/10 rounded-xl">
+                            <ClipboardList className="size-6 text-primary" />
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
-                    <div className="relative flex-1">
+                <div className="flex flex-col md:flex-row items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
+                    <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                             placeholder="Search by issue title or description..."
@@ -67,10 +111,33 @@ export default function JobLogsPage() {
                             onChange={(e) => handleSearchChange(e.target.value)}
                         />
                     </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-background border rounded-lg text-sm font-semibold hover:bg-muted/50 transition-colors">
-                        <Filter className="size-4" />
-                        Region
-                    </button>
+                    <Select value={statusFilter} onValueChange={handleStatusChange}>
+                        <SelectTrigger className="w-[160px] bg-background border">
+                            <div className="flex items-center gap-2">
+                                <Filter className="size-3.5" />
+                                <SelectValue placeholder="Status" />
+                            </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select value={severityFilter} onValueChange={handleSeverityChange}>
+                        <SelectTrigger className="w-[160px] bg-background border">
+                            <SelectValue placeholder="Severity" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Severities</SelectItem>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="critical">Critical</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 {loading ? (
@@ -82,23 +149,23 @@ export default function JobLogsPage() {
                 ) : error ? (
                     <div className="bg-destructive/10 border border-destructive/20 p-8 rounded-xl text-center">
                         <h2 className="text-destructive font-bold text-lg mb-2">Technical Error</h2>
-                        <p className="text-muted-foreground mb-4">{error instanceof Error ? error.message : "An unexpected error occurred"}</p>
+                        <p className="text-muted-foreground mb-4">{error}</p>
                         <p className="text-xs text-muted-foreground font-mono bg-background/50 p-2 rounded">
                             HINT: This is usually caused by Supabase Row-Level Security (RLS) blocking the read.
                         </p>
                     </div>
                 ) : (
                     <div className="bg-card p-6 rounded-xl border shadow-sm min-h-[400px]">
-                        <JobTimeline jobs={jobs || []} />
+                        <JobTimeline jobs={jobs} />
+                        <TablePagination
+                            page={page}
+                            pageCount={pageCount}
+                            onPageChange={setPage}
+                            totalItems={totalCount}
+                            pageSize={PAGE_SIZE}
+                        />
                     </div>
                 )}
-
-                <TablePagination
-                    currentPage={currentPage}
-                    totalCount={totalCount || 0}
-                    pageSize={PAGE_SIZE}
-                    onPageChange={setCurrentPage}
-                />
             </div>
         </DashboardLayout>
     )
