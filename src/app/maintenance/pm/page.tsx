@@ -64,8 +64,11 @@ export default function PMSchedulerPage() {
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchPMData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchPMData() }, [])
+    }, [])
 
     const getStatusColor = (asset: PMAsset) => {
         // Red if active fault

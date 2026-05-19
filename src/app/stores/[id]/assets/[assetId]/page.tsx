@@ -67,8 +67,11 @@ export default function AssetDetailPage({
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchData() }, [assetId, supabase])
+    }, [assetId, supabase])
 
     const handleDelete = async () => {
         if (!confirm("Are you sure you want to delete this asset? This will also affect any linked maintenance schedules.")) return

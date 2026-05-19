@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
-    Building2,
     MapPin,
     ChevronRight,
     Plus,
@@ -21,7 +20,14 @@ import {
     AlertTriangle,
     Filter
 } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
+import type { Store, Asset, Job, Vendor } from "@/types/database"
+
+type StoreRow = Store & {
+    assets?: Pick<Asset, 'id' | 'next_service_date'>[]
+    jobs?: Pick<Job, 'id' | 'vendor_id' | 'status'>[]
+}
 import {
     Table,
     TableBody,
@@ -56,7 +62,7 @@ export default function StoresListPage() {
     const [search, setSearch] = useState("")
     const [addDialogOpen, setAddDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
-    const [currentSite, setCurrentSite] = useState<any>(null)
+    const [currentSite, setCurrentSite] = useState<Store | null>(null)
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' })
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
@@ -64,7 +70,7 @@ export default function StoresListPage() {
 
     const storesKey = `stores-${page}-${search}-${filterRegion}-${sortConfig.key}-${sortConfig.direction}`
 
-    const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: any[], count: number }>(
+    const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
         storesKey,
         async () => {
             let query = supabase
@@ -117,7 +123,7 @@ export default function StoresListPage() {
     const stores = storesResult?.items || []
     const totalCount = storesResult?.count ?? 0
 
-    const { data: vendors } = useSupabaseQuery<any[]>(
+    const { data: vendors } = useSupabaseQuery<Pick<Vendor, 'id' | 'name'>[]>(
         'vendors-active',
         () => supabase.from('vendors').select('id, name').eq('status', 'active').order('name')
     )
@@ -127,7 +133,7 @@ export default function StoresListPage() {
     // Client-side filters that require nested data (overdue, vendor)
     const filteredStores = stores.filter(s => {
         if (filterOverdue) {
-            const hasOverdue = s.assets?.some((asset: any) => {
+            const hasOverdue = s.assets?.some((asset) => {
                 if (!asset.next_service_date) return false
                 return new Date(asset.next_service_date) < new Date()
             })
@@ -135,10 +141,10 @@ export default function StoresListPage() {
         }
 
         if (filterVendor !== "all") {
-            const hasVendor = s.jobs?.some((job: any) =>
+            const hasVendor = s.jobs?.some((job) =>
                 job.vendor_id === filterVendor &&
                 job.status !== 'resolved' &&
-                job.status !== 'cancelled'
+                job.status !== 'closed'
             )
             if (!hasVendor) return false
         }
@@ -186,7 +192,7 @@ export default function StoresListPage() {
 
     const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
-    const openEditDialog = (e: React.MouseEvent, site: any) => {
+    const openEditDialog = (e: React.MouseEvent, site: Store) => {
         e.preventDefault()
         e.stopPropagation()
         setCurrentSite(site)
@@ -362,18 +368,18 @@ export default function StoresListPage() {
                                                     </Link>
                                                     <div className="flex items-center gap-1">
                                                         {store.brand_st_pierres !== false && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/st-pierres.png" alt="SP" className="h-full w-full object-contain" title="St Pierre's Sushi" />
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="St Pierre's Sushi">
+                                                                <Image src="/brands/st-pierres.png" alt="SP" width={48} height={48} className="h-full w-full object-contain" />
                                                             </div>
                                                         )}
                                                         {store.brand_bento_bowl && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/bento-bowl.png" alt="BB" className="h-full w-full object-contain" title="Bento Bowl" />
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="Bento Bowl">
+                                                                <Image src="/brands/bento-bowl.png" alt="BB" width={48} height={48} className="h-full w-full object-contain" />
                                                             </div>
                                                         )}
                                                         {store.brand_k10 && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                                <img src="/brands/k10.png" alt="K10" className="h-full w-full object-contain" title="K10 Sushi Train" />
+                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="K10 Sushi Train">
+                                                                <Image src="/brands/k10.png" alt="K10" width={48} height={48} className="h-full w-full object-contain" />
                                                             </div>
                                                         )}
                                                     </div>

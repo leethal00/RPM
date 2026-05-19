@@ -31,8 +31,11 @@ export function RegionManager() {
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchRegions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchRegions() }, [])
+    }, [])
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault()

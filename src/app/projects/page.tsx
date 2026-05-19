@@ -5,8 +5,11 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
-import { Plus, LayoutGrid, List as ListIcon, Loader2, BarChart3, Calendar, Filter } from "lucide-react"
+import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar, Filter } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
+import type { Project, Job, Store } from "@/types/database"
+
+type ProjectRow = Project & { stores?: Store | null; jobs?: Pick<Job, 'status' | 'budget_impact'>[] }
 import {
     Dialog,
     DialogContent,
@@ -36,7 +39,7 @@ export default function ProjectsPage() {
 
     const projectsKey = `projects-${page}-${statusFilter}`
 
-    const { data: projectsResult, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<{ items: any[], count: number }>(
+    const { data: projectsResult, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<{ items: ProjectRow[], count: number }>(
         projectsKey,
         async () => {
             let query = supabase
@@ -194,7 +197,7 @@ export default function ProjectsPage() {
                         </div>
                         <h3 className="text-xl font-bold">No High-Level Projects</h3>
                         <p className="text-muted-foreground max-w-sm mx-auto mt-2 italic">
-                            You haven't initiated any capital projects or major site refurbs yet.
+                            You haven&apos;t initiated any capital projects or major site refurbs yet.
                         </p>
                         <Button
                             variant="outline"

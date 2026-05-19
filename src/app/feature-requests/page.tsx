@@ -36,10 +36,6 @@ export default function FeatureRequestsPage() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all")
 
-  useEffect(() => {
-    fetchFeatureRequests()
-  }, [])
-
   const fetchFeatureRequests = async () => {
     setIsLoading(true)
     setError(null)
@@ -59,6 +55,11 @@ export default function FeatureRequestsPage() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchFeatureRequests()
+  }, [])
 
   const filteredRequests = requests.filter((request) => {
     if (filter === "all") return true

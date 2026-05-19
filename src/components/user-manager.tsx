@@ -72,6 +72,7 @@ export function UserManager() {
     }, [supabase])
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchUsers()
         fetchClients()
         fetchCurrentUser()

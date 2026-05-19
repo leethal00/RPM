@@ -45,6 +45,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (assetId) fetchPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [assetId])

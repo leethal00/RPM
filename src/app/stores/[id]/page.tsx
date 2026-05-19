@@ -22,6 +22,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
+import type { Store, Asset, AssetType, Job, Project, AssetPhoto } from "@/types/database"
+
+type AssetRow = Asset & {
+    asset_types: Pick<AssetType, 'label'> | null
+    jobs: Pick<Job, 'status'>[]
+    asset_photos: Pick<AssetPhoto, 'id'>[]
+}
+type ProjectRow = Project & { jobs: Pick<Job, 'id' | 'status' | 'budget_impact'>[] }
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -34,7 +42,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         () => supabase.from('stores').select('*').eq('id', id).single()
     )
 
-    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<any[]>(
+    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<AssetRow[]>(
         `store-${id}-assets`,
         () => supabase.from('assets').select(`
             *,
@@ -44,12 +52,12 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         `).eq('store_id', id)
     )
 
-    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<any[]>(
+    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<Job[]>(
         `store-${id}-jobs`,
         () => supabase.from('jobs').select('*').eq('store_id', id).order('created_at', { ascending: false })
     )
 
-    const { data: projects, mutate: mutateProjects } = useSupabaseQuery<any[]>(
+    const { data: projects, mutate: mutateProjects } = useSupabaseQuery<ProjectRow[]>(
         `store-${id}-projects`,
         () => supabase.from('projects').select(`
             *,
@@ -57,7 +65,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         `).eq('store_id', id).neq('status', 'archived').order('created_at', { ascending: false })
     )
 
-    const store = storeData as any ?? null
+    const store = (storeData as Store | null) ?? null
     const loading = storeLoading
 
     const fetchData = () => {

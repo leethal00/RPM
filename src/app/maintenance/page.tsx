@@ -145,8 +145,11 @@ export default function MaintenanceDashboard() {
         fetchDueSchedules()
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchDueSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchDueSchedules() }, [])
+    }, [])
 
     return (
         <DashboardLayout>

@@ -75,8 +75,11 @@ export default function ProjectDetailPage({
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchData() }, [id, supabase])
+    }, [id, supabase])
 
     const handleArchiveProject = async () => {
         if (!confirm("Are you sure you want to archive this project? Linked jobs will be preserved but the project will be hidden from active views.")) return

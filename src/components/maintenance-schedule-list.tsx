@@ -46,8 +46,11 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchSchedules() }, [assetId])
+    }, [assetId])
 
     async function addSchedule() {
         setSaving(true)

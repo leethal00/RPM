@@ -45,8 +45,11 @@ export function AssetTypeManager() {
         setLoading(false)
     }
 
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchAssetTypes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchAssetTypes() }, [])
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()

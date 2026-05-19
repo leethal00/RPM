@@ -8,17 +8,18 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
-    Users,
-    Mail,
-    Phone,
     Plus,
     Edit2,
     HardHat,
     Briefcase,
-    Loader2,
     Clock,
     BarChart3
 } from "lucide-react"
+import type { Vendor, Job } from "@/types/database"
+
+type VendorMetrics = { openJobs: number; avgResolutionHours: number }
+type VendorWithMetrics = Vendor & { metrics: VendorMetrics }
+type JobMetricRow = Pick<Job, 'vendor_id' | 'status' | 'created_at' | 'resolved_at'>
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -45,11 +46,11 @@ export default function VendorsPage() {
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [editingVendor, setEditingVendor] = useState<any>(null)
+    const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
 
     const vendorsKey = `vendors-${page}-${search}`
 
-    const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: any[], count: number }>(
+    const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: VendorWithMetrics[], count: number }>(
         vendorsKey,
         async () => {
             let query = supabase
@@ -72,8 +73,9 @@ export default function VendorsPage() {
             if (vendorError) throw vendorError
 
             // Fetch Jobs to calculate metrics for current page vendors
-            const vendorIds = (vendorData || []).map((v: any) => v.id)
-            let jobData: any[] = []
+            const vendorList = (vendorData || []) as Vendor[]
+            const vendorIds = vendorList.map((v) => v.id)
+            let jobData: JobMetricRow[] = []
 
             if (vendorIds.length > 0) {
                 const { data: jobs, error: jobError } = await supabase
@@ -82,19 +84,19 @@ export default function VendorsPage() {
                     .in('vendor_id', vendorIds)
 
                 if (!jobError) {
-                    jobData = jobs || []
+                    jobData = (jobs || []) as JobMetricRow[]
                 }
             }
 
-            const enrichedVendors = (vendorData || []).map((vendor: any) => {
-                const vendorJobs = jobData.filter((j: any) => j.vendor_id === vendor.id)
-                const openJobs = vendorJobs.filter((j: any) => j.status !== 'resolved' && j.status !== 'cancelled').length
+            const enrichedVendors: VendorWithMetrics[] = vendorList.map((vendor) => {
+                const vendorJobs = jobData.filter((j) => j.vendor_id === vendor.id)
+                const openJobs = vendorJobs.filter((j) => j.status !== 'resolved' && j.status !== 'closed').length
 
-                const resolvedJobs = vendorJobs.filter((j: any) => j.status === 'resolved' && j.resolved_at && j.created_at)
+                const resolvedJobs = vendorJobs.filter((j) => j.status === 'resolved' && j.resolved_at && j.created_at)
                 let avgResolutionHours = 0
 
                 if (resolvedJobs.length > 0) {
-                    const totalHours = resolvedJobs.reduce((acc: number, j: any) => {
+                    const totalHours = resolvedJobs.reduce((acc, j) => {
                         const start = new Date(j.created_at).getTime()
                         const end = new Date(j.resolved_at!).getTime()
                         return acc + (end - start) / (1000 * 60 * 60)
@@ -124,7 +126,7 @@ export default function VendorsPage() {
 
     const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
-    const tradeColors: any = {
+    const tradeColors: Record<string, string> = {
         HVAC: "bg-blue-100 text-blue-700 border-blue-200",
         Plumbing: "bg-cyan-100 text-cyan-700 border-cyan-200",
         Electrical: "bg-amber-100 text-amber-700 border-amber-200",

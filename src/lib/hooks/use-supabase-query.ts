@@ -2,7 +2,7 @@ import useSWR, { SWRConfiguration } from "swr"
 
 export function useSupabaseQuery<T>(
   key: string | null,
-  query: () => Promise<{ data: T | null; error: any }>,
+  query: () => Promise<{ data: T | null; error: unknown }>,
   config?: SWRConfiguration
 ) {
   return useSWR<T>(

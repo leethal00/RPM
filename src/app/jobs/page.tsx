@@ -15,6 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { TablePagination } from "@/components/table-pagination"
+import type { Job, Store } from "@/types/database"
 
 const PAGE_SIZE = 25
 
@@ -27,7 +28,7 @@ export default function JobLogsPage() {
 
     const jobsKey = `jobs-${page}-${search}-${statusFilter}-${severityFilter}`
 
-    const { data: jobsResult, isLoading: loading, error: swrError } = useSupabaseQuery<{ items: any[], count: number }>(
+    const { data: jobsResult, isLoading: loading, error: swrError } = useSupabaseQuery<{ items: (Job & { stores: Pick<Store, 'name'> | null })[], count: number }>(
         jobsKey,
         async () => {
             let query = supabase
