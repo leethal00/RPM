@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 const PAGE_SIZE = 12
 
@@ -93,20 +95,14 @@ export default function ProjectsPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 text-primary mb-1">
-                            <BarChart3 className="size-5" />
-                            <span className="text-xs font-bold uppercase tracking-widest">Strategic HQ</span>
-                        </div>
-                        <h1 className="text-3xl font-bold tracking-tight">HQ Projects & Capex</h1>
-                        <p className="text-muted-foreground mt-1 text-sm italic">
-                            Tracking major site improvements and multi-job strategic initiatives.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
+            <PageShell>
+                <PageHeader
+                    icon={BarChart3}
+                    kicker="Strategic HQ"
+                    title="HQ Projects & Capex"
+                    description="Tracking major site improvements and multi-job strategic initiatives."
+                    actions={
+                        <div className="flex items-center gap-3">
                         <Select value={statusFilter} onValueChange={handleStatusChange}>
                             <SelectTrigger className="w-[160px] bg-background border">
                                 <div className="flex items-center gap-2">
@@ -164,8 +160,9 @@ export default function ProjectsPage() {
                                 />
                             </DialogContent>
                         </Dialog>
-                    </div>
-                </div>
+                        </div>
+                    }
+                />
 
                 {loading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -215,7 +212,7 @@ export default function ProjectsPage() {
                         </Button>
                     </div>
                 )}
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

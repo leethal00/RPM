@@ -5,6 +5,9 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
+import { LineChart } from "lucide-react"
 import {
     BarChart,
     Bar,
@@ -385,13 +388,12 @@ export default function AnalyticsPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Portfolio Analytics</h1>
-                    <p className="text-muted-foreground mt-1 text-sm italic">
-                        Asset health, maintenance operations, and portfolio distribution.
-                    </p>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={LineChart}
+                    title="Portfolio Analytics"
+                    description="Asset health, maintenance operations, and portfolio distribution."
+                />
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -686,7 +688,7 @@ export default function AnalyticsPage() {
                         </CardContent>
                     </Card>
                 )}
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

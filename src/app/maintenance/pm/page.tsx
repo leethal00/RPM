@@ -19,6 +19,8 @@ import {
 import Link from "next/link"
 import { toast } from "sonner"
 import type { Asset, Store, AssetType, Job, ClientBrand } from "@/types/database"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 type PMAsset = Asset & {
     stores: Pick<Store, 'id' | 'name'> & {
@@ -159,24 +161,19 @@ export default function PMSchedulerPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary px-4 md:px-0">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase bg-primary/5 text-primary border-primary/20">Fleet Strategy</Badge>
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tight text-slate-900 italic uppercase">PM Scheduler</h1>
-                        <p className="text-muted-foreground mt-1 text-sm font-medium">
-                            Proactive maintenance monitoring for {pmAssets.length} tracked assets.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+            <PageShell>
+                <PageHeader
+                    icon={Hammer}
+                    kicker="Fleet Strategy"
+                    title="PM Scheduler"
+                    description={`Proactive maintenance monitoring for ${pmAssets.length} tracked assets.`}
+                    actions={
                         <Button onClick={fetchPMData} variant="outline" size="sm" className="gap-2 font-bold uppercase tracking-wider text-[10px] border-2">
                             <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
                             Refresh Schedule
                         </Button>
-                    </div>
-                </div>
+                    }
+                />
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <Card className="border-2 shadow-sm">
@@ -299,7 +296,7 @@ export default function PMSchedulerPage() {
                         </CardContent>
                     </Card>
                 </div>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

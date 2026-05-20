@@ -25,6 +25,9 @@ import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { useCustomerFilter } from "@/lib/customer-filter"
 import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
+import { Building2 } from "lucide-react"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
@@ -212,113 +215,96 @@ export default function StoresListPage() {
         setEditDialogOpen(true)
     }
 
+    const activeFilterCount = (search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0)
+
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-6xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Sites Portfolio</h1>
-                        <p className="text-muted-foreground mt-1 text-sm italic">
-                            Manage all properties, site managers, and operation hours.
-                        </p>
-                    </div>
+            <PageShell>
+                <PageHeader
+                    icon={Building2}
+                    title="Sites Portfolio"
+                    description="Manage all properties, site managers, and operation hours."
+                    actions={
+                        <>
+                            <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">
+                                <span className="text-foreground text-base">{totalCount}</span> sites
+                            </span>
+                            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button className="gap-2 shadow-sm">
+                                        <Plus className="size-4" />
+                                        Add New Site
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Add New Site</DialogTitle>
+                                    </DialogHeader>
+                                    <SiteForm
+                                        onSuccess={() => {
+                                            setAddDialogOpen(false)
+                                            fetchStores()
+                                        }}
+                                        onCancel={() => setAddDialogOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
+                        </>
+                    }
+                />
 
-                    <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-                        <DialogTrigger asChild>
-                            <Button className="gap-2 shadow-sm">
-                                <Plus className="size-4" />
-                                Add New Site
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                            <DialogHeader>
-                                <DialogTitle>Add New Site</DialogTitle>
-                            </DialogHeader>
-                            <SiteForm
-                                onSuccess={() => {
-                                    setAddDialogOpen(false)
-                                    fetchStores()
-                                }}
-                                onCancel={() => setAddDialogOpen(false)}
-                            />
-                        </DialogContent>
-                    </Dialog>
-                </div>
-
-                <div className="flex flex-col md:flex-row items-end gap-4 p-4 bg-slate-50 border rounded-xl animate-in fade-in slide-in-from-top-4 duration-500">
-                    <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 ml-1">
-                            <Filter className="size-3" />
-                            Supply Chain Filters
-                        </label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <div className="flex flex-col gap-1.5">
-                                <CustomerFilterDropdown variant="inline" className="w-full" />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <Select value={filterVendor} onValueChange={handleVendorChange}>
-                                    <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
-                                        <div className="flex items-center gap-2">
-                                            <SlidersHorizontal className="size-3.5 text-primary" />
-                                            <SelectValue placeholder="Filter by Contractor" />
-                                        </div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all" className="font-bold">All Contractors</SelectItem>
-                                        {(vendors || []).map((vendor) => (
-                                            <SelectItem key={vendor.id} value={vendor.id}>
-                                                {vendor.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <Select value={filterRegion} onValueChange={handleRegionChange}>
-                                    <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
-                                        <div className="flex items-center gap-2">
-                                            <MapPin className="size-3.5 text-primary" />
-                                            <SelectValue placeholder="Filter by Region" />
-                                        </div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all" className="font-bold">All Regions</SelectItem>
-                                        <SelectItem value="Auckland">Auckland</SelectItem>
-                                        <SelectItem value="Wellington">Wellington</SelectItem>
-                                        <SelectItem value="Christchurch">Christchurch</SelectItem>
-                                        <SelectItem value="North Island Regional">North Island Regional</SelectItem>
-                                        <SelectItem value="South Island Regional">South Island Regional</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
+                <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        <Filter className="size-3" />
+                        Filters
+                        {activeFilterCount > 0 && (
                             <Button
-                                variant={filterOverdue ? "destructive" : "outline"}
-                                className={`h-10 border-2 font-black uppercase text-[10px] tracking-widest gap-2 ${!filterOverdue && 'bg-white hover:bg-slate-50'}`}
-                                onClick={handleOverdueToggle}
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleResetFilters}
+                                className="h-5 px-2 ml-auto text-[10px] uppercase tracking-widest hover:text-primary"
                             >
-                                <AlertTriangle className={`size-3.5 ${filterOverdue ? 'animate-pulse' : ''}`} />
-                                Overdue maintenance
-                                {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
+                                Reset {activeFilterCount}
                             </Button>
-
-                            {(search !== "" || filterOverdue || filterVendor !== "all" || filterRegion !== "all") && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleResetFilters}
-                                    className="h-10 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary gap-2"
-                                >
-                                    Reset {(search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0)} Filters
-                                </Button>
-                            )}
-                        </div>
+                        )}
                     </div>
-                    <div className="hidden lg:flex flex-col items-end gap-1 px-4 border-l border-slate-200">
-                        <span className="text-[24px] font-black text-slate-900 leading-none">{totalCount}</span>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Sites</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <CustomerFilterDropdown variant="inline" className="w-full" />
+                        <Select value={filterVendor} onValueChange={handleVendorChange}>
+                            <SelectTrigger className="h-10 gap-2 font-bold text-xs">
+                                <SlidersHorizontal className="size-3.5 text-primary" />
+                                <SelectValue placeholder="All Contractors" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all" className="font-bold">All Contractors</SelectItem>
+                                {(vendors || []).map((vendor) => (
+                                    <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Select value={filterRegion} onValueChange={handleRegionChange}>
+                            <SelectTrigger className="h-10 gap-2 font-bold text-xs">
+                                <MapPin className="size-3.5 text-primary" />
+                                <SelectValue placeholder="All Regions" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all" className="font-bold">All Regions</SelectItem>
+                                <SelectItem value="Auckland">Auckland</SelectItem>
+                                <SelectItem value="Wellington">Wellington</SelectItem>
+                                <SelectItem value="Christchurch">Christchurch</SelectItem>
+                                <SelectItem value="North Island Regional">North Island Regional</SelectItem>
+                                <SelectItem value="South Island Regional">South Island Regional</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            variant={filterOverdue ? "destructive" : "outline"}
+                            className="h-10 font-bold uppercase text-[10px] tracking-widest gap-2"
+                            onClick={handleOverdueToggle}
+                        >
+                            <AlertTriangle className={`size-3.5 ${filterOverdue ? 'animate-pulse' : ''}`} />
+                            Overdue
+                            {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
+                        </Button>
                     </div>
                 </div>
 
@@ -342,13 +328,14 @@ export default function StoresListPage() {
                                         <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
                                     </div>
                                 </TableHead>
+                                <TableHead className="w-[150px]">Brands</TableHead>
                                 <TableHead onClick={() => handleSort('address')} className="cursor-pointer group hidden md:table-cell">
                                     <div className="flex items-center gap-2">
                                         Address
                                         <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
                                     </div>
                                 </TableHead>
-                                <TableHead onClick={() => handleSort('maintenance_score')} className="cursor-pointer group hidden md:table-cell">
+                                <TableHead onClick={() => handleSort('maintenance_score')} className="cursor-pointer group hidden md:table-cell w-[90px]">
                                     <div className="flex items-center gap-2">
                                         Health
                                         <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -365,12 +352,12 @@ export default function StoresListPage() {
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={8} className="h-12 animate-pulse bg-muted/20" />
+                                        <TableCell colSpan={9} className="h-12 animate-pulse bg-muted/20" />
                                     </TableRow>
                                 ))
                             ) : filteredStores.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground italic">
+                                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground italic">
                                         No sites found matching your search.
                                     </TableCell>
                                 </TableRow>
@@ -378,19 +365,17 @@ export default function StoresListPage() {
                                 filteredStores.map((store) => (
                                     <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
                                         <TableCell className="font-semibold">
-                                            <div className="flex flex-col gap-1.5">
-                                                <div className="flex items-center gap-2">
-                                                    <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
-                                                        {store.name}
-                                                    </Link>
-                                                    <BrandChips brands={brandsFromStore(store)} size="lg" />
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    {store.has_drive_thru && (
-                                                        <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200">DRIVE THRU</Badge>
-                                                    )}
-                                                </div>
+                                            <div className="flex flex-col gap-1">
+                                                <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
+                                                    {store.name}
+                                                </Link>
+                                                {store.has_drive_thru && (
+                                                    <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200 w-fit">DRIVE THRU</Badge>
+                                                )}
                                             </div>
+                                        </TableCell>
+                                        <TableCell className="w-[150px]">
+                                            <BrandChips brands={brandsFromStore(store)} size="md" />
                                         </TableCell>
                                         <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
                                             <div className="flex flex-col gap-1">
@@ -511,7 +496,7 @@ export default function StoresListPage() {
                         )}
                     </DialogContent>
                 </Dialog>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

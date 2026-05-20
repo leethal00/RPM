@@ -5,19 +5,22 @@ import { UserManager } from "@/components/user-manager"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun, Settings } from "lucide-react"
 import { useTheme } from "next-themes"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 export default function UsersPage() {
     const { theme, setTheme } = useTheme()
 
     return (
         <DashboardLayout>
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-primary">Portal Settings</h1>
-                    <p className="text-muted-foreground mt-2">Manage your platform configuration, users, and masters.</p>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={Settings}
+                    title="Portal Settings"
+                    description="Manage your platform configuration, users, and masters."
+                />
 
                 <Card>
                     <CardHeader>
@@ -52,7 +55,7 @@ export default function UsersPage() {
                 </Card>
 
                 <UserManager />
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

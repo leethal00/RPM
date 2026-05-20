@@ -17,6 +17,8 @@ import {
 import { TablePagination } from "@/components/table-pagination"
 import type { Job, Store } from "@/types/database"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 const PAGE_SIZE = 25
 
@@ -94,19 +96,17 @@ export default function JobLogsPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-6 py-6 font-primary max-w-5xl mx-auto w-full">
-                <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                        <h1 className="text-3xl font-bold tracking-tight">Job Logs</h1>
-                        <p className="text-muted-foreground italic">Central archive of all audit and maintenance tickets.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">{totalCount} total</span>
-                        <div className="p-3 bg-primary/10 rounded-xl">
-                            <ClipboardList className="size-6 text-primary" />
-                        </div>
-                    </div>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={ClipboardList}
+                    title="Job Logs"
+                    description="Central archive of all audit and maintenance tickets."
+                    actions={
+                        <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">
+                            <span className="text-foreground text-base">{totalCount}</span> total
+                        </span>
+                    }
+                />
 
                 <div className="flex flex-col md:flex-row items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
                     <div className="relative flex-1 w-full">
@@ -173,7 +173,7 @@ export default function JobLogsPage() {
                         />
                     </div>
                 )}
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

@@ -17,6 +17,8 @@ import {
 } from "lucide-react"
 import type { Vendor, Job } from "@/types/database"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 type VendorMetrics = { openJobs: number; avgResolutionHours: number }
 type VendorWithMetrics = Vendor & { metrics: VendorMetrics }
@@ -146,48 +148,43 @@ export default function VendorsPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 text-primary mb-1">
-                            <Briefcase className="size-5" />
-                            <span className="text-xs font-bold uppercase tracking-widest text-primary">Supply Chain</span>
-                        </div>
-                        <h1 className="text-3xl font-bold tracking-tight">Vendor Directory</h1>
-                        <p className="text-muted-foreground mt-1 text-sm italic">
-                            Manage specialized contractors and specialized trade partners.
-                        </p>
-                    </div>
-
-                    <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-                        setIsAddDialogOpen(open)
-                        if (!open) setEditingVendor(null)
-                    }}>
-                        <DialogTrigger asChild>
-                            <Button className="gap-2 shadow-sm">
-                                <Plus className="size-4" />
-                                Register Vendor
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[600px]">
-                            <DialogHeader>
-                                <DialogTitle>{editingVendor ? "Edit Vendor Details" : "Register New Vendor"}</DialogTitle>
-                            </DialogHeader>
-                            <VendorForm
-                                vendor={editingVendor}
-                                onSuccess={() => {
-                                    setIsAddDialogOpen(false)
-                                    setEditingVendor(null)
-                                    fetchVendors()
-                                }}
-                                onCancel={() => {
-                                    setIsAddDialogOpen(false)
-                                    setEditingVendor(null)
-                                }}
-                            />
-                        </DialogContent>
-                    </Dialog>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={Briefcase}
+                    kicker="Supply Chain"
+                    title="Vendor Directory"
+                    description="Manage specialized contractors and specialized trade partners."
+                    actions={
+                        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+                            setIsAddDialogOpen(open)
+                            if (!open) setEditingVendor(null)
+                        }}>
+                            <DialogTrigger asChild>
+                                <Button className="gap-2 shadow-sm">
+                                    <Plus className="size-4" />
+                                    Register Vendor
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[600px]">
+                                <DialogHeader>
+                                    <DialogTitle>{editingVendor ? "Edit Vendor Details" : "Register New Vendor"}</DialogTitle>
+                                </DialogHeader>
+                                <VendorForm
+                                    vendor={editingVendor}
+                                    onSuccess={() => {
+                                        setIsAddDialogOpen(false)
+                                        setEditingVendor(null)
+                                        fetchVendors()
+                                    }}
+                                    onCancel={() => {
+                                        setIsAddDialogOpen(false)
+                                        setEditingVendor(null)
+                                    }}
+                                />
+                            </DialogContent>
+                        </Dialog>
+                    }
+                />
 
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -301,7 +298,7 @@ export default function VendorsPage() {
                         pageSize={PAGE_SIZE}
                     />
                 </div>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

@@ -17,6 +17,9 @@ import {
 import Link from "next/link"
 import { toast } from "sonner"
 import type { Asset, Store, AssetType } from "@/types/database"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
+import { Wrench } from "lucide-react"
 
 interface DueScheduleItem {
     id: string
@@ -153,19 +156,18 @@ export default function MaintenanceDashboard() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-6xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Maintenance Dashboard</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">
-                            Manage recurring tasks and generate service tickets.
-                        </p>
-                    </div>
-                    <Button onClick={fetchDueSchedules} variant="outline" size="sm" className="gap-2">
-                        <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh Due Items
-                    </Button>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={Wrench}
+                    title="Maintenance Dashboard"
+                    description="Manage recurring tasks and generate service tickets."
+                    actions={
+                        <Button onClick={fetchDueSchedules} variant="outline" size="sm" className="gap-2">
+                            <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh Due Items
+                        </Button>
+                    }
+                />
 
                 <div className="grid grid-cols-1 gap-6">
                     <Card>
@@ -230,7 +232,7 @@ export default function MaintenanceDashboard() {
                         </CardContent>
                     </Card>
                 </div>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }
