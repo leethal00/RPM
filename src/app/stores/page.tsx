@@ -238,7 +238,7 @@ export default function StoresListPage() {
 
     return (
         <DashboardLayout>
-            <PageShell>
+            <PageShell width="full">
                 <PageHeader
                     icon={Building2}
                     title="Sites Portfolio"
