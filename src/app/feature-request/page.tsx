@@ -17,6 +17,8 @@ import {
 import { Lightbulb, Loader2, CheckCircle2, AlertCircle, Sparkles, FileText } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 export default function FeatureRequestPage() {
   const [title, setTitle] = useState("")
@@ -84,17 +86,13 @@ export default function FeatureRequestPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-8 py-6 max-w-4xl mx-auto font-primary">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <Lightbulb className="size-5" />
-            <span className="text-xs font-bold uppercase tracking-widest">Feature Request</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Request a New Feature</h1>
-          <p className="text-muted-foreground text-sm">
-            Have an idea to improve RPM? Submit your feature request as a tracking ticket, or enable AI Auto-Build for automatic implementation.
-          </p>
-        </div>
+      <PageShell width="narrow">
+        <PageHeader
+          icon={Lightbulb}
+          kicker="Feature Request"
+          title="Request a New Feature"
+          description="Have an idea to improve RPM? Submit your feature request as a tracking ticket, or enable AI Auto-Build for automatic implementation."
+        />
 
         {submitStatus.type === "success" && (
           <Alert className="border-green-300 bg-green-50">
@@ -366,7 +364,7 @@ export default function FeatureRequestPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </PageShell>
     </DashboardLayout>
   )
 }

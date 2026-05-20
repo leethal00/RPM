@@ -4,24 +4,26 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { 
-  Map, 
-  Building2, 
-  ClipboardList, 
-  Hammer, 
-  BarChart3
+import {
+  Map,
+  Building2,
+  ClipboardList,
+  Hammer,
+  BarChart3,
+  HelpCircle,
 } from "lucide-react"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 export default function HelpPage() {
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Help & Support</h1>
-          <p className="text-muted-foreground mt-2">
-            Learn how to use the RPM platform to manage your sites, assets, and maintenance operations.
-          </p>
-        </div>
+      <PageShell>
+        <PageHeader
+          icon={HelpCircle}
+          title="Help & Support"
+          description="Learn how to use the RPM platform to manage your sites, assets, and maintenance operations."
+        />
 
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 mb-8 h-auto">
@@ -174,7 +176,7 @@ export default function HelpPage() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </PageShell>
     </DashboardLayout>
   )
 }

@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { ClipboardList, ExternalLink, Loader2, AlertCircle, Calendar, User, MessageSquare, Sparkles, CheckCircle2, Clock } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 interface FeatureRequest {
   id: number
@@ -107,27 +109,21 @@ export default function FeatureRequestsPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <ClipboardList className="size-5" />
-            <span className="text-xs font-bold uppercase tracking-widest">Feature Requests</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Submitted Features</h1>
-              <p className="text-muted-foreground text-sm">
-                View and track all feature requests submitted to RPM
-              </p>
-            </div>
+      <PageShell>
+        <PageHeader
+          icon={ClipboardList}
+          kicker="Feature Requests"
+          title="Submitted Features"
+          description="View and track all feature requests submitted to RPM."
+          actions={
             <Button asChild>
               <Link href="/feature-request">
                 <Sparkles className="mr-2 h-4 w-4" />
                 New Feature Request
               </Link>
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Filter Tabs */}
         <div className="flex gap-2">
@@ -245,7 +241,7 @@ export default function FeatureRequestsPage() {
             ))}
           </div>
         )}
-      </div>
+      </PageShell>
     </DashboardLayout>
   )
 }
