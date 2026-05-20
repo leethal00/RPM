@@ -116,7 +116,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                     </Button>
                 </div>
 
-                <StoreHeader store={store} />
+                <StoreHeader store={store} assets={assets ?? null} jobs={jobs ?? null} />
 
                 <Tabs defaultValue="assets" className="w-full">
                     <div className="flex items-center justify-between border-b pb-0">

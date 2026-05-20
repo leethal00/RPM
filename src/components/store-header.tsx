@@ -2,17 +2,23 @@ import { Badge } from "@/components/ui/badge"
 import { MapPin, Phone, User, Heart } from "lucide-react"
 import type { Store } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
+import { computeHealthScore, healthBadgeClasses, type HealthInputAsset, type HealthInputJob } from "@/lib/health-score"
 
 interface StoreHeaderProps {
     store: Store
+    /** Pass joined assets + jobs so the computed health score lights up. */
+    assets?: HealthInputAsset[] | null
+    jobs?: HealthInputJob[] | null
 }
 
-export function StoreHeader({ store }: StoreHeaderProps) {
+export function StoreHeader({ store, assets, jobs }: StoreHeaderProps) {
     const statusColors: Record<string, string> = {
         active: "bg-green-500",
         maintenance: "bg-amber-500",
         inactive: "bg-red-500",
     }
+
+    const health = computeHealthScore({ assets, jobs })
 
     return (
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between py-6 border-b">
@@ -42,7 +48,7 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                             </Badge>
                         )}
 
-                        {store.maintenance_score == null ? (
+                        {health.label === "unknown" ? (
                             <Badge
                                 variant="outline"
                                 className="font-black text-[10px] tracking-widest uppercase gap-1 px-2 py-1 border-2 text-muted-foreground"
@@ -53,15 +59,11 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                         ) : (
                             <Badge
                                 variant="outline"
-                                className={`
-                                    font-black text-[10px] tracking-widest uppercase gap-1 px-2 py-1 border-2
-                                    ${store.maintenance_score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                        store.maintenance_score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                            'bg-red-50 text-red-700 border-red-200'}
-                                `}
+                                title={`Score: ${health.score} — ${health.label}`}
+                                className={`font-black text-[10px] tracking-widest uppercase gap-1 px-2 py-1 border-2 ${healthBadgeClasses(health.label)}`}
                             >
                                 <Heart className="size-3 fill-current" />
-                                Score: {store.maintenance_score}
+                                Score: {health.score}
                             </Badge>
                         )}
                     </div>

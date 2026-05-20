@@ -28,10 +28,11 @@ import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Building2 } from "lucide-react"
+import { computeHealthScore, healthBadgeClasses } from "@/lib/health-score"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
-    jobs?: Pick<Job, 'id' | 'vendor_id' | 'status'>[]
+    jobs?: Pick<Job, 'id' | 'vendor_id' | 'status' | 'job_type' | 'severity'>[]
     store_brands?: { brand_id: string; client_brands?: ClientBrand }[]
 }
 import {
@@ -93,7 +94,9 @@ export default function StoresListPage() {
                     jobs (
                         id,
                         vendor_id,
-                        status
+                        status,
+                        job_type,
+                        severity
                     ),
                     store_brands (
                         brand_id,
@@ -412,30 +415,30 @@ export default function StoresListPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="hidden md:table-cell">
-                                            <div className="flex flex-col gap-1">
-                                                {store.maintenance_score == null ? (
+                                            {(() => {
+                                                const health = computeHealthScore({ assets: store.assets, jobs: store.jobs })
+                                                if (health.label === "unknown") {
+                                                    return (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit text-muted-foreground"
+                                                        >
+                                                            <Heart className="size-2.5" />
+                                                            —
+                                                        </Badge>
+                                                    )
+                                                }
+                                                return (
                                                     <Badge
                                                         variant="outline"
-                                                        className="font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit text-muted-foreground"
-                                                    >
-                                                        <Heart className="size-2.5" />
-                                                        —
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`
-                                                            font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit
-                                                            ${store.maintenance_score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                                store.maintenance_score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                                    'bg-red-50 text-red-700 border-red-200'}
-                                                        `}
+                                                        title={`Score: ${health.score} — ${health.label}`}
+                                                        className={`font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit ${healthBadgeClasses(health.label)}`}
                                                     >
                                                         <Heart className="size-2.5 fill-current" />
-                                                        {store.maintenance_score}
+                                                        {health.score}
                                                     </Badge>
-                                                )}
-                                            </div>
+                                                )
+                                            })()}
                                         </TableCell>
                                         <TableCell className="hidden lg:table-cell">
                                             <div className="flex flex-wrap gap-1">
