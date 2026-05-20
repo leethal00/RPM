@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
 import type { Store } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
+import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 
 interface StoreListProps {
     stores: Store[]
@@ -17,7 +18,8 @@ interface StoreListProps {
 
 export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, onSearchChange }: StoreListProps) {
     return (
-        <div className="flex h-full flex-col gap-4 border-l bg-card p-4">
+        <div className="flex h-full flex-col gap-3 border-l bg-card p-4">
+            <CustomerFilterDropdown variant="inline" className="w-full" />
             <div className="flex items-center gap-2 relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input

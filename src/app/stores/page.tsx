@@ -24,6 +24,7 @@ import Link from "next/link"
 import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
@@ -250,7 +251,11 @@ export default function StoresListPage() {
                             <Filter className="size-3" />
                             Supply Chain Filters
                         </label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="flex flex-col gap-1.5">
+                                <CustomerFilterDropdown variant="inline" className="w-full" />
+                            </div>
+
                             <div className="flex flex-col gap-1.5">
                                 <Select value={filterVendor} onValueChange={handleVendorChange}>
                                     <SelectTrigger className="bg-white border-2 h-10 font-bold text-xs">
