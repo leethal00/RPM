@@ -6,8 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
-import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 import type { SitePhoto } from "@/types/database"
 
@@ -19,6 +18,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     const [photos, setPhotos] = useState<SitePhoto[]>([])
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
     const supabase = createClient()
 
     const fetchPhotos = async () => {
@@ -44,68 +44,85 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId])
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
+    const uploadFiles = async (files: File[]) => {
+        const images = files.filter(f => f.type.startsWith("image/"))
+        if (images.length === 0) {
+            toast.error("Please drop image files only")
+            return
+        }
         setUploading(true)
+        let succeeded = 0
+        let failed = 0
         try {
-            // 1. Upload to storage
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${storeId}/${Math.random()}.${fileExt}`
-            const filePath = `photos/${fileName}`
+            for (const file of images) {
+                try {
+                    const fileExt = file.name.split('.').pop()
+                    const fileName = `${storeId}/${Math.random()}.${fileExt}`
+                    const filePath = `photos/${fileName}`
 
-            const { error: uploadError } = await supabase.storage
-                .from('site-photos')
-                .upload(filePath, file)
+                    const { error: uploadError } = await supabase.storage
+                        .from('site-photos')
+                        .upload(filePath, file)
+                    if (uploadError) throw uploadError
 
-            if (uploadError) throw uploadError
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('site-photos')
+                        .getPublicUrl(filePath)
 
-            // 2. Get public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('site-photos')
-                .getPublicUrl(filePath)
+                    const { error: dbError } = await supabase
+                        .from('site_photos')
+                        .insert({ store_id: storeId, url: publicUrl, caption: file.name })
+                    if (dbError) throw dbError
 
-            // 3. Save to database
-            const { error: dbError } = await supabase
-                .from('site_photos')
-                .insert({
-                    store_id: storeId,
-                    url: publicUrl,
-                    caption: file.name
-                })
+                    succeeded++
+                } catch (err: unknown) {
+                    failed++
+                    console.error(`Upload failed for ${file.name}:`, err)
+                }
+            }
 
-            if (dbError) throw dbError
-
-            toast.success("Photo uploaded successfully")
-            fetchPhotos()
-        } catch (error: unknown) {
-            toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
-            console.error(error)
+            if (succeeded > 0) {
+                toast.success(`${succeeded} photo${succeeded === 1 ? '' : 's'} uploaded${failed > 0 ? `, ${failed} failed` : ''}`)
+                fetchPhotos()
+            } else {
+                toast.error(`All ${failed} upload${failed === 1 ? '' : 's'} failed`)
+            }
         } finally {
             setUploading(false)
         }
     }
 
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? [])
+        if (files.length > 0) uploadFiles(files)
+        e.target.value = ""
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+        if (!isDragging) setIsDragging(true)
+    }
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault()
+        if (e.currentTarget === e.target) setIsDragging(false)
+    }
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const files = Array.from(e.dataTransfer.files ?? [])
+        if (files.length > 0) uploadFiles(files)
+    }
+
     const handleDelete = async (photo: SitePhoto) => {
         if (!confirm("Are you sure you want to delete this photo?")) return
-
         try {
-            // 1. Extract path from URL (naive approach)
             const pathMatch = photo.url.match(/site-photos\/(.+)$/)
             if (pathMatch) {
                 const filePath = pathMatch[1]
                 await supabase.storage.from('site-photos').remove([decodeURIComponent(filePath)])
             }
-
-            // 2. Delete from database
-            const { error } = await supabase
-                .from('site_photos')
-                .delete()
-                .eq('id', photo.id)
-
+            const { error } = await supabase.from('site_photos').delete().eq('id', photo.id)
             if (error) throw error
-
             setPhotos(photos.filter(p => p.id !== photo.id))
             toast.success("Photo deleted")
         } catch (error: unknown) {
@@ -118,74 +135,88 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     }
 
     return (
-        <div className="space-y-6 mt-12 pb-12 border-t pt-8">
+        <div className="space-y-4 mt-10 pb-12 border-t border-border/60 pt-8">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-xl font-bold flex items-center gap-2">
-                        <Camera className="size-5 text-primary" />
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Camera className="size-4 text-muted-foreground" />
                         Site Photo Gallery
                     </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Recent photos showing what this site looks like.
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                        Recent photos showing what this site looks like. Drag &amp; drop or click Upload.
                     </p>
                 </div>
                 <div>
                     <Label htmlFor="photo-upload" className="cursor-pointer">
-                        <div className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity">
-                            {uploading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                            Upload Photo
+                        <div className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium">
+                            {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                            Upload photo
                         </div>
                         <Input
                             id="photo-upload"
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
-                            onChange={handleUpload}
+                            onChange={handleFileInputChange}
                             disabled={uploading}
                         />
                     </Label>
                 </div>
             </div>
 
-            {photos.length === 0 ? (
-                <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <ImageIcon className="size-12 mb-4 opacity-20" />
-                        <p>No photos added for this site yet.</p>
-                        <p className="text-xs">Upload photos of the storefront, kitchen or dining area.</p>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {photos.map((photo) => (
-                        <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all">
-                            <Image
-                                src={photo.url}
-                                alt={photo.caption ?? "Site photo"}
-                                fill
-                                className="object-cover"
-                                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="size-8 rounded-full"
-                                    onClick={() => handleDelete(photo)}
-                                >
-                                    <Trash2 className="size-4" />
-                                </Button>
-                            </div>
-                            {photo.caption && (
-                                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                                    <p className="text-[10px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
-                                </div>
-                            )}
+            <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative rounded-lg border ${isDragging ? 'border-primary border-2 bg-primary/5' : 'border-dashed border-border/60'} transition-colors`}
+            >
+                {isDragging && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none bg-primary/5 rounded-lg">
+                        <div className="flex flex-col items-center gap-2 text-primary">
+                            <UploadCloud className="size-8" />
+                            <p className="text-sm font-medium">Drop to upload</p>
                         </div>
-                    ))}
-                </div>
-            )}
+                    </div>
+                )}
+                {photos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <ImageIcon className="size-8 mb-3 opacity-30" />
+                        <p className="text-sm">No photos added for this site yet.</p>
+                        <p className="text-xs text-muted-foreground/80">Drop an image here, or click Upload above.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3">
+                        {photos.map((photo) => (
+                            <div key={photo.id} className="group relative aspect-square rounded-md overflow-hidden border border-border/60 bg-muted/40">
+                                <Image
+                                    src={photo.url}
+                                    alt={photo.caption ?? "Site photo"}
+                                    fill
+                                    className="object-cover"
+                                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                    loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <Button
+                                        variant="destructive"
+                                        size="icon"
+                                        className="size-8 rounded-full"
+                                        onClick={() => handleDelete(photo)}
+                                    >
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                </div>
+                                {photo.caption && (
+                                    <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/70 to-transparent">
+                                        <p className="text-[10px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
