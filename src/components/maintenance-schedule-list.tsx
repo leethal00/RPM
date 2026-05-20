@@ -180,8 +180,8 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
                     </Card>
                 ))}
                 {schedules.length === 0 && (
-                    <div className="text-center py-10 border-2 border-dashed rounded-xl border-muted">
-                        <p className="text-muted-foreground text-sm italic">No recurring maintenance scheduled for this asset.</p>
+                    <div className="text-center py-8 border border-dashed rounded-md border-border/60">
+                        <p className="text-muted-foreground text-sm">No recurring maintenance scheduled for this asset.</p>
                     </div>
                 )}
             </div>

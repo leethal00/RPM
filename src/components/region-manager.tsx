@@ -97,7 +97,7 @@ export function RegionManager() {
                 </Button>
             </form>
 
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">

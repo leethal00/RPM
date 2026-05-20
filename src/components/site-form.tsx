@@ -274,7 +274,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid gap-2">
-                    <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">
                         Site Name <span className="text-red-500">*</span>
                     </Label>
                     <Input
@@ -287,7 +287,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="customer" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <Label htmlFor="customer" className="text-xs font-medium text-muted-foreground">
                         Customer <span className="text-red-500">*</span>
                     </Label>
                     <Select
@@ -307,7 +307,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="region" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Region</Label>
+                    <Label htmlFor="region" className="text-xs font-medium text-muted-foreground">Region</Label>
                     <Select
                         value={formData.region}
                         onValueChange={(value) => setFormData({ ...formData, region: value })}
@@ -324,7 +324,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                 </div>
 
                 <div className="space-y-3">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Brands at this Site</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">Brands at this Site</Label>
                     {availableBrands.length === 0 ? (
                         <div className="p-3 text-xs italic text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
                             {clientId
@@ -340,13 +340,13 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                                         key={brand.id}
                                         type="button"
                                         onClick={() => toggleBrand(brand.id)}
-                                        className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${isSelected
-                                            ? 'border-primary bg-primary/5'
-                                            : 'border-muted bg-muted/20 hover:border-muted-foreground/30 opacity-70 hover:opacity-100'
+                                        className={`relative flex flex-col items-center gap-2 p-3 rounded-md border transition-colors ${isSelected
+                                            ? 'border-primary/40 bg-primary/5'
+                                            : 'border-border/80 bg-card hover:bg-accent/30'
                                             }`}
                                     >
                                         <BrandChip brand={brand} size="md" />
-                                        <span className={`text-[10px] font-bold uppercase tracking-tight text-center ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                        <span className={`text-xs font-medium text-center ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
                                             {brand.label}
                                         </span>
                                         {isSelected && (
@@ -362,7 +362,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                 </div>
 
                 <div className="grid gap-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Designation</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">Designation</Label>
                     <div className="flex bg-muted rounded-md p-1">
                         {["Stand alone", "Inline", "Mall"].map(cat => (
                             <button
@@ -395,7 +395,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="grid gap-2">
                     <div className="flex items-center justify-between">
-                        <Label htmlFor="address" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <Label htmlFor="address" className="text-xs font-medium text-muted-foreground">
                             Site Address <span className="text-red-500">*</span>
                         </Label>
                         {formData.lat && formData.lng && (
@@ -453,7 +453,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="manager_name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Site Manager</Label>
+                        <Label htmlFor="manager_name" className="text-xs font-medium text-muted-foreground">Site Manager</Label>
                         <Input
                             id="manager_name"
                             placeholder="John Doe"
@@ -462,7 +462,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="manager_phone" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Manager Phone</Label>
+                        <Label htmlFor="manager_phone" className="text-xs font-medium text-muted-foreground">Manager Phone</Label>
                         <Input
                             id="manager_phone"
                             placeholder="021 123 456"
@@ -474,7 +474,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="space-y-4 border-t pt-4">
                     <div className="flex items-center justify-between">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hours of Operation</Label>
+                        <Label className="text-xs font-medium text-muted-foreground">Hours of Operation</Label>
                         <div className="flex bg-muted rounded-md p-1">
                             <button
                                 type="button"

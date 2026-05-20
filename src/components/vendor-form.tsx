@@ -102,7 +102,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
             <div className="grid gap-4">
                 <div className="grid gap-2">
-                    <Label htmlFor="vendor_name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Vendor Name *</Label>
+                    <Label htmlFor="vendor_name" className="text-xs font-medium text-muted-foreground">Vendor Name *</Label>
                     <Input
                         id="vendor_name"
                         placeholder="e.g. Sharp Plumbing NZ"
@@ -113,7 +113,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="trade" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Primary Trade</Label>
+                    <Label htmlFor="trade" className="text-xs font-medium text-muted-foreground">Primary Trade</Label>
                     <Select
                         value={formData.trade}
                         onValueChange={(value) => setFormData({ ...formData, trade: value })}
@@ -131,7 +131,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email Address</Label>
+                        <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email Address</Label>
                         <Input
                             id="email"
                             type="email"
@@ -141,7 +141,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Contact Phone</Label>
+                        <Label htmlFor="phone" className="text-xs font-medium text-muted-foreground">Contact Phone</Label>
                         <Input
                             id="phone"
                             placeholder="09 123 4567"
@@ -153,7 +153,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="account_code" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Account Code</Label>
+                        <Label htmlFor="account_code" className="text-xs font-medium text-muted-foreground">Account Code</Label>
                         <Input
                             id="account_code"
                             placeholder="VEN-123"
@@ -162,7 +162,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="status" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Vendor Status</Label>
+                        <Label htmlFor="status" className="text-xs font-medium text-muted-foreground">Vendor Status</Label>
                         <Select
                             value={formData.status}
                             onValueChange={(value) => setFormData({ ...formData, status: value })}
@@ -183,7 +183,7 @@ export function VendorForm({ vendor, onSuccess, onCancel }: VendorFormProps) {
                 <Button type="button" variant="outline" onClick={onCancel} className="italic">
                     Cancel
                 </Button>
-                <Button type="submit" disabled={loading} className="min-w-[140px] font-black uppercase tracking-widest text-[10px]">
+                <Button type="submit" disabled={loading} className="min-w-[140px] font-medium text-[10px]">
                     {loading ? (
                         <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

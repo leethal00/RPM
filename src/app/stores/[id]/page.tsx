@@ -217,8 +217,8 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 />
                             ))}
                             {(projects || []).length === 0 && (
-                                <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
-                                    <p className="text-muted-foreground italic">No strategic HQ projects linked to this site.</p>
+                                <div className="col-span-full py-12 text-center border border-dashed rounded-md border-border/60">
+                                    <p className="text-sm text-muted-foreground">No strategic HQ projects linked to this site.</p>
                                 </div>
                             )}
                         </div>

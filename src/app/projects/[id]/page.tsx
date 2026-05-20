@@ -185,26 +185,27 @@ export default function ProjectDetailPage({
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-3">
-                            <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
-                            <Badge className={`${statusColors[project.status]} text-white text-[10px] black tracking-widest uppercase`}>
+                            <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
+                            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
+                                <span className={`size-1.5 rounded-full ${(statusColors[project.status] || 'bg-muted-foreground').replace('bg-', 'bg-')}`} />
                                 {project.status.replace('_', ' ')}
-                            </Badge>
+                            </span>
                             {project.stores && (
-                                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary flex items-center gap-1 bg-primary/5 uppercase tracking-widest px-2">
-                                    <Building2 className="size-3" />
+                                <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                                    <Building2 className="size-3.5" />
                                     {project.stores.name}
-                                </Badge>
+                                </span>
                             )}
                         </div>
-                        <p className="text-muted-foreground italic max-w-2xl">{project.description || "Strategic capital expenditure initiative."}</p>
+                        <p className="text-sm text-muted-foreground max-w-2xl">{project.description || "Strategic capital expenditure initiative."}</p>
                     </div>
 
-                    <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-sidebar-border">
+                    <div className="flex items-center gap-4 bg-muted/40 p-4 rounded-md border border-border/60">
                         <div className="text-right">
-                            <p className="text-[10px] font-black uppercase text-muted-foreground opacity-60 tracking-widest">Target Completion</p>
-                            <p className="font-bold flex items-center justify-end gap-1.5 mt-0.5">
-                                <Calendar className="size-4 text-primary" />
-                                {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'TBD'}
+                            <p className="text-xs font-medium text-muted-foreground">Target completion</p>
+                            <p className="font-medium flex items-center justify-end gap-1.5 mt-0.5">
+                                <Calendar className="size-4 text-muted-foreground" />
+                                {project.end_date ? new Date(project.end_date).toLocaleDateString() : '—'}
                             </p>
                         </div>
                     </div>
@@ -222,12 +223,12 @@ export default function ProjectDetailPage({
                             <div className="space-y-4">
                                 <div className="flex justify-between items-end">
                                     <div className="space-y-1">
-                                        <p className="text-[10px] font-black uppercase text-muted-foreground">Implementation Status</p>
-                                        <p className="text-2xl font-black">{Math.round(progress)}% Complete</p>
+                                        <p className="text-xs font-medium text-muted-foreground">Implementation Status</p>
+                                        <p className="text-2xl font-semibold">{Math.round(progress)}% Complete</p>
                                     </div>
                                     <div className="text-right space-y-1">
-                                        <p className="text-[10px] font-black uppercase text-muted-foreground">Completed Tasks</p>
-                                        <p className="text-xl font-black">{completedJobs} / {jobs.length}</p>
+                                        <p className="text-xs font-medium text-muted-foreground">Completed Tasks</p>
+                                        <p className="text-xl font-semibold">{completedJobs} / {jobs.length}</p>
                                     </div>
                                 </div>
                                 <Progress value={progress} className="h-4 rounded-full shadow-inner bg-secondary" />
@@ -235,25 +236,25 @@ export default function ProjectDetailPage({
 
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 pt-4 border-t border-dashed">
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5 italic">
+                                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 italic">
                                         <Clock className="size-3" /> Start
                                     </p>
                                     <p className="font-bold text-sm">{project.start_date ? new Date(project.start_date).toLocaleDateString() : 'N/A'}</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5 italic">
+                                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 italic">
                                         <CheckCircle2 className="size-3" /> Resolved
                                     </p>
                                     <p className="font-bold text-sm">{completedJobs} Jobs</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5 italic">
+                                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 italic">
                                         <AlertTriangle className="size-3" /> Active
                                     </p>
                                     <p className="font-bold text-sm text-amber-600">{jobs.length - completedJobs} Pending</p>
                                 </div>
                                 <div className="space-y-1 text-right">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5 justify-end italic">
+                                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 justify-end italic">
                                         <DollarSign className="size-3" /> Budget
                                     </p>
                                     <p className="font-bold text-sm text-primary">${project.budget?.toLocaleString() || "0"}</p>
@@ -271,7 +272,7 @@ export default function ProjectDetailPage({
                                 {project.description || "No detailed strategic scope defined for this project."}
                             </div>
                             <div className="space-y-3 pt-2">
-                                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Linked Sites</p>
+                                <p className="text-xs font-medium text-muted-foreground">Linked Sites</p>
                                 <div className="flex flex-wrap gap-2">
                                     {Array.from(new Set(jobs.map(j => j.stores?.name))).map(storeName => (
                                         <Badge key={storeName} variant="secondary" className="px-3 py-1 text-[10px] font-bold">
@@ -296,14 +297,14 @@ export default function ProjectDetailPage({
                         </Button>
                     </div>
 
-                    <div className="bg-card border rounded-xl p-6 shadow-sm overflow-hidden">
+                    <div className="bg-card border rounded-xl p-6 overflow-hidden">
                         {jobs.length > 0 ? (
                             <JobTimeline jobs={jobs} />
                         ) : (
-                            <div className="py-20 text-center border-2 border-dashed rounded-lg">
-                                <ClipboardList className="size-12 text-muted-foreground/30 mx-auto mb-4" />
-                                <p className="text-muted-foreground italic">No jobs have been associated with this project stream yet.</p>
-                                <Button asChild variant="link" className="mt-2">
+                            <div className="py-16 text-center border border-dashed border-border/60 rounded-md">
+                                <ClipboardList className="size-8 text-muted-foreground/40 mx-auto mb-3" />
+                                <p className="text-sm text-muted-foreground">No jobs associated with this project yet.</p>
+                                <Button asChild variant="link" size="sm" className="mt-1">
                                     <Link href="/stores">Link your first job</Link>
                                 </Button>
                             </div>

@@ -157,7 +157,7 @@ export function BrandManager({ clientId, clientName }: BrandManagerProps) {
     return (
         <div className="space-y-4">
             <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                <h3 className="text-sm font-medium text-muted-foreground">
                     Brands for {clientName}
                 </h3>
                 <p className="text-xs text-muted-foreground italic mt-1">

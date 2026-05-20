@@ -99,7 +99,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
             <div className="space-y-4">
                 <div className="grid gap-2">
-                    <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Project Title</Label>
+                    <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">Project Title</Label>
                     <Input
                         id="name"
                         placeholder="e.g. St Pierre's Queensgate Full Refurbishment"
@@ -110,7 +110,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="description" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Strategic Objectives</Label>
+                    <Label htmlFor="description" className="text-xs font-medium text-muted-foreground">Strategic Objectives</Label>
                     <Textarea
                         id="description"
                         placeholder="Define the high-level goals of this project..."
@@ -122,7 +122,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="status" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Initial Status</Label>
+                        <Label htmlFor="status" className="text-xs font-medium text-muted-foreground">Initial Status</Label>
                         <Select
                             value={formData.status}
                             onValueChange={(v) => setFormData({ ...formData, status: v })}
@@ -138,7 +138,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                         </Select>
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="budget" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Capex Budget ($)</Label>
+                        <Label htmlFor="budget" className="text-xs font-medium text-muted-foreground">Capex Budget ($)</Label>
                         <Input
                             id="budget"
                             type="number"
@@ -150,7 +150,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="store_id" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Linked Site (Optional)</Label>
+                    <Label htmlFor="store_id" className="text-xs font-medium text-muted-foreground">Linked Site (Optional)</Label>
                     <Select
                         value={formData.store_id}
                         onValueChange={(v) => setFormData({ ...formData, store_id: v })}
@@ -172,7 +172,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="start_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target Start</Label>
+                        <Label htmlFor="start_date" className="text-xs font-medium text-muted-foreground">Target Start</Label>
                         <Input
                             id="start_date"
                             type="date"
@@ -181,7 +181,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="end_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target Completion</Label>
+                        <Label htmlFor="end_date" className="text-xs font-medium text-muted-foreground">Target Completion</Label>
                         <Input
                             id="end_date"
                             type="date"
@@ -196,7 +196,7 @@ export function ProjectForm({ onSuccess, onCancel, project }: ProjectFormProps) 
                 <Button type="button" variant="outline" onClick={onCancel} className="italic">
                     Discard
                 </Button>
-                <Button type="submit" disabled={loading} className="min-w-[140px] font-black uppercase tracking-widest text-[10px]">
+                <Button type="submit" disabled={loading} className="min-w-[140px] font-medium text-[10px]">
                     {loading ? (
                         <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

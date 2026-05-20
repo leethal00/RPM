@@ -27,7 +27,7 @@ export function BrandChip({ brand, size = "md", showLabel = false }: BrandChipPr
     if (hasLogo) {
         return (
             <div
-                className={`${s.box} rounded-xl bg-white ${s.padding} border-2 shadow-sm flex items-center justify-center`}
+                className={`${s.box} rounded-md bg-white ${s.padding} border border-border/60 flex items-center justify-center`}
                 title={brand.label}
             >
                 <Image
@@ -45,12 +45,12 @@ export function BrandChip({ brand, size = "md", showLabel = false }: BrandChipPr
     const bgColor = brand.color ?? "#2D6A4F"
     return (
         <div
-            className={`${s.box} rounded-xl ${s.padding} border-2 shadow-sm flex items-center justify-center ${s.text} font-black uppercase tracking-tight text-white`}
+            className={`${s.box} rounded-md ${s.padding} flex items-center justify-center ${s.text} font-semibold tracking-tight text-white`}
             style={{ backgroundColor: bgColor }}
             title={brand.label}
         >
             <span className="text-center leading-none break-all line-clamp-2">
-                {showLabel ? brand.label : brand.label.slice(0, 3)}
+                {showLabel ? brand.label : brand.label.slice(0, 3).toUpperCase()}
             </span>
         </div>
     )

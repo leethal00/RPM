@@ -144,7 +144,7 @@ export function AssetTypeManager() {
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 py-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="label" className="text-xs font-bold uppercase text-muted-foreground">Asset Type Name *</Label>
+                                <Label htmlFor="label" className="text-xs font-medium text-muted-foreground">Asset type name *</Label>
                                 <Input id="label" placeholder="e.g. Signage" value={formData.label} onChange={(e) => setFormData({ ...formData, label: e.target.value })} required />
                             </div>
                             <div className="flex justify-end gap-3 pt-4">
@@ -172,12 +172,12 @@ export function AssetTypeManager() {
                 />
             </div>
 
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="text-[10px] font-black uppercase">Asset Type</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase w-[100px] text-right">Actions</TableHead>
+                        <TableRow className="border-b border-border/60 hover:bg-transparent">
+                            <TableHead className="h-10 text-xs font-medium text-muted-foreground">Asset type</TableHead>
+                            <TableHead className="h-10 text-xs font-medium text-muted-foreground w-[80px] text-right"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>

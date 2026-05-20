@@ -93,35 +93,35 @@ export default function ProfilePage() {
             <div className="max-w-4xl mx-auto py-8 px-4 font-primary">
                 <div className="flex flex-col gap-8">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Your Profile</h1>
-                        <p className="text-muted-foreground italic">Manage your account details and preferences.</p>
+                        <h1 className="text-3xl font-semibold tracking-tight">Your profile</h1>
+                        <p className="text-sm text-muted-foreground">Manage your account details and preferences.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <Card className="md:col-span-1 border-primary/20 bg-primary/5">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Card className="md:col-span-1">
                             <CardHeader className="text-center">
-                                <Avatar className="size-24 mx-auto border-4 border-background shadow-xl">
+                                <Avatar className="size-20 mx-auto">
                                     <AvatarImage src={profile?.avatar_url || ""} />
-                                    <AvatarFallback className="text-2xl font-bold">{userInitials}</AvatarFallback>
+                                    <AvatarFallback className="text-xl font-medium">{userInitials}</AvatarFallback>
                                 </Avatar>
-                                <CardTitle className="mt-4">{formData.full_name || "User"}</CardTitle>
-                                <CardDescription className="uppercase tracking-widest text-[10px] font-bold text-primary/80">
+                                <CardTitle className="mt-3 text-lg">{formData.full_name || "User"}</CardTitle>
+                                <CardDescription className="text-xs text-muted-foreground capitalize">
                                     {profile?.role || "Member"}
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                    <Shield className="size-4 text-primary" />
-                                    <span>Permissions: Standard</span>
+                            <CardContent className="space-y-3 text-sm">
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    <Shield className="size-3.5" />
+                                    <span>Permissions: standard</span>
                                 </div>
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                    <User className="size-4 text-primary" />
-                                    <span>ID: ...{user?.id?.slice(-8)}</span>
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    <User className="size-3.5" />
+                                    <span>ID …{user?.id?.slice(-8)}</span>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        <Card className="md:col-span-2 shadow-sm border-muted-foreground/10">
+                        <Card className="md:col-span-2">
                             <CardHeader>
                                 <CardTitle>Profile Information</CardTitle>
                                 <CardDescription>Update your personal details here.</CardDescription>
@@ -129,7 +129,7 @@ export default function ProfilePage() {
                             <form onSubmit={handleSave}>
                                 <CardContent className="space-y-6">
                                     <div className="space-y-2">
-                                        <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email Address (Read-only)</Label>
+                                        <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email Address (Read-only)</Label>
                                         <div className="relative">
                                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                                             <Input
@@ -142,7 +142,7 @@ export default function ProfilePage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="full_name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Full Name</Label>
+                                        <Label htmlFor="full_name" className="text-xs font-medium text-muted-foreground">Full Name</Label>
                                         <div className="relative">
                                             <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                                             <Input
@@ -156,7 +156,7 @@ export default function ProfilePage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Phone Number</Label>
+                                        <Label htmlFor="phone" className="text-xs font-medium text-muted-foreground">Phone Number</Label>
                                         <Input
                                             id="phone"
                                             placeholder="+64 123 456 789"

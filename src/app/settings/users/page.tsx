@@ -29,7 +29,7 @@ export default function UsersPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Theme</Label>
+                            <Label className="text-xs font-medium text-muted-foreground">Theme</Label>
                             <div className="flex gap-3">
                                 <Button
                                     variant={theme === "light" ? "default" : "outline"}

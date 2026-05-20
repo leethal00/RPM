@@ -253,12 +253,12 @@ export default function AssetDetailPage({
                                                     <div className={`size-8 rounded-full ${dotColor} animate-pulse`} />
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className={`text-lg font-black uppercase tracking-tight ${dotColor.replace('bg-', 'text-')}`}>
+                                                    <p className={`text-lg font-semibold capitalize ${dotColor.replace('bg-', 'text-')}`}>
                                                         {statusLabel}
                                                     </p>
                                                     <div className="flex flex-col gap-1 mt-1">
                                                         <p className="text-[10px] uppercase font-bold text-muted-foreground">Next Service Target</p>
-                                                        <p className="text-sm font-black text-primary">
+                                                        <p className="text-sm font-medium text-primary">
                                                             {(() => {
                                                                 if (!asset.next_service_date) return "TBD";
                                                                 const d = new Date(asset.next_service_date);

@@ -1,9 +1,8 @@
 "use client"
 
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Calendar, DollarSign, ClipboardList, TrendingUp } from "lucide-react"
+import { Calendar, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import type { Job, Project, Store } from "@/types/database"
 
@@ -17,46 +16,49 @@ export function ProjectCard({ project, viewMode }: ProjectCardProps) {
     const completedJobs = jobs.filter((j: Pick<Job, 'status'>) => j.status === 'resolved' || j.status === 'closed').length
     const progress = jobs.length > 0 ? (completedJobs / jobs.length) * 100 : 0
 
-    const statusColors: Record<string, string> = {
-        planning: "bg-blue-500",
+    const statusDot: Record<string, string> = {
+        planning: "bg-primary",
         in_progress: "bg-amber-500",
-        completed: "bg-green-500",
-        cancelled: "bg-red-500",
+        completed: "bg-emerald-500",
+        cancelled: "bg-destructive",
     }
+
+    const statusLabel = project.status.replace('_', ' ')
 
     if (viewMode === 'list') {
         return (
             <Link href={`/projects/${project.id}`}>
-                <Card className="hover:shadow-md transition-shadow cursor-pointer overflow-hidden group">
-                    <CardContent className="p-4 flex items-center justify-between gap-6">
+                <Card className="hover:bg-accent/30 transition-colors cursor-pointer group">
+                    <CardContent className="px-5 py-4 flex items-center justify-between gap-6">
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-1">
-                                <h3 className="font-bold text-lg truncate group-hover:text-primary transition-colors">
+                            <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
                                     {project.name}
                                 </h3>
-                                <Badge className={`${statusColors[project.status]} text-white text-[10px] uppercase font-black tracking-widest`}>
-                                    {project.status.replace('_', ' ')}
-                                </Badge>
+                                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground capitalize">
+                                    <span className={`size-1.5 rounded-full ${statusDot[project.status]}`} />
+                                    {statusLabel}
+                                </span>
                             </div>
-                            <p className="text-xs text-muted-foreground italic line-clamp-1">{project.description}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">{project.description}</p>
                         </div>
 
-                        <div className="hidden md:flex flex-col items-end gap-1 w-48">
-                            <div className="flex justify-between w-full text-[10px] font-bold uppercase text-muted-foreground italic">
+                        <div className="hidden md:flex flex-col items-end gap-1 w-40">
+                            <div className="flex justify-between w-full text-xs text-muted-foreground">
                                 <span>Progress</span>
-                                <span>{Math.round(progress)}%</span>
+                                <span className="tabular-nums">{Math.round(progress)}%</span>
                             </div>
                             <Progress value={progress} className="h-1.5" />
                         </div>
 
                         <div className="flex items-center gap-6 text-sm">
-                            <div className="flex flex-col items-center">
-                                <span className="text-[10px] font-black text-muted-foreground uppercase opacity-60">Jobs</span>
-                                <span className="font-bold">{jobs.length}</span>
+                            <div className="flex flex-col items-center gap-0.5">
+                                <span className="text-xs text-muted-foreground">Jobs</span>
+                                <span className="font-medium tabular-nums">{jobs.length}</span>
                             </div>
-                            <div className="flex flex-col items-end">
-                                <span className="text-[10px] font-black text-muted-foreground uppercase opacity-60 text-right w-full">Budget</span>
-                                <span className="font-bold text-primary">${project.budget?.toLocaleString() || "0"}</span>
+                            <div className="flex flex-col items-end gap-0.5">
+                                <span className="text-xs text-muted-foreground">Budget</span>
+                                <span className="font-medium tabular-nums">${project.budget?.toLocaleString() || "0"}</span>
                             </div>
                         </div>
                     </CardContent>
@@ -67,57 +69,51 @@ export function ProjectCard({ project, viewMode }: ProjectCardProps) {
 
     return (
         <Link href={`/projects/${project.id}`}>
-            <Card className="h-full flex flex-col hover:shadow-lg transition-all border-sidebar-border hover:border-primary/30 group">
+            <Card className="h-full flex flex-col hover:bg-accent/20 transition-colors group">
                 <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start gap-4">
-                        <Badge className={`${statusColors[project.status]} text-white text-[10px] uppercase font-black tracking-widest shadow-sm`}>
-                            {project.status.replace('_', ' ')}
-                        </Badge>
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground italic">
+                    <div className="flex justify-between items-start gap-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground capitalize">
+                            <span className={`size-1.5 rounded-full ${statusDot[project.status]}`} />
+                            {statusLabel}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Calendar className="size-3" />
-                            {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'TBD'}
+                            {project.end_date ? new Date(project.end_date).toLocaleDateString() : '—'}
                         </div>
                     </div>
-                    <h3 className="text-xl font-bold mt-3 group-hover:text-primary transition-colors leading-tight">
+                    <h3 className="text-lg font-semibold mt-2 group-hover:text-primary transition-colors leading-snug">
                         {project.name}
                     </h3>
                 </CardHeader>
-                <CardContent className="flex-1 space-y-6">
-                    <p className="text-xs text-muted-foreground leading-relaxed italic line-clamp-2">
-                        {project.description || "No project overview provided."}
+                <CardContent className="flex-1 space-y-5">
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                        {project.description || "No project overview."}
                     </p>
 
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
-                            <span className="text-muted-foreground italic">Completion Progress</span>
-                            <span className="text-foreground">{Math.round(progress)}%</span>
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Completion</span>
+                            <span className="tabular-nums text-foreground">{Math.round(progress)}%</span>
                         </div>
-                        <Progress value={progress} className="h-2 rounded-full shadow-inner" />
+                        <Progress value={progress} className="h-1.5" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black text-muted-foreground uppercase opacity-60 flex items-center gap-1">
-                                <ClipboardList className="size-2.5" />
-                                Assigned Work
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-0.5">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <ClipboardList className="size-3" />
+                                Jobs
                             </p>
-                            <p className="text-sm font-bold">{jobs.length} Active Jobs</p>
+                            <p className="text-sm font-medium tabular-nums">{jobs.length}</p>
                         </div>
-                        <div className="space-y-1 text-right">
-                            <p className="text-[9px] font-black text-muted-foreground uppercase opacity-60 flex items-center gap-1 justify-end">
-                                <DollarSign className="size-2.5" />
-                                Capex Budget
-                            </p>
-                            <p className="text-sm font-bold text-primary">${project.budget?.toLocaleString() || "0"}</p>
+                        <div className="space-y-0.5 text-right">
+                            <p className="text-xs text-muted-foreground">Budget</p>
+                            <p className="text-sm font-medium tabular-nums">${project.budget?.toLocaleString() || "0"}</p>
                         </div>
                     </div>
                 </CardContent>
-                <CardFooter className="pt-4 border-t bg-muted/5 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="size-2 rounded-full bg-primary animate-pulse" />
-                        <span className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter">Live Strategic View</span>
-                    </div>
-                    <TrendingUp className="size-4 text-muted-foreground opacity-30" />
+                <CardFooter className="pt-3 border-t border-border/40 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">View strategy</span>
                 </CardFooter>
             </Card>
         </Link>

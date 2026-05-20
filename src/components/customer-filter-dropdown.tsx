@@ -32,8 +32,8 @@ export function CustomerFilterDropdown({ variant = "header", className = "" }: C
     if (!initialised || !isAdmin) return null
 
     const triggerClass = variant === "inline"
-        ? `h-10 gap-2 bg-white border-2 font-bold text-xs ${className}`
-        : `h-8 gap-2 border-muted-foreground/20 bg-muted/30 text-xs font-bold uppercase tracking-wider min-w-[180px] ${className}`
+        ? `h-9 gap-2 text-sm ${className}`
+        : `h-8 gap-2 text-sm min-w-[160px] ${className}`
 
     return (
         <Select
@@ -44,12 +44,12 @@ export function CustomerFilterDropdown({ variant = "header", className = "" }: C
                 className={triggerClass}
                 aria-label="Filter by customer"
             >
-                <Building2 className="size-3.5 text-primary" />
-                <SelectValue placeholder="All Customers" />
+                <Building2 className="size-3.5 text-muted-foreground" />
+                <SelectValue placeholder="All customers" />
                 <ChevronsUpDown className="ml-auto size-3 opacity-50" />
             </SelectTrigger>
             <SelectContent className="z-[1100]">
-                <SelectItem value={ALL_VALUE} className="font-bold">All Customers</SelectItem>
+                <SelectItem value={ALL_VALUE}>All customers</SelectItem>
                 {customers.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                         {c.name}

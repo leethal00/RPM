@@ -263,7 +263,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                 <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                                     <div className="flex items-center gap-2">
                                         {getStatusIcon(job.status)}
-                                        <span className="font-bold uppercase tracking-tight text-sm">{job.status}</span>
+                                        <span className="font-medium text-sm capitalize">{job.status}</span>
                                     </div>
                                     <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/20">
                                         {job.severity}

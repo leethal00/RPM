@@ -146,7 +146,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="asset_group" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Group *</Label>
+                        <Label htmlFor="asset_group" className="text-xs font-medium text-muted-foreground">Asset Group *</Label>
                         <Select
                             value={formData.asset_group}
                             onValueChange={(v: string) => setFormData({ ...formData, asset_group: v })}
@@ -162,7 +162,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                     </div>
 
                     <div className="grid gap-2">
-                        <Label htmlFor="asset_type_id" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Type *</Label>
+                        <Label htmlFor="asset_type_id" className="text-xs font-medium text-muted-foreground">Asset Type *</Label>
                         <Select
                             value={formData.asset_type_id}
                             onValueChange={(v) => setFormData({ ...formData, asset_type_id: v })}
@@ -182,7 +182,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="asset_dimensions" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Dimensions</Label>
+                    <Label htmlFor="asset_dimensions" className="text-xs font-medium text-muted-foreground">Asset Dimensions</Label>
                     <Input
                         id="asset_dimensions"
                         placeholder="e.g. 2400mm x 600mm"
@@ -193,7 +193,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="install_date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Install Date</Label>
+                        <Label htmlFor="install_date" className="text-xs font-medium text-muted-foreground">Install Date</Label>
                         <Input
                             id="install_date"
                             type="date"
@@ -202,7 +202,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                         />
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="status" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
+                        <Label htmlFor="status" className="text-xs font-medium text-muted-foreground">Status</Label>
                         <Select
                             value={formData.status}
                             onValueChange={(value) => setFormData({ ...formData, status: value })}
@@ -219,11 +219,11 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                     </div>
                 </div>
 
-                <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 space-y-3">
-                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Service Intelligence</Label>
+                <div className="p-4 bg-muted/40 rounded-md border border-border/60 space-y-3">
+                    <Label className="text-xs font-medium text-muted-foreground">Service scheduling</Label>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-1">
-                            <Label htmlFor="pm_interval_months" className="text-[10px] font-bold uppercase text-muted-foreground">PM Interval (months)</Label>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="pm_interval_months" className="text-xs font-medium text-muted-foreground">PM interval (months)</Label>
                             <Input
                                 id="pm_interval_months"
                                 type="number"
@@ -231,21 +231,21 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                                 max={120}
                                 value={formData.pm_interval_months}
                                 onChange={(e) => setFormData({ ...formData, pm_interval_months: Number(e.target.value) || 0 })}
-                                className="h-9 text-sm font-bold"
+                                className="h-9"
                             />
                         </div>
-                        <div className="grid gap-1">
-                            <Label htmlFor="next_service" className="text-[10px] font-bold uppercase text-muted-foreground">Next Service Target</Label>
-                            <div className="flex flex-col">
-                                <span className="text-lg font-black text-primary uppercase tracking-tighter">
-                                    {getQuarterLabel(formData.next_service_date) || "TBD"}
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="next_service" className="text-xs font-medium text-muted-foreground">Next service target</Label>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-sm font-medium text-foreground">
+                                    {getQuarterLabel(formData.next_service_date) || "—"}
                                 </span>
                                 <Input
                                     id="next_service"
                                     type="date"
                                     value={formData.next_service_date}
                                     onChange={(e) => setFormData({ ...formData, next_service_date: e.target.value })}
-                                    className="h-7 text-[10px] mt-1 opacity-50 focus:opacity-100 transition-opacity"
+                                    className="h-7 text-xs"
                                 />
                             </div>
                         </div>
@@ -253,7 +253,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="asset_details" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Asset Details (Free Format) *</Label>
+                    <Label htmlFor="asset_details" className="text-xs font-medium text-muted-foreground">Asset Details (Free Format) *</Label>
                     <Textarea
                         id="asset_details"
                         placeholder="e.g. Mounted on main pylon cabinet, requires cherry picker for access."
@@ -268,10 +268,10 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                         <AssetPhotoGallery assetId={asset.id} />
                     </div>
                 ) : (
-                    <div className="pt-4 border-t px-4 py-3 bg-primary/5 rounded-lg border-2 border-dashed border-primary/20">
-                        <p className="text-xs text-primary font-medium flex items-center gap-2">
-                            <Camera className="size-4" />
-                            Note: Photos can be attached after the asset has been created.
+                    <div className="px-4 py-3 bg-muted/40 rounded-md border border-dashed border-border">
+                        <p className="text-xs text-muted-foreground flex items-center gap-2">
+                            <Camera className="size-3.5" />
+                            Photos can be attached once the asset is created.
                         </p>
                     </div>
                 )}
