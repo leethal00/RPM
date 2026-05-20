@@ -5,7 +5,6 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import {
     Search,
     MapPin,
@@ -13,12 +12,7 @@ import {
     Plus,
     Edit2,
     ArrowUpDown,
-    Clock,
-    User,
-    Heart,
     SlidersHorizontal,
-    AlertTriangle,
-    Filter
 } from "lucide-react"
 import Link from "next/link"
 import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
@@ -28,7 +22,7 @@ import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Building2 } from "lucide-react"
-import { computeHealthScore, healthBadgeClasses } from "@/lib/health-score"
+import { computeHealthScore } from "@/lib/health-score"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
@@ -75,10 +69,11 @@ export default function StoresListPage() {
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
     const [filterUnverified, setFilterUnverified] = useState(false)
+    const [filterApproximate, setFilterApproximate] = useState(false)
 
     const { clientId } = useCustomerFilter()
 
-    const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
+    const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${filterApproximate}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
 
     const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
         storesKey,
@@ -119,6 +114,10 @@ export default function StoresListPage() {
 
             if (filterUnverified) {
                 query = query.is("lat", null)
+            }
+
+            if (filterApproximate) {
+                query = query.eq("location_approximate", true)
             }
 
             query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
@@ -211,12 +210,18 @@ export default function StoresListPage() {
         setPage(1)
     }
 
+    const handleApproximateToggle = () => {
+        setFilterApproximate(prev => !prev)
+        setPage(1)
+    }
+
     const handleResetFilters = () => {
         setSearch("")
         setFilterOverdue(false)
         setFilterVendor("all")
         setFilterRegion("all")
         setFilterUnverified(false)
+        setFilterApproximate(false)
         setPage(1)
     }
 
@@ -229,7 +234,7 @@ export default function StoresListPage() {
         setEditDialogOpen(true)
     }
 
-    const activeFilterCount = (search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0) + (filterUnverified ? 1 : 0)
+    const activeFilterCount = (search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0) + (filterUnverified ? 1 : 0) + (filterApproximate ? 1 : 0)
 
     return (
         <DashboardLayout>
@@ -240,14 +245,14 @@ export default function StoresListPage() {
                     description="Manage all properties, site managers, and operation hours."
                     actions={
                         <>
-                            <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">
-                                <span className="text-foreground text-base">{totalCount}</span> sites
+                            <span className="text-sm text-muted-foreground">
+                                <span className="text-foreground font-medium">{totalCount}</span> sites
                             </span>
                             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                                 <DialogTrigger asChild>
-                                    <Button className="gap-2 shadow-sm">
-                                        <Plus className="size-4" />
-                                        Add New Site
+                                    <Button size="sm" className="gap-1.5 h-9">
+                                        <Plus className="size-3.5" />
+                                        Add site
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="sm:max-w-[500px]">
@@ -267,42 +272,37 @@ export default function StoresListPage() {
                     }
                 />
 
-                <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        <Filter className="size-3" />
-                        Filters
-                        {activeFilterCount > 0 && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleResetFilters}
-                                className="h-5 px-2 ml-auto text-[10px] uppercase tracking-widest hover:text-primary"
-                            >
-                                Reset {activeFilterCount}
-                            </Button>
-                        )}
+                <div className="flex flex-col gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search sites, addresses, managers…"
+                            className="pl-10 h-10 bg-card border-border/80 focus-visible:border-ring/50 shadow-none"
+                            value={search}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                        />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                        <CustomerFilterDropdown variant="inline" className="w-full" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <CustomerFilterDropdown variant="inline" className="h-9 min-w-[160px]" />
                         <Select value={filterVendor} onValueChange={handleVendorChange}>
-                            <SelectTrigger className="h-10 gap-2 font-bold text-xs">
-                                <SlidersHorizontal className="size-3.5 text-primary" />
-                                <SelectValue placeholder="All Contractors" />
+                            <SelectTrigger className="h-9 min-w-[160px] gap-2 text-sm font-normal">
+                                <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="All contractors" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all" className="font-bold">All Contractors</SelectItem>
+                                <SelectItem value="all">All contractors</SelectItem>
                                 {(vendors || []).map((vendor) => (
                                     <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                         <Select value={filterRegion} onValueChange={handleRegionChange}>
-                            <SelectTrigger className="h-10 gap-2 font-bold text-xs">
-                                <MapPin className="size-3.5 text-primary" />
-                                <SelectValue placeholder="All Regions" />
+                            <SelectTrigger className="h-9 min-w-[160px] gap-2 text-sm font-normal">
+                                <MapPin className="size-3.5 text-muted-foreground" />
+                                <SelectValue placeholder="All regions" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all" className="font-bold">All Regions</SelectItem>
+                                <SelectItem value="all">All regions</SelectItem>
                                 <SelectItem value="Auckland">Auckland</SelectItem>
                                 <SelectItem value="Wellington">Wellington</SelectItem>
                                 <SelectItem value="Christchurch">Christchurch</SelectItem>
@@ -310,65 +310,70 @@ export default function StoresListPage() {
                                 <SelectItem value="South Island Regional">South Island Regional</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Button
-                            variant={filterOverdue ? "destructive" : "outline"}
-                            className="h-10 font-bold uppercase text-[10px] tracking-widest gap-2"
+                        <button
+                            type="button"
                             onClick={handleOverdueToggle}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterOverdue ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                         >
-                            <AlertTriangle className={`size-3.5 ${filterOverdue ? 'animate-pulse' : ''}`} />
+                            <span className={`size-1.5 rounded-full ${filterOverdue ? 'bg-destructive' : 'bg-muted-foreground/40'}`} />
                             Overdue
-                            {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
-                        </Button>
-                        <Button
-                            variant={filterUnverified ? "default" : "outline"}
-                            className="h-10 font-bold uppercase text-[10px] tracking-widest gap-2"
+                        </button>
+                        <button
+                            type="button"
                             onClick={handleUnverifiedToggle}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterUnverified ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                         >
-                            <MapPin className={`size-3.5 ${filterUnverified ? 'animate-pulse' : ''}`} />
-                            Unverified Only
-                            {filterUnverified && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
-                        </Button>
+                            <span className={`size-1.5 rounded-full ${filterUnverified ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+                            Unverified
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleApproximateToggle}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterApproximate ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                        >
+                            <span className={`size-1.5 rounded-full ${filterApproximate ? 'bg-amber-500' : 'bg-muted-foreground/40'}`} />
+                            Approximate
+                        </button>
+                        {activeFilterCount > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleResetFilters}
+                                className="h-9 px-2 text-sm text-muted-foreground hover:text-foreground ml-auto"
+                            >
+                                Reset
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search by name, address, or manager..."
-                        className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
-                        value={search}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                    />
-                </div>
-
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                     <Table>
                         <TableHeader>
-                            <TableRow className="bg-muted/30 hover:bg-muted/30">
-                                <TableHead onClick={() => handleSort('name')} className="cursor-pointer group">
-                                    <div className="flex items-center gap-2">
-                                        Site Name
-                                        <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                            <TableRow className="border-b border-border/60 hover:bg-transparent">
+                                <TableHead onClick={() => handleSort('name')} className="cursor-pointer group h-10 text-xs font-medium text-muted-foreground">
+                                    <div className="flex items-center gap-1.5">
+                                        Site
+                                        <ArrowUpDown className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </TableHead>
-                                <TableHead className="w-[150px]">Brands</TableHead>
-                                <TableHead onClick={() => handleSort('address')} className="cursor-pointer group hidden md:table-cell">
-                                    <div className="flex items-center gap-2">
+                                <TableHead className="w-[140px] h-10 text-xs font-medium text-muted-foreground">Brands</TableHead>
+                                <TableHead onClick={() => handleSort('address')} className="cursor-pointer group hidden md:table-cell h-10 text-xs font-medium text-muted-foreground">
+                                    <div className="flex items-center gap-1.5">
                                         Address
-                                        <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        <ArrowUpDown className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </TableHead>
-                                <TableHead onClick={() => handleSort('maintenance_score')} className="cursor-pointer group hidden md:table-cell w-[90px]">
-                                    <div className="flex items-center gap-2">
+                                <TableHead onClick={() => handleSort('maintenance_score')} className="cursor-pointer group hidden md:table-cell w-[80px] h-10 text-xs font-medium text-muted-foreground">
+                                    <div className="flex items-center gap-1.5">
                                         Health
-                                        <ArrowUpDown className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                                        <ArrowUpDown className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                 </TableHead>
-                                <TableHead className="hidden lg:table-cell">Classification</TableHead>
-                                <TableHead className="hidden md:table-cell">Region</TableHead>
-                                <TableHead className="hidden lg:table-cell">Site Manager</TableHead>
-                                <TableHead className="hidden xl:table-cell">Hours</TableHead>
-                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                                <TableHead className="hidden lg:table-cell h-10 text-xs font-medium text-muted-foreground">Type</TableHead>
+                                <TableHead className="hidden md:table-cell h-10 text-xs font-medium text-muted-foreground">Region</TableHead>
+                                <TableHead className="hidden lg:table-cell h-10 text-xs font-medium text-muted-foreground">Manager</TableHead>
+                                <TableHead className="hidden xl:table-cell h-10 text-xs font-medium text-muted-foreground">Hours</TableHead>
+                                <TableHead className="w-[80px] text-right h-10"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -386,111 +391,88 @@ export default function StoresListPage() {
                                 </TableRow>
                             ) : (
                                 filteredStores.map((store) => (
-                                    <TableRow key={store.id} className="group hover:bg-muted/5 transition-colors">
-                                        <TableCell className="font-semibold">
-                                            <div className="flex flex-col gap-1">
-                                                <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
+                                    <TableRow key={store.id} className="group border-b border-border/40 hover:bg-accent/30 transition-colors last:border-b-0">
+                                        <TableCell className="py-3">
+                                            <div className="flex flex-col gap-0.5">
+                                                <Link href={`/stores/${store.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
                                                     {store.name}
                                                 </Link>
                                                 {store.has_drive_thru && (
-                                                    <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200 w-fit">DRIVE THRU</Badge>
+                                                    <span className="text-[11px] text-muted-foreground">Drive-thru</span>
                                                 )}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="w-[150px]">
+                                        <TableCell className="w-[140px] py-3">
                                             <BrandChips brands={brandsFromStore(store)} size="md" />
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-1">
-                                                    <MapPin className="size-3 shrink-0" />
-                                                    <span className="truncate max-w-[200px]">{store.address || "\u2014"}</span>
-                                                </div>
+                                        <TableCell className="text-sm hidden md:table-cell py-3">
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="truncate max-w-[240px] text-muted-foreground">{store.address || "\u2014"}</span>
                                                 {store.lat && store.lng && (
-                                                    <div className="flex items-center gap-1 text-[9px] text-green-600 font-bold uppercase tracking-tight">
-                                                        <div className="size-1.5 rounded-full bg-green-500" />
-                                                        Verified Location
-                                                    </div>
+                                                    store.location_approximate ? (
+                                                        <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                                                            <div className="size-1.5 rounded-full bg-amber-500" />
+                                                            Approximate
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                            <div className="size-1.5 rounded-full bg-emerald-500" />
+                                                            Verified
+                                                        </div>
+                                                    )
                                                 )}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="hidden md:table-cell">
+                                        <TableCell className="hidden md:table-cell py-3">
                                             {(() => {
                                                 const health = computeHealthScore({ assets: store.assets, jobs: store.jobs })
                                                 if (health.label === "unknown") {
-                                                    return (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit text-muted-foreground"
-                                                        >
-                                                            <Heart className="size-2.5" />
-                                                            —
-                                                        </Badge>
-                                                    )
+                                                    return <span className="text-muted-foreground/60 text-sm">—</span>
                                                 }
+                                                const dotColor =
+                                                    health.label === "healthy" ? "bg-emerald-500" :
+                                                        health.label === "attention" ? "bg-amber-500" :
+                                                            "bg-destructive"
                                                 return (
-                                                    <Badge
-                                                        variant="outline"
-                                                        title={`Score: ${health.score} — ${health.label}`}
-                                                        className={`font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit ${healthBadgeClasses(health.label)}`}
-                                                    >
-                                                        <Heart className="size-2.5 fill-current" />
-                                                        {health.score}
-                                                    </Badge>
+                                                    <div className="flex items-center gap-1.5 text-sm" title={`Score: ${health.score} — ${health.label}`}>
+                                                        <div className={`size-1.5 rounded-full ${dotColor}`} />
+                                                        <span className="tabular-nums text-foreground">{health.score}</span>
+                                                    </div>
                                                 )
                                             })()}
                                         </TableCell>
-                                        <TableCell className="hidden lg:table-cell">
-                                            <div className="flex flex-wrap gap-1">
-                                                {store.site_type && (
-                                                    <Badge variant="secondary" className="text-[10px] h-5 bg-primary/5 text-primary border-primary/10">
-                                                        {store.site_type}
-                                                    </Badge>
-                                                )}
-                                                {store.site_category && (
-                                                    <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
-                                                        {store.site_category}
-                                                    </Badge>
-                                                )}
-                                            </div>
+                                        <TableCell className="hidden lg:table-cell py-3">
+                                            <span className="text-sm text-muted-foreground">{store.site_category || store.site_type || "\u2014"}</span>
                                         </TableCell>
-                                        <TableCell className="text-sm hidden md:table-cell text-muted-foreground">
+                                        <TableCell className="text-sm hidden md:table-cell text-muted-foreground py-3">
                                             {store.region || "\u2014"}
                                         </TableCell>
-                                        <TableCell className="text-sm hidden lg:table-cell">
-                                            {store.manager_name ? (
-                                                <div className="flex items-center gap-2 text-muted-foreground">
-                                                    <User className="size-3" />
-                                                    {store.manager_name}
-                                                </div>
-                                            ) : "\u2014"}
+                                        <TableCell className="text-sm hidden lg:table-cell text-muted-foreground py-3">
+                                            {store.manager_name || "\u2014"}
                                         </TableCell>
-                                        <TableCell className="text-sm hidden xl:table-cell">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Clock className="size-3 shrink-0" />
-                                                <span className="truncate max-w-[250px]">
-                                                    {(() => {
-                                                        if (!store.hours_of_operation) return "\u2014"
-                                                        try {
-                                                            const hours = JSON.parse(store.hours_of_operation)
-                                                            if (hours.type === "daily") {
-                                                                return `All Days: ${hours.hours.start}\u2014${hours.hours.end}`
-                                                            } else {
-                                                                return "Custom Weekly Hours"
-                                                            }
-                                                        } catch {
-                                                            return store.hours_of_operation
+                                        <TableCell className="text-sm hidden xl:table-cell text-muted-foreground py-3">
+                                            <span className="truncate max-w-[200px] inline-block align-middle">
+                                                {(() => {
+                                                    if (!store.hours_of_operation) return "\u2014"
+                                                    try {
+                                                        const hours = JSON.parse(store.hours_of_operation)
+                                                        if (hours.type === "daily") {
+                                                            return `${hours.hours.start}\u2013${hours.hours.end}`
+                                                        } else {
+                                                            return "Weekly schedule"
                                                         }
-                                                    })()}
-                                                </span>
-                                            </div>
+                                                    } catch {
+                                                        return store.hours_of_operation
+                                                    }
+                                                })()}
+                                            </span>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-primary" onClick={(e) => openEditDialog(e, store)}>
+                                        <TableCell className="text-right py-3">
+                                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-foreground" onClick={(e) => openEditDialog(e, store)}>
                                                     <Edit2 className="size-3.5" />
                                                 </Button>
-                                                <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-primary" asChild>
+                                                <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-foreground" asChild>
                                                     <Link href={`/stores/${store.id}`}>
                                                         <ChevronRight className="size-4" />
                                                     </Link>

@@ -6,17 +6,11 @@ interface PageHeaderProps {
     title: string
     description?: string
     actions?: ReactNode
-    /** Small uppercase kicker above the title (e.g. "Strategic HQ") */
+    /** Small label above the title (e.g. "Strategic HQ") */
     kicker?: string
     kickerIcon?: LucideIcon
 }
 
-/**
- * Consistent header for every main page. Pairs with PageShell.
- *
- * Layout: [kicker line]  /  [icon + title row] + description on left,
- * actions slot on right (buttons, filters, etc).
- */
 export function PageHeader({
     icon: Icon,
     title,
@@ -26,20 +20,20 @@ export function PageHeader({
     kickerIcon: KickerIcon,
 }: PageHeaderProps) {
     return (
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between pb-6 border-b">
-            <div className="space-y-1">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between pb-5 border-b border-border/60">
+            <div className="space-y-1.5">
                 {kicker && (
-                    <div className="flex items-center gap-2 text-primary">
-                        {KickerIcon && <KickerIcon className="size-4" />}
-                        <span className="text-xs font-bold uppercase tracking-widest">{kicker}</span>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                        {KickerIcon && <KickerIcon className="size-3.5" />}
+                        <span className="text-xs font-medium">{kicker}</span>
                     </div>
                 )}
-                <div className="flex items-center gap-3">
-                    {Icon && <Icon className="size-7 text-primary shrink-0" />}
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{title}</h1>
+                <div className="flex items-center gap-2.5">
+                    {Icon && <Icon className="size-5 text-muted-foreground shrink-0" />}
+                    <h1 className="text-[1.7rem] font-semibold tracking-tight text-foreground">{title}</h1>
                 </div>
                 {description && (
-                    <p className="text-sm text-muted-foreground italic ml-0 max-w-2xl">
+                    <p className="text-sm text-muted-foreground max-w-2xl">
                         {description}
                     </p>
                 )}
