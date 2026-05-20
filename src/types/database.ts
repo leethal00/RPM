@@ -37,6 +37,7 @@ export interface Store {
   address: string | null
   lat: number | null
   lng: number | null
+  location_approximate: boolean
   manager_name: string | null
   manager_phone: string | null
   rodier_account_manager_id: string | null

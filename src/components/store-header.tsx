@@ -74,7 +74,11 @@ export function StoreHeader({ store, assets, jobs }: StoreHeaderProps) {
                         <div className="flex items-center gap-2 flex-wrap">
                             <span>{store.address}, {store.region}</span>
                             {store.lat && store.lng && (
-                                <Badge variant="outline" className="h-4 py-0 text-[8px] bg-green-50 text-green-700 border-green-200 whitespace-nowrap">VERIFIED LOCATION</Badge>
+                                store.location_approximate ? (
+                                    <Badge variant="outline" className="h-4 py-0 text-[8px] bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap">APPROXIMATE — NEEDS REVIEW</Badge>
+                                ) : (
+                                    <Badge variant="outline" className="h-4 py-0 text-[8px] bg-green-50 text-green-700 border-green-200 whitespace-nowrap">VERIFIED LOCATION</Badge>
+                                )
                             )}
                         </div>
                     </div>

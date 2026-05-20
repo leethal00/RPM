@@ -21,6 +21,7 @@ describe('Database types', () => {
       address: '123 Main St',
       lat: -36.8485,
       lng: 174.7633,
+      location_approximate: false,
       manager_name: null,
       manager_phone: null,
       rodier_account_manager_id: null,

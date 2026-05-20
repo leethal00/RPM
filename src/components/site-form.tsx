@@ -56,6 +56,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         has_drive_thru: site?.has_drive_thru || false,
         lat: site?.lat || null,
         lng: site?.lng || null,
+        location_approximate: site?.location_approximate || false,
     })
 
     // Geocoding State
@@ -86,7 +87,8 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             ...formData,
             address: suggestion.display_name,
             lat: parseFloat(suggestion.lat),
-            lng: parseFloat(suggestion.lon)
+            lng: parseFloat(suggestion.lon),
+            location_approximate: false,
         })
         setSuggestions([])
         toast.success("Location verified & coordinates captured!")
@@ -397,7 +399,11 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             Site Address <span className="text-red-500">*</span>
                         </Label>
                         {formData.lat && formData.lng && (
-                            <Badge variant="outline" className="h-4 text-[8px] bg-green-50 text-green-700 border-green-200">LOCATION VERIFIED</Badge>
+                            formData.location_approximate ? (
+                                <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200">APPROXIMATE — REVIEW</Badge>
+                            ) : (
+                                <Badge variant="outline" className="h-4 text-[8px] bg-green-50 text-green-700 border-green-200">LOCATION VERIFIED</Badge>
+                            )
                         )}
                     </div>
                     <div className="flex gap-2">
@@ -430,6 +436,18 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                                 </button>
                             ))}
                         </div>
+                    )}
+
+                    {formData.lat && formData.lng && (
+                        <label className="flex items-center gap-2 mt-1 text-xs text-muted-foreground cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={formData.location_approximate}
+                                onChange={(e) => setFormData({ ...formData, location_approximate: e.target.checked })}
+                                className="size-3.5 accent-amber-500"
+                            />
+                            <span>Mark location as <span className="font-semibold text-amber-700">approximate</span> — flag for later review</span>
+                        </label>
                     )}
                 </div>
 
