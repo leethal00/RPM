@@ -242,9 +242,9 @@ describe('AnalyticsPage', () => {
 
     // Summary cards
     expect(screen.getByText('3')).toBeInTheDocument() // total assets
-    expect(screen.getByText('Total Assets')).toBeInTheDocument()
+    expect(screen.getByText('Total assets')).toBeInTheDocument()
     expect(screen.getByText('Healthy')).toBeInTheDocument()
-    expect(screen.getByText('Due Soon')).toBeInTheDocument()
+    expect(screen.getByText('Due soon')).toBeInTheDocument()
     expect(screen.getByText('Attention')).toBeInTheDocument()
   })
 
@@ -333,7 +333,7 @@ describe('AnalyticsPage asset health classification', () => {
     })
 
     // 1 faulted, 0 overdue = 1 attention
-    expect(screen.getByText('0 OVERDUE + 1 FAULTED')).toBeInTheDocument()
+    expect(screen.getByText('0 overdue · 1 faulted')).toBeInTheDocument()
   })
 
   it('should classify assets with overdue service as overdue', async () => {
@@ -368,7 +368,7 @@ describe('AnalyticsPage asset health classification', () => {
     render(<AnalyticsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('1 OVERDUE + 0 FAULTED')).toBeInTheDocument()
+      expect(screen.getByText('1 overdue · 0 faulted')).toBeInTheDocument()
     })
   })
 
@@ -408,6 +408,6 @@ describe('AnalyticsPage asset health classification', () => {
     })
 
     // 100% healthy
-    expect(screen.getByText('100% HEALTHY')).toBeInTheDocument()
+    expect(screen.getByText('100% healthy')).toBeInTheDocument()
   })
 })
