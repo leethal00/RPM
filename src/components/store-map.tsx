@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import Link from "next/link"
 
-// Fix for default marker icons in Leaflet with Next.js
+// Default marker icons (kept for any non-status fallback paths)
 const DefaultIcon = L.icon({
     iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -17,19 +17,35 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon
 
-// Helper to create colored icons based on status
-const getStatusIcon = (status: string) => {
-    let color = "#2D6A4F" // Default Green
-    if (status === "maintenance") color = "#F59E0B" // Amber
-    if (status === "inactive") color = "#DC2626" // Red
+// Memoised status icons — created once at module load, reused across every marker
+// (previously rebuilt per render, which caused visible flicker as the DOM swapped icons)
+const STATUS_COLORS: Record<string, string> = {
+    active: "#2D6A4F",
+    maintenance: "#F59E0B",
+    inactive: "#DC2626",
+}
 
-    return L.divIcon({
+const buildStatusIcon = (color: string) =>
+    L.divIcon({
         className: "custom-div-icon",
         html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px ${color}88;"></div>`,
         iconSize: [16, 16],
         iconAnchor: [8, 8],
     })
+
+const STATUS_ICONS: Record<string, L.DivIcon> = {
+    active: buildStatusIcon(STATUS_COLORS.active),
+    maintenance: buildStatusIcon(STATUS_COLORS.maintenance),
+    inactive: buildStatusIcon(STATUS_COLORS.inactive),
 }
+
+const getStatusIcon = (status: string) => STATUS_ICONS[status] ?? STATUS_ICONS.active
+
+// NZ panning guard — generous box around the country
+const NZ_BOUNDS: L.LatLngBoundsLiteral = [
+    [-48.0, 165.0], // SW (Stewart Island, Tasman Sea)
+    [-33.5, 180.0], // NE (Northland, Chathams)
+]
 
 import type { Store } from "@/types/database"
 
@@ -41,10 +57,15 @@ interface StoreMapProps {
 
 function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
     const map = useMap()
+    const initialised = useRef(false)
     useEffect(() => {
-        map.flyTo(center, zoom, {
-            duration: 1.5
-        })
+        // Skip the very first invocation — MapContainer already initialises at center/zoom.
+        // Only fly when center/zoom actually CHANGE after mount.
+        if (!initialised.current) {
+            initialised.current = true
+            return
+        }
+        map.flyTo(center, zoom, { duration: 1.2 })
     }, [center, zoom, map])
     return null
 }
@@ -174,9 +195,17 @@ export default function StoreMap({ stores, center = [-40.9006, 174.8860], zoom =
             <MapContainer
                 center={center}
                 zoom={zoom}
+                minZoom={5}
+                maxBounds={NZ_BOUNDS}
+                maxBoundsViscosity={0.9}
                 scrollWheelZoom={true}
+                preferCanvas={true}
+                zoomSnap={0.5}
+                zoomDelta={0.5}
+                wheelDebounceTime={40}
+                wheelPxPerZoomLevel={100}
                 className="h-full w-full"
-                zoomControl={false}
+                zoomControl={true}
             >
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
