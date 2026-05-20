@@ -313,7 +313,7 @@ export default function StoresListPage() {
                         <button
                             type="button"
                             onClick={handleOverdueToggle}
-                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterOverdue ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterOverdue ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                         >
                             <span className={`size-1.5 rounded-full ${filterOverdue ? 'bg-destructive' : 'bg-muted-foreground/40'}`} />
                             Overdue
@@ -321,7 +321,7 @@ export default function StoresListPage() {
                         <button
                             type="button"
                             onClick={handleUnverifiedToggle}
-                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterUnverified ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterUnverified ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                         >
                             <span className={`size-1.5 rounded-full ${filterUnverified ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
                             Unverified
@@ -329,7 +329,7 @@ export default function StoresListPage() {
                         <button
                             type="button"
                             onClick={handleApproximateToggle}
-                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterApproximate ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                            className={`h-9 px-3 rounded-md border text-sm transition-colors flex items-center gap-1.5 ${filterApproximate ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                         >
                             <span className={`size-1.5 rounded-full ${filterApproximate ? 'bg-amber-500' : 'bg-muted-foreground/40'}`} />
                             Approximate

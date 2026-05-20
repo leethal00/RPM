@@ -113,7 +113,7 @@ export default function JobLogsPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                             placeholder="Search by title or description…"
-                            className="pl-10 h-10"
+                            className="pl-10 h-10 bg-card"
                             value={search}
                             onChange={(e) => handleSearchChange(e.target.value)}
                         />

@@ -18,14 +18,14 @@ interface StoreListProps {
 
 export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, onSearchChange }: StoreListProps) {
     return (
-        <div className="flex h-full flex-col gap-3 border-l border-border/60 bg-card p-4">
-            <CustomerFilterDropdown variant="inline" className="w-full" />
+        <div className="flex h-full flex-col gap-3 border-l border-border/60 bg-muted/50 dark:bg-muted/30 p-4">
+            <CustomerFilterDropdown variant="inline" className="w-full bg-card" />
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
                     type="search"
                     placeholder="Search sites…"
-                    className="pl-9 h-9"
+                    className="pl-9 h-9 bg-card"
                     value={searchTerm}
                     onChange={(e) => onSearchChange(e.target.value)}
                 />
@@ -49,7 +49,7 @@ export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, o
                                 onClick={() => onStoreClick(store)}
                                 className={`w-full text-left flex flex-col gap-2 rounded-md border p-3 transition-colors ${isSelected
                                     ? 'border-primary/40 bg-primary/5'
-                                    : 'border-border/60 hover:bg-accent/40'
+                                    : 'border-border/60 bg-card hover:border-border hover:shadow-sm'
                                 }`}
                             >
                                 <div className="flex items-start justify-between gap-2 min-w-0">
