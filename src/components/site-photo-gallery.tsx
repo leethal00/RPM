@@ -2,24 +2,32 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
-import type { SitePhoto } from "@/types/database"
+import type { SitePhoto, AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
 
 interface SitePhotoGalleryProps {
     storeId: string
 }
 
+type AssetPhotoEnriched = AssetPhoto & {
+    asset_label: string | null
+}
+
 export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     const [photos, setPhotos] = useState<SitePhoto[]>([])
+    const [assetPhotos, setAssetPhotos] = useState<AssetPhotoEnriched[]>([])
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+    const [includeAssetPhotos, setIncludeAssetPhotos] = useState(false)
     const supabase = createClient()
 
     const fetchPhotos = async () => {
@@ -39,14 +47,55 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
         }
     }
 
+    const fetchAssetPhotos = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('asset_photos')
+                .select(`
+                    id, url, caption, created_at, asset_id,
+                    assets!inner ( id, store_id, asset_types ( label ) )
+                `)
+                .eq('assets.store_id', storeId)
+                .order('created_at', { ascending: false })
+
+            if (error) throw error
+            type Row = {
+                id: string
+                url: string
+                caption: string | null
+                created_at: string
+                asset_id: string
+                assets: { asset_types?: { label?: string } | null }
+            }
+            const enriched: AssetPhotoEnriched[] = ((data ?? []) as unknown as Row[]).map((r) => ({
+                id: r.id,
+                asset_id: r.asset_id,
+                url: r.url,
+                caption: r.caption,
+                created_at: r.created_at,
+                asset_label: r.assets?.asset_types?.label ?? null,
+            }))
+            setAssetPhotos(enriched)
+        } catch (error: unknown) {
+            console.error('Error fetching asset photos:', error instanceof Error ? error.message : error)
+        }
+    }
+
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId])
 
+    useEffect(() => {
+        if (includeAssetPhotos && assetPhotos.length === 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            fetchAssetPhotos()
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [includeAssetPhotos])
+
     const uploadFiles = async (files: File[]) => {
-        // Accept image/* AND HEIC files (some browsers ship them with empty MIME types).
         const images = files.filter(f => f.type.startsWith("image/") || isHeic(f))
         if (images.length === 0) {
             toast.error("Please drop image files only")
@@ -143,9 +192,12 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
         return <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
     }
 
+    const visibleAssetPhotos = includeAssetPhotos ? assetPhotos : []
+    const totalCount = photos.length + visibleAssetPhotos.length
+
     return (
         <div className="space-y-4 mt-10 pb-12 border-t border-border/60 pt-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h3 className="text-lg font-semibold flex items-center gap-2">
                         <Camera className="size-4 text-muted-foreground" />
@@ -155,7 +207,19 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                         Recent photos showing what this site looks like. Drag &amp; drop or click Upload.
                     </p>
                 </div>
-                <div>
+                <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                        <Switch
+                            checked={includeAssetPhotos}
+                            onCheckedChange={setIncludeAssetPhotos}
+                        />
+                        <span className="text-muted-foreground">
+                            Include asset photos
+                            {includeAssetPhotos && assetPhotos.length > 0 && (
+                                <span className="text-foreground font-medium ml-1">({assetPhotos.length})</span>
+                            )}
+                        </span>
+                    </label>
                     <Label htmlFor="photo-upload" className="cursor-pointer">
                         <div className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium">
                             {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
@@ -188,16 +252,20 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                         </div>
                     </div>
                 )}
-                {photos.length === 0 ? (
+                {totalCount === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                         <ImageIcon className="size-8 mb-3 opacity-30" />
-                        <p className="text-sm">No photos added for this site yet.</p>
+                        <p className="text-sm">
+                            {includeAssetPhotos
+                                ? "No photos for this site or its assets yet."
+                                : "No photos added for this site yet."}
+                        </p>
                         <p className="text-xs text-muted-foreground/80">Drop an image here, or click Upload above.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3">
                         {photos.map((photo) => (
-                            <div key={photo.id} className="group relative aspect-square rounded-md overflow-hidden border border-border/60 bg-muted/40">
+                            <div key={`site-${photo.id}`} className="group relative aspect-square rounded-md overflow-hidden border border-border/60 bg-muted/40">
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Site photo"}
@@ -219,6 +287,34 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                 {photo.caption && (
                                     <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/70 to-transparent">
                                         <p className="text-[10px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {visibleAssetPhotos.map((photo) => (
+                            <div key={`asset-${photo.id}`} className="group relative aspect-square rounded-md overflow-hidden border border-primary/30 bg-muted/40">
+                                <Image
+                                    src={photo.url}
+                                    alt={photo.caption ?? "Asset photo"}
+                                    fill
+                                    className="object-cover"
+                                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                    loading="lazy"
+                                />
+                                {/* Top-left asset label chip — always visible so the source is obvious. */}
+                                <div className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 bg-card/95 border border-border/60 text-foreground text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                    {photo.asset_label ?? "Asset"}
+                                </div>
+                                <Link
+                                    href={`/stores/${storeId}/assets/${photo.asset_id}`}
+                                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-medium"
+                                >
+                                    <ExternalLink className="size-3.5" />
+                                    Open asset
+                                </Link>
+                                {photo.caption && (
+                                    <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/70 to-transparent">
+                                        <p className="text-[10px] text-white truncate" title={photo.caption}>{photo.caption}</p>
                                     </div>
                                 )}
                             </div>
