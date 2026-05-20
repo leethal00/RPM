@@ -122,3 +122,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Leaflet attribution — required by OSM/CARTO TOS, styled down to stay out of the way */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.6) !important;
+  padding: 0 5px !important;
+  line-height: 14px !important;
+  transition: opacity 0.15s ease;
+}
+.leaflet-control-attribution:hover {
+  opacity: 1;
+}
+.leaflet-control-attribution a {
+  color: inherit !important;
+  text-decoration: none;
+}
+.leaflet-control-attribution a:hover {
+  text-decoration: underline;
+}
