@@ -41,6 +41,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
         asset_dimensions: asset?.asset_dimensions || "",
         last_service_date: asset?.last_service_date || "",
         next_service_date: asset?.next_service_date || "",
+        pm_interval_months: asset?.pm_interval_months ?? 18,
     })
 
     useEffect(() => {
@@ -114,6 +115,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
             asset_dimensions: formData.asset_dimensions,
             last_service_date: formData.last_service_date || null,
             next_service_date: formData.next_service_date || null,
+            pm_interval_months: formData.pm_interval_months || null,
         }
 
         let error;
@@ -221,8 +223,16 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                     <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Service Intelligence</Label>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-1">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Service Interval</span>
-                            <span className="text-sm font-black italic">18 Months (Standard)</span>
+                            <Label htmlFor="pm_interval_months" className="text-[10px] font-bold uppercase text-muted-foreground">PM Interval (months)</Label>
+                            <Input
+                                id="pm_interval_months"
+                                type="number"
+                                min={1}
+                                max={120}
+                                value={formData.pm_interval_months}
+                                onChange={(e) => setFormData({ ...formData, pm_interval_months: Number(e.target.value) || 0 })}
+                                className="h-9 text-sm font-bold"
+                            />
                         </div>
                         <div className="grid gap-1">
                             <Label htmlFor="next_service" className="text-[10px] font-bold uppercase text-muted-foreground">Next Service Target</Label>

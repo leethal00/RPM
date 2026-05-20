@@ -9,13 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
 import { toast } from "sonner"
-
-interface SitePhoto {
-    id: string
-    url: string
-    caption: string
-    created_at: string
-}
+import type { SitePhoto } from "@/types/database"
 
 interface SitePhotoGalleryProps {
     storeId: string
@@ -167,7 +161,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                         <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all">
                             <Image
                                 src={photo.url}
-                                alt={photo.caption}
+                                alt={photo.caption ?? "Site photo"}
                                 fill
                                 className="object-cover"
                                 sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
@@ -183,9 +177,11 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                     <Trash2 className="size-4" />
                                 </Button>
                             </div>
-                            <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                                <p className="text-[10px] text-white truncate font-medium">{photo.caption}</p>
-                            </div>
+                            {photo.caption && (
+                                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                                    <p className="text-[10px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>

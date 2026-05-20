@@ -70,12 +70,13 @@ export interface AssetType {
 export interface Asset {
   id: string
   store_id: string
-  name: string
+  name: string | null
   asset_type_id: string | null
   install_date: string | null
   last_service_date: string | null
   next_service_date: string | null
   service_interval_days: number | null
+  pm_interval_months: number | null
   status: string | null
   asset_group: string | null
   asset_details: string | null
@@ -169,12 +170,15 @@ export interface SitePhoto {
   id: string
   store_id: string
   url: string
+  caption: string | null
   created_at: string
+  updated_at: string
 }
 
 export interface AssetPhoto {
   id: string
   asset_id: string
   url: string
+  caption: string | null
   created_at: string
 }

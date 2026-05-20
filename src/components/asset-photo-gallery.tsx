@@ -9,13 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
 import { toast } from "sonner"
-
-interface AssetPhoto {
-    id: string
-    url: string
-    caption: string
-    created_at: string
-}
+import type { AssetPhoto } from "@/types/database"
 
 interface AssetPhotoGalleryProps {
     assetId: string
@@ -163,7 +157,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                         <div key={photo.id} className="group relative aspect-square rounded-lg overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all">
                             <Image
                                 src={photo.url}
-                                alt={photo.caption}
+                                alt={photo.caption ?? "Asset photo"}
                                 fill
                                 className="object-cover"
                                 sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 20vw"
@@ -179,6 +173,11 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                                     <Trash2 className="size-3.5" />
                                 </Button>
                             </div>
+                            {photo.caption && (
+                                <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent">
+                                    <p className="text-[9px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>

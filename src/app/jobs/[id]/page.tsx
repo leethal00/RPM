@@ -306,6 +306,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                         <span className="text-muted-foreground">Logged:</span>
                                         <span>{new Date(job.created_at).toLocaleString()}</span>
                                     </div>
+                                    {job.responded_at && (
+                                        <div className="flex items-center justify-between text-xs font-bold text-amber-700">
+                                            <span>First response:</span>
+                                            <span>{new Date(job.responded_at).toLocaleString()}</span>
+                                        </div>
+                                    )}
                                     {job.resolved_at && (
                                         <div className="flex items-center justify-between text-xs font-bold text-green-700">
                                             <span>Resolved:</span>

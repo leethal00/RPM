@@ -197,10 +197,14 @@ export default function AssetDetailPage({
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Service Interval</p>
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">PM Interval</p>
                                             <div className="flex items-center gap-2">
                                                 <Activity className="size-4 text-primary" />
-                                                <p className="text-sm font-bold">18 Months (Standard)</p>
+                                                <p className="text-sm font-bold">
+                                                    {asset.pm_interval_months != null
+                                                        ? `${asset.pm_interval_months} Months`
+                                                        : "Not set"}
+                                                </p>
                                             </div>
                                         </div>
                                         <div className="space-y-1">
