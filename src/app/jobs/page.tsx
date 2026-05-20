@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { JobTimeline } from "@/components/job-timeline"
 import { Input } from "@/components/ui/input"
-import { Search, Filter, ClipboardList } from "lucide-react"
+import { Search, ClipboardList } from "lucide-react"
 import {
     Select,
     SelectContent,
@@ -102,67 +102,66 @@ export default function JobLogsPage() {
                     title="Job Logs"
                     description="Central archive of all audit and maintenance tickets."
                     actions={
-                        <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">
-                            <span className="text-foreground text-base">{totalCount}</span> total
+                        <span className="text-sm text-muted-foreground">
+                            <span className="text-foreground font-medium">{totalCount}</span> total
                         </span>
                     }
                 />
 
-                <div className="flex flex-col md:flex-row items-center gap-4 bg-muted/30 p-4 rounded-xl border border-muted-foreground/10">
-                    <div className="relative flex-1 w-full">
+                <div className="flex flex-col gap-3">
+                    <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by issue title or description..."
-                            className="pl-10 bg-background border-none"
+                            placeholder="Search by title or description…"
+                            className="pl-10 h-10"
                             value={search}
                             onChange={(e) => handleSearchChange(e.target.value)}
                         />
                     </div>
-                    <Select value={statusFilter} onValueChange={handleStatusChange}>
-                        <SelectTrigger className="w-[160px] bg-background border">
-                            <div className="flex items-center gap-2">
-                                <Filter className="size-3.5" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Select value={statusFilter} onValueChange={handleStatusChange}>
+                            <SelectTrigger className="h-9 min-w-[160px] text-sm font-normal">
                                 <SelectValue placeholder="Status" />
-                            </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Statuses</SelectItem>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="resolved">Resolved</SelectItem>
-                            <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Select value={severityFilter} onValueChange={handleSeverityChange}>
-                        <SelectTrigger className="w-[160px] bg-background border">
-                            <SelectValue placeholder="Severity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Severities</SelectItem>
-                            <SelectItem value="low">Low</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="critical">Critical</SelectItem>
-                        </SelectContent>
-                    </Select>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All statuses</SelectItem>
+                                <SelectItem value="open">Open</SelectItem>
+                                <SelectItem value="in_progress">In progress</SelectItem>
+                                <SelectItem value="resolved">Resolved</SelectItem>
+                                <SelectItem value="closed">Closed</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={severityFilter} onValueChange={handleSeverityChange}>
+                            <SelectTrigger className="h-9 min-w-[160px] text-sm font-normal">
+                                <SelectValue placeholder="Severity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All severities</SelectItem>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
 
                 {loading ? (
-                    <div className="p-8 animate-pulse space-y-4">
-                        <div className="h-20 bg-muted rounded-xl" />
-                        <div className="h-20 bg-muted rounded-xl" />
-                        <div className="h-20 bg-muted rounded-xl" />
+                    <div className="space-y-2">
+                        <div className="h-16 bg-muted/40 rounded-lg animate-pulse" />
+                        <div className="h-16 bg-muted/40 rounded-lg animate-pulse" />
+                        <div className="h-16 bg-muted/40 rounded-lg animate-pulse" />
                     </div>
                 ) : error ? (
-                    <div className="bg-destructive/10 border border-destructive/20 p-8 rounded-xl text-center">
-                        <h2 className="text-destructive font-bold text-lg mb-2">Technical Error</h2>
-                        <p className="text-muted-foreground mb-4">{error}</p>
-                        <p className="text-xs text-muted-foreground font-mono bg-background/50 p-2 rounded">
-                            HINT: This is usually caused by Supabase Row-Level Security (RLS) blocking the read.
+                    <div className="border border-destructive/30 bg-destructive/5 p-6 rounded-lg">
+                        <h2 className="text-destructive font-medium mb-2">Technical error</h2>
+                        <p className="text-sm text-muted-foreground mb-3">{error}</p>
+                        <p className="text-xs text-muted-foreground font-mono">
+                            Usually caused by Supabase RLS blocking the read.
                         </p>
                     </div>
                 ) : (
-                    <div className="bg-card p-6 rounded-xl border shadow-sm min-h-[400px]">
+                    <div className="bg-card rounded-lg border border-border/60 min-h-[400px]">
                         <JobTimeline jobs={jobs} />
                         <TablePagination
                             page={page}

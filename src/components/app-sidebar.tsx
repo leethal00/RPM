@@ -153,7 +153,7 @@ export function AppSidebar() {
                     <div className="px-2 pt-2 mb-2">
                         <SidebarMenuButton
                             asChild
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-bold shadow-sm"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"
                         >
                             <Link href="/jobs/new" className="flex items-center gap-2">
                                 <PlusCircle className="size-4" />

@@ -5,7 +5,6 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
     Calendar,
     AlertCircle,
@@ -76,17 +75,11 @@ export default function PMSchedulerPage() {
     }, [])
 
     const getStatusColor = (asset: PMAsset) => {
-        // Red if active fault
         const activeFaults = asset.jobs?.filter((j: Pick<Job, 'status'>) => j.status === 'open' || j.status === 'in_progress')
-        if (activeFaults && activeFaults.length > 0) return "bg-red-50 text-red-600"
-
-        if (!asset.next_service_date) return "bg-slate-100 text-slate-600"
-        const nextDue = new Date(asset.next_service_date)
-        const now = new Date()
-
-        if (nextDue < now) return "bg-orange-50 text-orange-600 border-orange-200"
-
-        return "bg-emerald-50 text-emerald-600"
+        if (activeFaults && activeFaults.length > 0) return "bg-destructive/10 text-destructive"
+        if (!asset.next_service_date) return "bg-muted/40 text-muted-foreground"
+        if (new Date(asset.next_service_date) < new Date()) return "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
     }
 
     // Show the first brand at this site (sites typically have one primary brand)
@@ -164,38 +157,37 @@ export default function PMSchedulerPage() {
             <PageShell>
                 <PageHeader
                     icon={Hammer}
-                    kicker="Fleet Strategy"
                     title="PM Scheduler"
-                    description={`Proactive maintenance monitoring for ${pmAssets.length} tracked assets.`}
+                    description={`Proactive maintenance monitoring across ${pmAssets.length} tracked assets.`}
                     actions={
-                        <Button onClick={fetchPMData} variant="outline" size="sm" className="gap-2 font-bold uppercase tracking-wider text-[10px] border-2">
+                        <Button onClick={fetchPMData} variant="outline" size="sm" className="gap-1.5">
                             <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-                            Refresh Schedule
+                            Refresh
                         </Button>
                     }
                 />
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="border-2 shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-red-50/50">
-                            <CardTitle className="text-xs font-black uppercase tracking-widest">Overdue</CardTitle>
-                            <AlertCircle className="h-4 w-4 text-red-500" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">Overdue</CardTitle>
+                            <AlertCircle className="size-4 text-destructive" />
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="text-2xl font-black text-red-600">
+                        <CardContent>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">
                                 {pmAssets.filter(a => a.next_service_date && new Date(a.next_service_date) < new Date()).length}
                             </div>
-                            <p className="text-[10px] text-muted-foreground uppercase font-bold mt-1">Requiring Immediate Action</p>
+                            <p className="text-xs text-muted-foreground mt-1">Requiring immediate action</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-2 shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-amber-50/50">
-                            <CardTitle className="text-xs font-black uppercase tracking-widest">Due (30 Days)</CardTitle>
-                            <Clock className="h-4 w-4 text-amber-500" />
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">Due (30 days)</CardTitle>
+                            <Clock className="size-4 text-amber-500" />
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="text-2xl font-black text-amber-600">
+                        <CardContent>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">
                                 {pmAssets.filter(a => {
                                     if (!a.next_service_date) return false;
                                     const next = new Date(a.next_service_date);
@@ -205,17 +197,17 @@ export default function PMSchedulerPage() {
                                     return next >= now && next <= thirtyDays;
                                 }).length}
                             </div>
-                            <p className="text-[10px] text-muted-foreground uppercase font-bold mt-1">Upcoming Maintenance</p>
+                            <p className="text-xs text-muted-foreground mt-1">Upcoming maintenance</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-2 shadow-sm">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-emerald-50/50">
-                            <CardTitle className="text-xs font-black uppercase tracking-widest">Compliant</CardTitle>
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">Compliant</CardTitle>
+                            <CheckCircle2 className="size-4 text-emerald-500" />
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="text-2xl font-black text-emerald-600">
+                        <CardContent>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">
                                 {pmAssets.filter(a => {
                                     if (!a.next_service_date) return true;
                                     const next = new Date(a.next_service_date);
@@ -224,78 +216,71 @@ export default function PMSchedulerPage() {
                                     return next > thirtyDays;
                                 }).length}
                             </div>
-                            <p className="text-[10px] text-muted-foreground uppercase font-bold mt-1">Scheduled for later</p>
+                            <p className="text-xs text-muted-foreground mt-1">Scheduled for later</p>
                         </CardContent>
                     </Card>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6">
-                    <Card className="border-2 shadow-sm overflow-hidden">
-                        <CardHeader className="border-b bg-slate-50/80">
-                            <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                                <Calendar className="size-4 text-primary" />
-                                Maintenance Pipeline
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="divide-y-2 border-slate-100">
-                                {pmAssets.map((asset) => (
-                                    <div key={asset.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/50 transition-colors">
-                                        <div className="flex items-start gap-4">
-                                            <div className={`p-3 rounded-xl ${getStatusColor(asset)}`}>
-                                                <Hammer className="size-6" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="font-black text-slate-800 uppercase tracking-tight">{asset.asset_types?.label}</span>
-                                                    <Badge variant="outline" className="h-5 text-[9px] font-black tracking-tighter uppercase px-1.5 bg-primary/5 text-primary border-primary/20">
-                                                        {asset.asset_group}
-                                                    </Badge>
-                                                </div>
-                                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                                    <span className="flex items-center gap-1.5">
-                                                        <Building2 className="size-3.5 text-primary/60" />
-                                                        {getStoreBrand(asset.stores)} - {asset.stores.name}
-                                                    </span>
-                                                    <span className="flex items-center gap-1.5 bg-amber-50 px-2 py-0.5 rounded text-amber-700">
-                                                        <Calendar className="size-3.5" />
-                                                        Due: {getQuarterLabel(asset.next_service_date)}
-                                                    </span>
-                                                </div>
-                                            </div>
+                <Card>
+                    <CardHeader className="border-b border-border/60 pb-4">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <Calendar className="size-4 text-muted-foreground" />
+                            Maintenance pipeline
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="divide-y divide-border/40">
+                            {pmAssets.map((asset) => (
+                                <div key={asset.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-accent/30 transition-colors">
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <div className={`size-8 rounded-md flex items-center justify-center shrink-0 ${getStatusColor(asset)}`}>
+                                            <Hammer className="size-4" />
                                         </div>
-                                        <div className="flex items-center gap-3 self-end md:self-center">
-                                            <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-primary font-bold uppercase text-[10px] tracking-widest">
-                                                <Link href={`/stores/${asset.stores.id}/assets/${asset.id}`}>
-                                                    Config
-                                                    <ArrowRight className="size-3 ml-2" />
-                                                </Link>
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => generatePMJob(asset)}
-                                                className="bg-slate-900 hover:bg-black text-white px-6 font-black uppercase text-[10px] tracking-[0.15em] h-9 shadow-lg shadow-slate-200"
-                                            >
-                                                Generate PM Ticket
-                                            </Button>
+                                        <div className="space-y-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-medium text-foreground">{asset.asset_types?.label}</span>
+                                                {asset.asset_group && (
+                                                    <span className="text-xs text-muted-foreground">{asset.asset_group}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                                <span className="flex items-center gap-1">
+                                                    <Building2 className="size-3" />
+                                                    {getStoreBrand(asset.stores)}{getStoreBrand(asset.stores) && " · "}{asset.stores.name}
+                                                </span>
+                                                <span className="text-muted-foreground/40">·</span>
+                                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                                    <Calendar className="size-3" />
+                                                    Due {getQuarterLabel(asset.next_service_date)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                ))}
-                                {pmAssets.length === 0 && !loading && (
-                                    <div className="py-24 text-center">
-                                        <div className="size-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-dashed border-slate-200">
-                                            <Calendar className="size-10 text-slate-300" />
-                                        </div>
-                                        <div className="max-w-xs mx-auto">
-                                            <p className="font-black text-xl text-slate-900 uppercase italic">No Active PMs</p>
-                                            <p className="text-xs text-slate-500 font-bold uppercase mt-2">Configure assets with PM intervals to track maintenance here.</p>
-                                        </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground gap-1">
+                                            <Link href={`/stores/${asset.stores.id}/assets/${asset.id}`}>
+                                                Config
+                                                <ArrowRight className="size-3" />
+                                            </Link>
+                                        </Button>
+                                        <Button size="sm" onClick={() => generatePMJob(asset)}>
+                                            Generate PM ticket
+                                        </Button>
                                     </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                                </div>
+                            ))}
+                            {pmAssets.length === 0 && !loading && (
+                                <div className="py-16 text-center">
+                                    <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <Calendar className="size-5 text-muted-foreground" />
+                                    </div>
+                                    <p className="font-medium text-foreground">No active PMs</p>
+                                    <p className="text-sm text-muted-foreground">Configure assets with PM intervals to track maintenance here.</p>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
             </PageShell>
         </DashboardLayout>
     )

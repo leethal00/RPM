@@ -5,7 +5,7 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
-import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar, Filter } from "lucide-react"
+import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
 import type { Project, Job, Store } from "@/types/database"
 
@@ -98,83 +98,79 @@ export default function ProjectsPage() {
             <PageShell>
                 <PageHeader
                     icon={BarChart3}
-                    kicker="Strategic HQ"
-                    title="HQ Projects & Capex"
-                    description="Tracking major site improvements and multi-job strategic initiatives."
+                    title="HQ Projects"
+                    description="Major site improvements and multi-job strategic initiatives."
                     actions={
-                        <div className="flex items-center gap-3">
-                        <Select value={statusFilter} onValueChange={handleStatusChange}>
-                            <SelectTrigger className="w-[160px] bg-background border">
-                                <div className="flex items-center gap-2">
-                                    <Filter className="size-3.5" />
+                        <div className="flex items-center gap-2">
+                            <Select value={statusFilter} onValueChange={handleStatusChange}>
+                                <SelectTrigger className="h-9 min-w-[140px] text-sm font-normal">
                                     <SelectValue placeholder="Status" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Statuses</SelectItem>
-                                <SelectItem value="planning">Planning</SelectItem>
-                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                        </Select>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All statuses</SelectItem>
+                                    <SelectItem value="planning">Planning</SelectItem>
+                                    <SelectItem value="in_progress">In progress</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                </SelectContent>
+                            </Select>
 
-                        <div className="flex items-center border rounded-lg p-1 bg-muted/30">
-                            <Button
-                                variant={viewMode === 'grid' ? "secondary" : "ghost"}
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setViewMode('grid')}
-                            >
-                                <LayoutGrid className="size-4" />
-                            </Button>
-                            <Button
-                                variant={viewMode === 'list' ? "secondary" : "ghost"}
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setViewMode('list')}
-                            >
-                                <ListIcon className="size-4" />
-                            </Button>
-                        </div>
-
-                        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button className="gap-2 shadow-sm">
-                                    <Plus className="size-4" />
-                                    New Project
+                            <div className="flex items-center border border-border/60 rounded-md p-0.5">
+                                <Button
+                                    variant={viewMode === 'grid' ? "secondary" : "ghost"}
+                                    size="icon"
+                                    className="size-8"
+                                    onClick={() => setViewMode('grid')}
+                                >
+                                    <LayoutGrid className="size-3.5" />
                                 </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[600px]">
-                                <DialogHeader>
-                                    <DialogTitle>Initiate HQ Project</DialogTitle>
-                                    <DialogDescription>
-                                        Define high-level objectives, budget, and timeline.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <ProjectForm
-                                    onSuccess={() => {
-                                        setIsDialogOpen(false)
-                                        fetchProjects()
-                                    }}
-                                    onCancel={() => setIsDialogOpen(false)}
-                                />
-                            </DialogContent>
-                        </Dialog>
+                                <Button
+                                    variant={viewMode === 'list' ? "secondary" : "ghost"}
+                                    size="icon"
+                                    className="size-8"
+                                    onClick={() => setViewMode('list')}
+                                >
+                                    <ListIcon className="size-3.5" />
+                                </Button>
+                            </div>
+
+                            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button size="sm" className="gap-1.5 h-9">
+                                        <Plus className="size-3.5" />
+                                        New project
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[600px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Initiate HQ Project</DialogTitle>
+                                        <DialogDescription>
+                                            Define high-level objectives, budget, and timeline.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <ProjectForm
+                                        onSuccess={() => {
+                                            setIsDialogOpen(false)
+                                            fetchProjects()
+                                        }}
+                                        onCancel={() => setIsDialogOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
                         </div>
                     }
                 />
 
                 {loading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="h-[250px] rounded-xl bg-muted animate-pulse border" />
+                            <div key={i} className="h-[200px] rounded-lg bg-muted/40 animate-pulse" />
                         ))}
                     </div>
                 ) : projects.length > 0 ? (
                     <>
                         <div className={viewMode === 'grid'
-                            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                            : "flex flex-col gap-4"
+                            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                            : "flex flex-col gap-3"
                         }>
                             {projects.map((project) => (
                                 <ProjectCard
@@ -184,31 +180,30 @@ export default function ProjectsPage() {
                                 />
                             ))}
                         </div>
-                        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-                            <TablePagination
-                                page={page}
-                                pageCount={pageCount}
-                                onPageChange={setPage}
-                                totalItems={totalCount}
-                                pageSize={PAGE_SIZE}
-                            />
-                        </div>
+                        <TablePagination
+                            page={page}
+                            pageCount={pageCount}
+                            onPageChange={setPage}
+                            totalItems={totalCount}
+                            pageSize={PAGE_SIZE}
+                        />
                     </>
                 ) : (
-                    <div className="py-24 text-center border-2 border-dashed rounded-2xl bg-muted/10">
-                        <div className="size-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Calendar className="size-10 text-muted-foreground" />
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
+                        <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Calendar className="size-5 text-muted-foreground" />
                         </div>
-                        <h3 className="text-xl font-bold">No High-Level Projects</h3>
-                        <p className="text-muted-foreground max-w-sm mx-auto mt-2 italic">
-                            You haven&apos;t initiated any capital projects or major site refurbs yet.
+                        <h3 className="text-base font-medium text-foreground">No HQ projects yet</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                            You haven&apos;t initiated any capital projects or major site refurbs.
                         </p>
                         <Button
                             variant="outline"
-                            className="mt-6 border-primary text-primary hover:bg-primary/5"
+                            size="sm"
+                            className="mt-4"
                             onClick={() => setIsDialogOpen(true)}
                         >
-                            Initiate First Project
+                            Initiate first project
                         </Button>
                     </div>
                 )}

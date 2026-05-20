@@ -396,59 +396,57 @@ export default function AnalyticsPage() {
                 />
 
                 {/* Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <Card className="bg-primary/5 border-primary/20">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <Card>
+                        <CardHeader className="pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                                 <Layers className="size-3.5" />
-                                Total Assets
+                                Total assets
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black">{data.totalAssets}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">
-                                {healthPercent}% HEALTHY
-                            </p>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">{data.totalAssets}</div>
+                            <p className="text-xs text-muted-foreground mt-1">{healthPercent}% healthy</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-green-200 bg-green-50/30 dark:bg-green-950/20 dark:border-green-900">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400 flex items-center gap-1.5">
-                                <CheckCircle2 className="size-3.5" />
+                    <Card>
+                        <CardHeader className="pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 text-emerald-500" />
                                 Healthy
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-green-600 dark:text-green-400">{data.healthyCount}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">NO ACTION NEEDED</p>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">{data.healthyCount}</div>
+                            <p className="text-xs text-muted-foreground mt-1">No action needed</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-amber-200 bg-amber-50/30 dark:bg-amber-950/20 dark:border-amber-900">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                                <Clock className="size-3.5" />
-                                Due Soon
+                    <Card>
+                        <CardHeader className="pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <Clock className="size-3.5 text-amber-500" />
+                                Due soon
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-amber-600 dark:text-amber-400">{data.dueCount}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">WITHIN 30 DAYS</p>
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">{data.dueCount}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Within 30 days</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-red-200 bg-red-50/30 dark:bg-red-950/20 dark:border-red-900">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-1.5">
-                                <AlertTriangle className="size-3.5" />
+                    <Card>
+                        <CardHeader className="pb-1">
+                            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                <AlertTriangle className="size-3.5 text-destructive" />
                                 Attention
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-black text-red-600 dark:text-red-400">{data.overdueCount + data.faultedCount}</div>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-medium">
-                                {data.overdueCount} OVERDUE + {data.faultedCount} FAULTED
+                            <div className="text-3xl font-semibold tabular-nums text-foreground">{data.overdueCount + data.faultedCount}</div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {data.overdueCount} overdue · {data.faultedCount} faulted
                             </p>
                         </CardContent>
                     </Card>
@@ -456,9 +454,9 @@ export default function AnalyticsPage() {
 
                 {/* Charts Row 1: Health Donut + Asset Distribution by Type */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <Card className="shadow-sm border-sidebar-border">
+                    <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Activity className="size-4 text-primary" />
                                 Asset Health Overview
                             </CardTitle>
@@ -503,9 +501,9 @@ export default function AnalyticsPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="shadow-sm border-sidebar-border">
+                    <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <BarChart3 className="size-4 text-primary" />
                                 Assets by Type
                             </CardTitle>
@@ -547,9 +545,9 @@ export default function AnalyticsPage() {
 
                 {/* Charts Row 2: Maintenance Activity + Assets by Region */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <Card className="shadow-sm border-sidebar-border">
+                    <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Wrench className="size-4 text-primary" />
                                 Maintenance Activity (6 Months)
                             </CardTitle>
@@ -614,9 +612,9 @@ export default function AnalyticsPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="shadow-sm border-sidebar-border">
+                    <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <MapPin className="size-4 text-primary" />
                                 Assets by Region
                             </CardTitle>
@@ -658,9 +656,9 @@ export default function AnalyticsPage() {
 
                 {/* Upcoming Maintenance Table */}
                 {data.upcomingMaintenance.length > 0 && (
-                    <Card className="shadow-sm border-sidebar-border">
+                    <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-bold flex items-center gap-2 italic">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Clock className="size-4 text-primary" />
                                 Upcoming Scheduled Maintenance (Next 90 Days)
                             </CardTitle>
