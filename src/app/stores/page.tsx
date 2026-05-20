@@ -23,6 +23,7 @@ import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Building2 } from "lucide-react"
 import { computeHealthScore } from "@/lib/health-score"
+import { formatHoursShort } from "@/lib/hours"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
@@ -452,19 +453,7 @@ export default function StoresListPage() {
                                         </TableCell>
                                         <TableCell className="text-sm hidden xl:table-cell text-muted-foreground py-3">
                                             <span className="truncate max-w-[200px] inline-block align-middle">
-                                                {(() => {
-                                                    if (!store.hours_of_operation) return "\u2014"
-                                                    try {
-                                                        const hours = JSON.parse(store.hours_of_operation)
-                                                        if (hours.type === "daily") {
-                                                            return `${hours.hours.start}\u2013${hours.hours.end}`
-                                                        } else {
-                                                            return "Weekly schedule"
-                                                        }
-                                                    } catch {
-                                                        return store.hours_of_operation
-                                                    }
-                                                })()}
+                                                {formatHoursShort(store.hours_of_operation)}
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-right py-3">

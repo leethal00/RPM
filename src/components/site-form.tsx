@@ -96,10 +96,17 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
     // State for structured hours
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    const [is24Hours, setIs24Hours] = useState<boolean>(() => {
+        try {
+            return JSON.parse(site?.hours_of_operation || "{}").type === "always"
+        } catch {
+            return false
+        }
+    })
     const [hoursType, setHoursType] = useState<"daily" | "weekly">(() => {
         try {
             const parsed = JSON.parse(site?.hours_of_operation || "{}")
-            return parsed.type || "daily"
+            return parsed.type === "weekly" ? "weekly" : "daily"
         } catch {
             return "daily"
         }
@@ -214,10 +221,12 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             return
         }
 
-        // Prepare hours JSON
-        const hoursData = hoursType === "daily"
-            ? { type: "daily", hours: dailyHours }
-            : { type: "weekly", days: weeklyHours }
+        // Prepare hours JSON. 24-hour mode takes precedence over daily/weekly.
+        const hoursData = is24Hours
+            ? { type: "always" }
+            : hoursType === "daily"
+                ? { type: "daily", hours: dailyHours }
+                : { type: "weekly", days: weeklyHours }
 
         const payload = {
             ...formData,
@@ -472,31 +481,49 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                     </div>
                 </div>
 
-                <div className="space-y-4 border-t pt-4">
+                <div className="space-y-4 border-t border-border/60 pt-4">
                     <div className="flex items-center justify-between">
-                        <Label className="text-xs font-medium text-muted-foreground">Hours of Operation</Label>
-                        <div className="flex bg-muted rounded-md p-1">
+                        <Label className="text-xs font-medium text-muted-foreground">Hours of operation</Label>
+                        <div className="flex bg-muted rounded-md p-0.5">
                             <button
                                 type="button"
-                                className={`px-3 py-1 text-[10px] font-bold rounded-sm transition-all ${hoursType === 'daily' ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                disabled={is24Hours}
+                                className={`px-3 py-1 text-xs rounded-sm transition-colors ${hoursType === 'daily' && !is24Hours ? 'bg-card shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'} ${is24Hours ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={() => setHoursType('daily')}
                             >
-                                ALL DAYS SAME
+                                All days same
                             </button>
                             <button
                                 type="button"
-                                className={`px-3 py-1 text-[10px] font-bold rounded-sm transition-all ${hoursType === 'weekly' ? 'bg-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                disabled={is24Hours}
+                                className={`px-3 py-1 text-xs rounded-sm transition-colors ${hoursType === 'weekly' && !is24Hours ? 'bg-card shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'} ${is24Hours ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={() => setHoursType('weekly')}
                             >
-                                SPECIFIC DAYS
+                                Specific days
                             </button>
                         </div>
                     </div>
 
-                    {hoursType === 'daily' ? (
-                        <div className="flex items-center gap-4 bg-muted/20 p-3 rounded-lg border border-dashed text-sm">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={is24Hours}
+                            onChange={(e) => setIs24Hours(e.target.checked)}
+                            className="size-4 accent-primary"
+                        />
+                        <span className="font-medium text-foreground">Open 24 hours</span>
+                        <span className="text-xs text-muted-foreground">— this site operates 24/7</span>
+                    </label>
+
+                    {is24Hours ? (
+                        <div className="flex items-center justify-center gap-2 bg-muted/40 p-4 rounded-md border border-dashed border-border/60 text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">24 hours</span>
+                            <span>— hour inputs disabled while this is on</span>
+                        </div>
+                    ) : hoursType === 'daily' ? (
+                        <div className="flex items-center gap-4 bg-muted/40 p-3 rounded-md border border-dashed border-border/60 text-sm">
                             <div className="flex-1 grid gap-1.5">
-                                <span className="text-[10px] text-muted-foreground uppercase font-bold">Open</span>
+                                <span className="text-xs text-muted-foreground">Open</span>
                                 <Input
                                     type="time"
                                     value={dailyHours.start}
@@ -505,7 +532,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                                 />
                             </div>
                             <div className="flex-1 grid gap-1.5">
-                                <span className="text-[10px] text-muted-foreground uppercase font-bold">Close</span>
+                                <span className="text-xs text-muted-foreground">Close</span>
                                 <Input
                                     type="time"
                                     value={dailyHours.end}
@@ -515,23 +542,23 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             {daysOfWeek.map(day => (
-                                <div key={day} className="flex items-center justify-between p-2 hover:bg-muted/30 rounded-lg border border-transparent hover:border-muted/50 transition-all text-xs">
-                                    <span className="font-semibold w-20">{day}</span>
+                                <div key={day} className="flex items-center justify-between p-2 hover:bg-accent/30 rounded-md transition-colors text-sm">
+                                    <span className="font-medium w-20">{day}</span>
                                     <div className="flex items-center gap-2">
                                         <Input
                                             type="time"
                                             value={weeklyHours[day].start}
                                             onChange={(e) => setWeeklyHours({ ...weeklyHours, [day]: { ...weeklyHours[day], start: e.target.value } })}
-                                            className="h-7 w-24 text-[10px]"
+                                            className="h-7 w-24 text-xs"
                                         />
-                                        <span className="text-muted-foreground text-[10px]">—</span>
+                                        <span className="text-muted-foreground text-xs">–</span>
                                         <Input
                                             type="time"
                                             value={weeklyHours[day].end}
                                             onChange={(e) => setWeeklyHours({ ...weeklyHours, [day]: { ...weeklyHours[day], end: e.target.value } })}
-                                            className="h-7 w-24 text-[10px]"
+                                            className="h-7 w-24 text-xs"
                                         />
                                     </div>
                                 </div>
