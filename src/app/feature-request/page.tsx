@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
+import { createClient } from "@/lib/supabase/client"
 
 export default function FeatureRequestPage() {
   const [title, setTitle] = useState("")
@@ -26,11 +27,27 @@ export default function FeatureRequestPage() {
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium")
   const [aiAutoBuild, setAiAutoBuild] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [developerMode, setDeveloperMode] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<{
     type: "success" | "error" | null
     message: string
     issueUrl?: string
   }>({ type: null, message: "" })
+
+  useEffect(() => {
+    const supabase = createClient()
+    async function checkDeveloperMode() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from("users")
+        .select("developer_mode")
+        .eq("id", user.id)
+        .single()
+      setDeveloperMode(Boolean(profile?.developer_mode))
+    }
+    checkDeveloperMode()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,7 +64,9 @@ export default function FeatureRequestPage() {
           title,
           description,
           priority,
-          aiAutoBuild,
+          // Defence-in-depth: even if a non-dev somehow toggled this on,
+          // never send true unless we know the caller is in developer mode.
+          aiAutoBuild: developerMode && aiAutoBuild,
         }),
       })
 
@@ -89,9 +108,11 @@ export default function FeatureRequestPage() {
       <PageShell width="narrow">
         <PageHeader
           icon={Lightbulb}
-          kicker="Feature Request"
-          title="Request a New Feature"
-          description="Have an idea to improve RPM? Submit your feature request as a tracking ticket, or enable AI Auto-Build for automatic implementation."
+          title="Suggest a feature"
+          description={developerMode
+            ? "Submit a tracking ticket, or enable AI Auto-Build to ship it directly."
+            : "Have an idea to improve RPM? Submit it as a tracking ticket and the team will pick it up."
+          }
         />
 
         {submitStatus.type === "success" && (
@@ -200,39 +221,35 @@ export default function FeatureRequestPage() {
                 </p>
               </div>
 
-              <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="size-5 text-primary" />
-                    <Label htmlFor="ai-auto-build" className="text-base font-semibold cursor-pointer">
-                      AI Auto-Build
-                    </Label>
+              {developerMode && (
+                <div className="space-y-3 p-4 bg-muted/40 rounded-md border border-border/60">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="size-4 text-primary" />
+                      <Label htmlFor="ai-auto-build" className="text-sm font-medium cursor-pointer">
+                        AI Auto-Build
+                      </Label>
+                    </div>
+                    <Switch
+                      id="ai-auto-build"
+                      checked={aiAutoBuild}
+                      onCheckedChange={setAiAutoBuild}
+                      disabled={isSubmitting}
+                    />
                   </div>
-                  <Switch
-                    id="ai-auto-build"
-                    checked={aiAutoBuild}
-                    onCheckedChange={setAiAutoBuild}
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div className="space-y-2 pl-7">
-                  {aiAutoBuild ? (
-                    <div className="flex items-start gap-2">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-foreground">
-                        <span className="font-semibold text-primary">AI Enabled:</span> Your feature request will trigger an automated workflow. Claude will read your requirements, implement the feature following best practices, run tests, and create a pull request for your review within minutes.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-2">
-                      <FileText className="size-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div className="space-y-2 pl-6">
+                    {aiAutoBuild ? (
                       <p className="text-sm text-muted-foreground">
-                        <span className="font-semibold text-foreground">Manual Tracking:</span> Your feature request will be created as a GitHub issue for tracking and manual implementation by the development team.
+                        <span className="font-medium text-foreground">AI enabled</span> — submission triggers the automated workflow. Claude reads the requirements, implements, runs tests, and pushes to <code className="text-xs">dev</code> within minutes.
                       </p>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Manual tracking</span> — a GitHub issue is created for the team to pick up.
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Button
@@ -272,98 +289,76 @@ export default function FeatureRequestPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+        {developerMode && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                {aiAutoBuild ? (
+                  <>
+                    <Sparkles className="size-4 text-primary" />
+                    AI Auto-Build workflow
+                  </>
+                ) : (
+                  <>
+                    <FileText className="size-4 text-muted-foreground" />
+                    Manual tracking workflow
+                  </>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
               {aiAutoBuild ? (
                 <>
-                  <Sparkles className="size-4 text-primary" />
-                  AI Auto-Build Workflow
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-primary/10 text-primary text-xs font-medium">1</div>
+                    <div>
+                      <p className="font-medium text-foreground">Submit</p>
+                      <p className="text-muted-foreground">Fill out the form with your feature idea and priority level.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-primary/10 text-primary text-xs font-medium">2</div>
+                    <div>
+                      <p className="font-medium text-foreground">AI implementation</p>
+                      <p className="text-muted-foreground">Claude analyses your request, implements following best practices, and runs tests.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-primary/10 text-primary text-xs font-medium">3</div>
+                    <div>
+                      <p className="font-medium text-foreground">Review</p>
+                      <p className="text-muted-foreground">A pull request lands on dev for you to review, preview, and approve or request changes.</p>
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
-                  <FileText className="size-4" />
-                  Manual Tracking Workflow
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-muted text-muted-foreground text-xs font-medium">1</div>
+                    <div>
+                      <p className="font-medium text-foreground">Submit</p>
+                      <p className="text-muted-foreground">Fill out the form with your feature idea and priority level.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-muted text-muted-foreground text-xs font-medium">2</div>
+                    <div>
+                      <p className="font-medium text-foreground">Issue created</p>
+                      <p className="text-muted-foreground">A GitHub issue is created on the repository for tracking and discussion.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-full bg-muted text-muted-foreground text-xs font-medium">3</div>
+                    <div>
+                      <p className="font-medium text-foreground">Manual development</p>
+                      <p className="text-muted-foreground">The development team reviews and implements based on priority and roadmap.</p>
+                    </div>
+                  </div>
                 </>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {aiAutoBuild ? (
-              <>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">Submit Your Request</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Fill out the form with your feature idea, priority level, and enable AI Auto-Build
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">AI Implementation</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Claude analyzes your request, implements the feature following best practices, and runs tests
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">Review & Approve</h4>
-                    <p className="text-sm text-muted-foreground">
-                      You receive a pull request to review, test in preview, and approve or request changes
-                    </p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-muted-foreground text-muted text-xs font-bold">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">Submit Your Request</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Fill out the form with your feature idea and priority level
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-muted-foreground text-muted text-xs font-bold">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">Issue Created</h4>
-                    <p className="text-sm text-muted-foreground">
-                      A GitHub issue is created on the repository for tracking and discussion
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-muted-foreground text-muted text-xs font-bold">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm">Manual Development</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The development team reviews and implements the feature based on priority and roadmap
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </PageShell>
     </DashboardLayout>
   )

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
 const GITHUB_REPO_OWNER = "leethal00"
 const GITHUB_REPO_NAME = "RPM"
@@ -26,6 +27,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Server-side authorisation for AI Auto-Build. The form already hides
+    // the toggle from non-devs, but a hand-crafted POST could still slip
+    // aiAutoBuild=true through. Reject it here unless the caller has
+    // developer_mode=true on their users row.
+    let aiAutoBuildAuthorized = false
+    if (aiAutoBuild) {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        return NextResponse.json(
+          { error: "You must be signed in to submit a feature request." },
+          { status: 401 }
+        )
+      }
+      const { data: profile } = await supabase
+        .from("users")
+        .select("developer_mode")
+        .eq("id", user.id)
+        .single()
+      if (!profile?.developer_mode) {
+        return NextResponse.json(
+          { error: "AI Auto-Build is restricted to developer accounts." },
+          { status: 403 }
+        )
+      }
+      aiAutoBuildAuthorized = true
+    }
+
     // Map priority to label
     const priorityLabels: Record<string, string> = {
       low: "priority: low",
@@ -35,9 +64,10 @@ export async function POST(request: NextRequest) {
 
     const priorityLabel = priorityLabels[priority] || "priority: medium"
 
-    // Build labels array based on aiAutoBuild setting
+    // Build labels array — ai-feature label only attached after server-side
+    // authorisation check passed above.
     const labels = [priorityLabel]
-    if (aiAutoBuild) {
+    if (aiAutoBuildAuthorized) {
       labels.push("ai-feature")
     }
 
@@ -49,7 +79,7 @@ ${description}
 ---
 
 **Priority:** ${priority.toUpperCase()}
-**AI Auto-Build:** ${aiAutoBuild ? "✅ Enabled" : "❌ Disabled"}
+**AI Auto-Build:** ${aiAutoBuildAuthorized ? "✅ Enabled" : "❌ Disabled"}
 
 *This feature request was submitted via the RPM Feature Request form.*
 `

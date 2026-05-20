@@ -25,6 +25,7 @@ export interface UserProfile {
   client_id: string | null
   store_ids: string[]
   avatar_url: string | null
+  developer_mode: boolean
   created_at: string
   updated_at: string
 }

@@ -32,11 +32,16 @@ interface FeatureRequest {
   pull_request: boolean
 }
 
+const STALE_CUTOFF_DAYS = 90
+
 export default function FeatureRequestsPage() {
   const [requests, setRequests] = useState<FeatureRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all")
+  const [showOlder, setShowOlder] = useState(false)
+  // Frozen on mount so the cutoff doesn't shift mid-render.
+  const [cutoff] = useState(() => Date.now() - STALE_CUTOFF_DAYS * 24 * 60 * 60 * 1000)
 
   const fetchFeatureRequests = async () => {
     setIsLoading(true)
@@ -63,10 +68,20 @@ export default function FeatureRequestsPage() {
     fetchFeatureRequests()
   }, [])
 
-  const filteredRequests = requests.filter((request) => {
-    if (filter === "all") return true
-    return request.state === filter
-  })
+  // Closed items older than the cutoff are auto-hidden so the pipeline
+  // stays focused on recent / live work. Toggle "Show older" to reveal.
+  const isStaleClosed = (r: FeatureRequest) =>
+    r.state === "closed" && r.closed_at != null && new Date(r.closed_at).getTime() < cutoff
+
+  const visibleByAge = (r: FeatureRequest) => showOlder || !isStaleClosed(r)
+
+  const filteredRequests = requests
+    .filter((request) => filter === "all" || request.state === filter)
+    .filter(visibleByAge)
+
+  const hiddenStaleCount = requests.filter((r) =>
+    (filter === "all" || r.state === filter) && isStaleClosed(r)
+  ).length
 
   const getStateIcon = (state: string) => {
     if (state === "closed") return <CheckCircle2 className="size-4 text-green-600" />
@@ -112,21 +127,20 @@ export default function FeatureRequestsPage() {
       <PageShell>
         <PageHeader
           icon={ClipboardList}
-          kicker="Feature Requests"
-          title="Submitted Features"
-          description="View and track all feature requests submitted to RPM."
+          title="Feature pipeline"
+          description="Suggested features the team is working through, with current status."
           actions={
-            <Button asChild>
+            <Button size="sm" asChild className="gap-1.5">
               <Link href="/feature-request">
-                <Sparkles className="mr-2 h-4 w-4" />
-                New Feature Request
+                <Sparkles className="size-3.5" />
+                Suggest a feature
               </Link>
             </Button>
           }
         />
 
         {/* Filter Tabs */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={filter === "all" ? "default" : "outline"}
             onClick={() => setFilter("all")}
@@ -139,7 +153,7 @@ export default function FeatureRequestsPage() {
             onClick={() => setFilter("open")}
             size="sm"
           >
-            In Progress ({requests.filter(r => r.state === "open").length})
+            In progress ({requests.filter(r => r.state === "open").length})
           </Button>
           <Button
             variant={filter === "closed" ? "default" : "outline"}
@@ -148,6 +162,17 @@ export default function FeatureRequestsPage() {
           >
             Completed ({requests.filter(r => r.state === "closed").length})
           </Button>
+          {hiddenStaleCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOlder((v) => !v)}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showOlder
+                ? `Hide ${hiddenStaleCount} older closed`
+                : `Show ${hiddenStaleCount} older closed (>${STALE_CUTOFF_DAYS} days)`}
+            </button>
+          )}
         </div>
 
         {error && (
