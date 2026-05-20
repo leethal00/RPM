@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SessionTimeoutDialog } from "@/components/session-timeout-dialog"
 import { createClient } from "@/lib/supabase/client"
+import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 
 export default function DashboardLayout({
     children,
@@ -39,10 +40,11 @@ export default function DashboardLayout({
                         <div className="flex items-center gap-2">
                             <SidebarTrigger className="-ml-1" />
                             <Separator orientation="vertical" className="mr-2 h-4" />
-                            <div className="flex items-center gap-2 px-4">
+                            <div className="flex items-center gap-3 px-4">
                                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
                                     Rodier Property Maintenance
                                 </h1>
+                                <CustomerFilterDropdown />
                             </div>
                         </div>
                         <div className="flex items-center gap-4">

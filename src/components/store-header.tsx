@@ -1,7 +1,7 @@
-import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Phone, User, Heart } from "lucide-react"
 import type { Store } from "@/types/database"
+import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 
 interface StoreHeaderProps {
     store: Store
@@ -25,17 +25,11 @@ export function StoreHeader({ store }: StoreHeaderProps) {
                         </Badge>
 
                         {/* Brand Logos */}
-                        <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 rounded-2xl border-2 shadow-sm">
-                            {store.brand_st_pierres !== false && (
-                                <Image src="/brands/st-pierres.png" alt="St Pierre's" width={80} height={80} className="h-20 w-auto object-contain" title="St Pierre's Sushi" />
-                            )}
-                            {store.brand_bento_bowl && (
-                                <Image src="/brands/bento-bowl.png" alt="Bento Bowl" width={80} height={80} className="h-20 w-auto object-contain" title="Bento Bowl" />
-                            )}
-                            {store.brand_k10 && (
-                                <Image src="/brands/k10.png" alt="K10" width={80} height={80} className="h-20 w-auto object-contain" title="K10 Sushi Train" />
-                            )}
-                        </div>
+                        {brandsFromStore(store).length > 0 && (
+                            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 rounded-2xl border-2 shadow-sm">
+                                <BrandChips brands={brandsFromStore(store)} size="lg" />
+                            </div>
+                        )}
 
                         {store.site_category && (
                             <Badge variant="outline" className="text-muted-foreground uppercase text-[10px]">

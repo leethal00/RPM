@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select"
 import { TablePagination } from "@/components/table-pagination"
 import type { Job, Store } from "@/types/database"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 const PAGE_SIZE = 25
 
@@ -25,8 +26,9 @@ export default function JobLogsPage() {
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [severityFilter, setSeverityFilter] = useState<string>("all")
+    const { clientId } = useCustomerFilter()
 
-    const jobsKey = `jobs-${page}-${search}-${statusFilter}-${severityFilter}`
+    const jobsKey = `jobs-${page}-${search}-${statusFilter}-${severityFilter}-${clientId ?? 'all'}`
 
     const { data: jobsResult, isLoading: loading, error: swrError } = useSupabaseQuery<{ items: (Job & { stores: Pick<Store, 'name'> | null })[], count: number }>(
         jobsKey,
@@ -35,7 +37,7 @@ export default function JobLogsPage() {
                 .from('jobs')
                 .select(`
                     *,
-                    stores ( name )
+                    stores!inner ( name, client_id )
                 `, { count: "exact" })
 
             if (search.trim()) {
@@ -49,6 +51,10 @@ export default function JobLogsPage() {
 
             if (severityFilter !== "all") {
                 query = query.eq("severity", severityFilter)
+            }
+
+            if (clientId) {
+                query = query.eq("stores.client_id", clientId)
             }
 
             query = query.order('created_at', { ascending: false })

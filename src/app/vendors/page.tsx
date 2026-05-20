@@ -16,6 +16,7 @@ import {
     BarChart3
 } from "lucide-react"
 import type { Vendor, Job } from "@/types/database"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 type VendorMetrics = { openJobs: number; avgResolutionHours: number }
 type VendorWithMetrics = Vendor & { metrics: VendorMetrics }
@@ -47,8 +48,9 @@ export default function VendorsPage() {
     const [search, setSearch] = useState("")
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
+    const { clientId } = useCustomerFilter()
 
-    const vendorsKey = `vendors-${page}-${search}`
+    const vendorsKey = `vendors-${page}-${search}-${clientId ?? 'all'}`
 
     const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: VendorWithMetrics[], count: number }>(
         vendorsKey,
@@ -60,6 +62,10 @@ export default function VendorsPage() {
             if (search.trim()) {
                 const term = `%${search.trim()}%`
                 query = query.or(`name.ilike.${term},trade.ilike.${term}`)
+            }
+
+            if (clientId) {
+                query = query.eq('client_id', clientId)
             }
 
             query = query.order('name')

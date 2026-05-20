@@ -11,9 +11,8 @@ export const siteSchema = z.object({
   region: z.string().optional(),
   manager_name: z.string().optional(),
   status: z.enum(["active", "inactive", "maintenance"]),
-  brand_st_pierres: z.boolean(),
-  brand_bento_bowl: z.boolean(),
-  brand_k10: z.boolean(),
+  client_id: z.string().uuid("Please select a customer"),
+  brand_ids: z.array(z.string().uuid()).default([]),
   site_category: z.string(),
   has_drive_thru: z.boolean(),
 })

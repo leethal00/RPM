@@ -18,10 +18,12 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import type { Asset, Store, AssetType, Job } from "@/types/database"
+import type { Asset, Store, AssetType, Job, ClientBrand } from "@/types/database"
 
 type PMAsset = Asset & {
-    stores: Pick<Store, 'id' | 'name' | 'brand_st_pierres' | 'brand_bento_bowl' | 'brand_k10'>
+    stores: Pick<Store, 'id' | 'name'> & {
+        store_brands?: { brand_id: string; client_brands?: ClientBrand }[]
+    }
     asset_types: Pick<AssetType, 'label'> | null
     jobs: Pick<Job, 'status'>[]
 }
@@ -42,9 +44,10 @@ export default function PMSchedulerPage() {
                 stores (
                     name,
                     id,
-                    brand_st_pierres,
-                    brand_bento_bowl,
-                    brand_k10
+                    store_brands (
+                        brand_id,
+                        client_brands ( * )
+                    )
                 ),
                 asset_types (
                     label
@@ -84,10 +87,13 @@ export default function PMSchedulerPage() {
         return "bg-emerald-50 text-emerald-600"
     }
 
-    const getStoreBrand = (store: Pick<Store, 'brand_st_pierres' | 'brand_bento_bowl' | 'brand_k10'>) => {
-        if (store.brand_bento_bowl) return "Bento Bowl"
-        if (store.brand_k10) return "K10"
-        return "St Pierre's"
+    // Show the first brand at this site (sites typically have one primary brand)
+    const getStoreBrand = (store: { store_brands?: { client_brands?: ClientBrand }[] }) => {
+        const brands = store.store_brands
+            ?.map((sb) => sb.client_brands)
+            .filter((b): b is ClientBrand => b != null)
+            .sort((a, b) => a.display_order - b.display_order)
+        return brands?.[0]?.label ?? ""
     }
 
     // Helper for 18-month quarter rounding

@@ -1,11 +1,11 @@
 "use client"
 
-import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Search, Filter, MapPin } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
 import type { Store } from "@/types/database"
+import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 
 interface StoreListProps {
     stores: Store[]
@@ -56,23 +56,7 @@ export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, o
                                             </span>
                                         )}
                                         <h3 className="font-bold text-sm tracking-tight leading-tight break-words pr-2">{store.name}</h3>
-                                        <div className="flex items-center gap-1">
-                                            {store.brand_st_pierres !== false && (
-                                                <div className="h-12 w-12 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                    <Image src="/brands/st-pierres.png" alt="SP" width={40} height={40} className="h-full w-full object-contain" title="St Pierre's Sushi" />
-                                                </div>
-                                            )}
-                                            {store.brand_bento_bowl && (
-                                                <div className="h-12 w-12 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                    <Image src="/brands/bento-bowl.png" alt="BB" width={40} height={40} className="h-full w-full object-contain" title="Bento Bowl" />
-                                                </div>
-                                            )}
-                                            {store.brand_k10 && (
-                                                <div className="h-12 w-12 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center">
-                                                    <Image src="/brands/k10.png" alt="K10" width={40} height={40} className="h-full w-full object-contain" title="K10 Sushi Train" />
-                                                </div>
-                                            )}
-                                        </div>
+                                        <BrandChips brands={brandsFromStore(store)} size="md" />
                                     </div>
                                     <div className={`size-2.5 rounded-full shrink-0 mt-1 ${store.status === 'active' ? 'bg-green-500' :
                                         store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'

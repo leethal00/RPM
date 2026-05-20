@@ -6,6 +6,7 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { StoreList } from "@/components/store-list"
 import { createClient } from "@/lib/supabase/client"
 import type { Store } from "@/types/database"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 const StoreMap = dynamic(() => import("@/components/store-map"), {
   ssr: false,
@@ -18,12 +19,16 @@ export default function MapPage() {
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const supabase = createClient()
+  const { clientId } = useCustomerFilter()
 
   useEffect(() => {
     async function fetchStores() {
-      const { data, error } = await supabase
+      setLoading(true)
+      let query = supabase
         .from('stores')
-        .select('*, client:clients(name), site_photos(url)')
+        .select('*, client:clients(name), site_photos(url), store_brands(brand_id, client_brands(*))')
+      if (clientId) query = query.eq('client_id', clientId)
+      const { data, error } = await query
 
       if (!error && data) {
         setStores(data as Store[])
@@ -32,7 +37,7 @@ export default function MapPage() {
     }
 
     fetchStores()
-  }, [supabase])
+  }, [supabase, clientId])
 
   const center: [number, number] = selectedStore?.lat != null && selectedStore?.lng != null
     ? [selectedStore.lat, selectedStore.lng]

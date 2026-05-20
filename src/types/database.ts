@@ -41,9 +41,6 @@ export interface Store {
   manager_phone: string | null
   rodier_account_manager_id: string | null
   status: StoreStatus
-  brand_st_pierres: boolean
-  brand_bento_bowl: boolean
-  brand_k10: boolean
   site_type: string | null
   site_category: string | null
   maintenance_score: number | null
@@ -57,6 +54,19 @@ export interface Store {
   projects?: Project[]
   clients?: Client
   site_photos?: SitePhoto[]
+  store_brands?: { brand_id: string; client_brands?: ClientBrand }[]
+}
+
+export interface ClientBrand {
+  id: string
+  client_id: string
+  key: string
+  label: string
+  logo_url: string | null
+  color: string | null
+  display_order: number
+  created_at: string
+  updated_at: string
 }
 
 export interface AssetType {

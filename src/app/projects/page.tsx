@@ -27,6 +27,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { TablePagination } from "@/components/table-pagination"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 const PAGE_SIZE = 12
 
@@ -36,8 +37,9 @@ export default function ProjectsPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const { clientId } = useCustomerFilter()
 
-    const projectsKey = `projects-${page}-${statusFilter}`
+    const projectsKey = `projects-${page}-${statusFilter}-${clientId ?? 'all'}`
 
     const { data: projectsResult, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<{ items: ProjectRow[], count: number }>(
         projectsKey,
@@ -50,12 +52,17 @@ export default function ProjectsPage() {
                         id,
                         status,
                         budget_impact
-                    )
+                    ),
+                    stores!inner ( client_id )
                 `, { count: "exact" })
                 .neq('status', 'archived')
 
             if (statusFilter !== "all") {
                 query = query.eq('status', statusFilter)
+            }
+
+            if (clientId) {
+                query = query.eq('stores.client_id', clientId)
             }
 
             query = query.order('created_at', { ascending: false })

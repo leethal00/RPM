@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { Loader2 } from "lucide-react"
+import { Loader2, Check } from "lucide-react"
 import {
     Select,
     SelectContent,
@@ -16,8 +15,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import type { Region, Client, Store } from "@/types/database"
+import type { Region, Client, Store, ClientBrand } from "@/types/database"
 import { siteSchema, getValidationErrors } from "@/lib/validations"
+import { BrandChip, brandsFromStore } from "@/components/brand-chip"
 
 interface GeocodeSuggestion {
     display_name: string
@@ -38,6 +38,12 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
     const [customers, setCustomers] = useState<Client[]>([])
     const [clientId, setClientId] = useState<string>(site?.client_id || "")
 
+    // Brands available for the currently-selected customer, plus the current selection
+    const [availableBrands, setAvailableBrands] = useState<ClientBrand[]>([])
+    const [selectedBrandIds, setSelectedBrandIds] = useState<Set<string>>(
+        () => new Set(brandsFromStore(site ?? {}).map((b) => b.id))
+    )
+
     // Form State
     const [formData, setFormData] = useState({
         name: site?.name || "",
@@ -46,9 +52,6 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         manager_name: site?.manager_name || "",
         manager_phone: site?.manager_phone || "",
         status: site?.status || "active",
-        brand_st_pierres: site?.brand_st_pierres ?? true,
-        brand_bento_bowl: site?.brand_bento_bowl ?? false,
-        brand_k10: site?.brand_k10 ?? false,
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
         lat: site?.lat || null,
@@ -150,6 +153,42 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         fetchRegions()
     }, [supabase])
 
+    // Refresh brand list whenever the chosen customer changes.
+    // If user switches customer, clear any selected brands that no longer apply.
+    useEffect(() => {
+        if (!clientId) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAvailableBrands([])
+            return
+        }
+        async function fetchBrands() {
+            const { data } = await supabase
+                .from('client_brands')
+                .select('*')
+                .eq('client_id', clientId)
+                .order('display_order')
+            const brands = (data ?? []) as ClientBrand[]
+            setAvailableBrands(brands)
+            // Prune selection to brands that exist for this customer
+            setSelectedBrandIds(prev => {
+                const allowed = new Set(brands.map(b => b.id))
+                const pruned = new Set<string>()
+                prev.forEach(id => { if (allowed.has(id)) pruned.add(id) })
+                return pruned
+            })
+        }
+        fetchBrands()
+    }, [supabase, clientId])
+
+    const toggleBrand = (brandId: string) => {
+        setSelectedBrandIds(prev => {
+            const next = new Set(prev)
+            if (next.has(brandId)) next.delete(brandId)
+            else next.add(brandId)
+            return next
+        })
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -160,7 +199,12 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             return
         }
 
-        const result = siteSchema.safeParse(formData)
+        const validationPayload = {
+            ...formData,
+            client_id: clientId,
+            brand_ids: Array.from(selectedBrandIds),
+        }
+        const result = siteSchema.safeParse(validationPayload)
         if (!result.success) {
             const errors = getValidationErrors(result)
             errors.forEach((msg) => toast.error(msg))
@@ -177,36 +221,50 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             ...formData,
             client_id: clientId,
             hours_of_operation: JSON.stringify(hoursData),
-            // Legacy support
-            bento_bowl: formData.brand_bento_bowl
         }
 
-        let error, count
+        let storeId = site?.id
+        let error
+
         if (site?.id) {
-            const { error: updateError, count: updateCount } = await supabase
+            const { error: updateError } = await supabase
                 .from('stores')
-                .update(payload, { count: 'exact' })
+                .update(payload)
                 .eq('id', site.id)
             error = updateError
-            count = updateCount
         } else {
-            const { error: insertError, count: insertCount } = await supabase
+            const { data: inserted, error: insertError } = await supabase
                 .from('stores')
-                .insert(payload, { count: 'exact' })
+                .insert(payload)
+                .select('id')
+                .single()
             error = insertError
-            count = insertCount
+            if (!error && inserted) storeId = inserted.id
         }
 
         if (error) {
             toast.error(error.message)
-        } else {
-            if (count === 0 && site?.id) {
-                toast.warning("Site found but 0 changes applied (check permissions)")
-            } else {
-                toast.success(site?.id ? "Site updated successfully" : "Site added successfully")
-            }
-            onSuccess()
+            setLoading(false)
+            return
         }
+
+        // Sync store_brands: delete all current, insert the new selection.
+        // Simple approach — small N (typically 1-3 brands per site) keeps this cheap.
+        if (storeId) {
+            await supabase.from('store_brands').delete().eq('store_id', storeId)
+            const brandRows = Array.from(selectedBrandIds).map(brand_id => ({ store_id: storeId, brand_id }))
+            if (brandRows.length > 0) {
+                const { error: brandError } = await supabase.from('store_brands').insert(brandRows)
+                if (brandError) {
+                    toast.error(`Site saved but failed to update brands: ${brandError.message}`)
+                    setLoading(false)
+                    return
+                }
+            }
+        }
+
+        toast.success(site?.id ? "Site updated successfully" : "Site added successfully")
+        onSuccess()
         setLoading(false)
     }
 
@@ -265,64 +323,40 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
 
                 <div className="space-y-3">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Brands at this Site</Label>
-                    <div className="grid grid-cols-3 gap-3">
-                        {/* St Pierre's - Always True */}
-                        <div className="relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-primary bg-primary/5 cursor-default">
-                            <div className="h-10 w-full flex items-center justify-center">
-                                <Image src="/brands/st-pierres.png" alt="St Pierres" width={40} height={40} className="max-h-full max-w-full object-contain" />
-                            </div>
-                            <span className="text-[10px] font-bold text-primary uppercase">Sushi of Japan</span>
-                            <div className="absolute -top-2 -right-2 bg-primary text-white rounded-full p-0.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            </div>
+                    {availableBrands.length === 0 ? (
+                        <div className="p-3 text-xs italic text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
+                            {clientId
+                                ? "This customer has no brands configured yet. Add brands via Portal Settings → Customers."
+                                : "Select a customer first to see its brands."}
                         </div>
-
-                        {/* Bento Bowl */}
-                        <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, brand_bento_bowl: !formData.brand_bento_bowl })}
-                            className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_bento_bowl ? 'border-[#e67e22] bg-[#e67e22]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
-                        >
-                            <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100 group">
-                                <Image
-                                    src="/brands/bento-bowl.png"
-                                    alt="Bento Bowl"
-                                    width={40}
-                                    height={40}
-                                    className={`max-h-full max-w-full object-contain ${formData.brand_bento_bowl ? 'grayscale-0 opacity-100' : ''}`}
-                                />
-                            </div>
-                            <span className={`text-[10px] font-bold uppercase ${formData.brand_bento_bowl ? 'text-[#e67e22]' : 'text-muted-foreground'}`}>Bento Bowl</span>
-                            {formData.brand_bento_bowl && (
-                                <div className="absolute -top-2 -right-2 bg-[#e67e22] text-white rounded-full p-0.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                </div>
-                            )}
-                        </button>
-
-                        {/* K10 */}
-                        <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, brand_k10: !formData.brand_k10 })}
-                            className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${formData.brand_k10 ? 'border-[#a32b2b] bg-[#a32b2b]/5' : 'border-muted bg-muted/20 hover:border-muted-foreground/30'}`}
-                        >
-                            <div className="h-10 w-full flex items-center justify-center grayscale hover:grayscale-0 transition-all opacity-70 hover:opacity-100">
-                                <Image
-                                    src="/brands/k10.png"
-                                    alt="K10"
-                                    width={40}
-                                    height={40}
-                                    className={`max-h-full max-w-full object-contain ${formData.brand_k10 ? 'grayscale-0 opacity-100' : ''}`}
-                                />
-                            </div>
-                            <span className={`text-[10px] font-bold uppercase ${formData.brand_k10 ? 'text-[#a32b2b]' : 'text-muted-foreground'}`}>K10 Train</span>
-                            {formData.brand_k10 && (
-                                <div className="absolute -top-2 -right-2 bg-[#a32b2b] text-white rounded-full p-0.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                </div>
-                            )}
-                        </button>
-                    </div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-3">
+                            {availableBrands.map((brand) => {
+                                const isSelected = selectedBrandIds.has(brand.id)
+                                return (
+                                    <button
+                                        key={brand.id}
+                                        type="button"
+                                        onClick={() => toggleBrand(brand.id)}
+                                        className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${isSelected
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-muted bg-muted/20 hover:border-muted-foreground/30 opacity-70 hover:opacity-100'
+                                            }`}
+                                    >
+                                        <BrandChip brand={brand} size="md" />
+                                        <span className={`text-[10px] font-bold uppercase tracking-tight text-center ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                            {brand.label}
+                                        </span>
+                                        {isSelected && (
+                                            <div className="absolute -top-2 -right-2 bg-primary text-white rounded-full p-0.5">
+                                                <Check className="size-3" strokeWidth={3} />
+                                            </div>
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid gap-2">

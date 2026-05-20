@@ -39,7 +39,11 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
 
     const { data: storeData, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery(
         `store-${id}`,
-        () => supabase.from('stores').select('*').eq('id', id).single()
+        () => supabase
+            .from('stores')
+            .select('*, store_brands(brand_id, client_brands(*))')
+            .eq('id', id)
+            .single()
     )
 
     const { data: assets, mutate: mutateAssets } = useSupabaseQuery<AssetRow[]>(

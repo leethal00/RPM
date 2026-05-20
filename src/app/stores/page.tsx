@@ -20,13 +20,15 @@ import {
     AlertTriangle,
     Filter
 } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
-import type { Store, Asset, Job, Vendor } from "@/types/database"
+import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
+import { BrandChips, brandsFromStore } from "@/components/brand-chip"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 type StoreRow = Store & {
     assets?: Pick<Asset, 'id' | 'next_service_date'>[]
     jobs?: Pick<Job, 'id' | 'vendor_id' | 'status'>[]
+    store_brands?: { brand_id: string; client_brands?: ClientBrand }[]
 }
 import {
     Table,
@@ -68,7 +70,9 @@ export default function StoresListPage() {
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
 
-    const storesKey = `stores-${page}-${search}-${filterRegion}-${sortConfig.key}-${sortConfig.direction}`
+    const { clientId } = useCustomerFilter()
+
+    const storesKey = `stores-${page}-${search}-${filterRegion}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
 
     const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
         storesKey,
@@ -85,6 +89,10 @@ export default function StoresListPage() {
                         id,
                         vendor_id,
                         status
+                    ),
+                    store_brands (
+                        brand_id,
+                        client_brands ( * )
                     )
                 `, { count: "exact" })
 
@@ -95,6 +103,10 @@ export default function StoresListPage() {
 
             if (filterRegion !== "all") {
                 query = query.eq("region", filterRegion)
+            }
+
+            if (clientId) {
+                query = query.eq("client_id", clientId)
             }
 
             query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
@@ -366,23 +378,7 @@ export default function StoresListPage() {
                                                     <Link href={`/stores/${store.id}`} className="hover:text-primary transition-colors">
                                                         {store.name}
                                                     </Link>
-                                                    <div className="flex items-center gap-1">
-                                                        {store.brand_st_pierres !== false && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="St Pierre's Sushi">
-                                                                <Image src="/brands/st-pierres.png" alt="SP" width={48} height={48} className="h-full w-full object-contain" />
-                                                            </div>
-                                                        )}
-                                                        {store.brand_bento_bowl && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="Bento Bowl">
-                                                                <Image src="/brands/bento-bowl.png" alt="BB" width={48} height={48} className="h-full w-full object-contain" />
-                                                            </div>
-                                                        )}
-                                                        {store.brand_k10 && (
-                                                            <div className="h-14 w-14 rounded-xl bg-white p-1 border-2 shadow-sm flex items-center justify-center" title="K10 Sushi Train">
-                                                                <Image src="/brands/k10.png" alt="K10" width={48} height={48} className="h-full w-full object-contain" />
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                    <BrandChips brands={brandsFromStore(store)} size="lg" />
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     {store.has_drive_thru && (
