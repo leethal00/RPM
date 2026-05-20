@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 import type { AssetPhoto } from "@/types/database"
+import { ensureRenderable, isHeic } from "@/lib/image-prep"
 
 interface AssetPhotoGalleryProps {
     assetId: string
@@ -45,17 +46,23 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     }, [assetId])
 
     const uploadFiles = async (files: File[]) => {
-        const images = files.filter(f => f.type.startsWith("image/"))
+        const images = files.filter(f => f.type.startsWith("image/") || isHeic(f))
         if (images.length === 0) {
             toast.error("Please drop image files only")
             return
         }
         setUploading(true)
+        const heicCount = images.filter(isHeic).length
+        let convertToastId: string | number | undefined
+        if (heicCount > 0) {
+            convertToastId = toast.loading(`Converting ${heicCount} HEIC photo${heicCount === 1 ? '' : 's'}…`)
+        }
         let succeeded = 0
         let failed = 0
         try {
-            for (const file of images) {
+            for (const raw of images) {
                 try {
+                    const file = await ensureRenderable(raw)
                     const fileExt = file.name.split('.').pop()
                     const fileName = `${assetId}/${Math.random()}.${fileExt}`
                     const filePath = `photos/${fileName}`
@@ -77,9 +84,10 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                     succeeded++
                 } catch (err: unknown) {
                     failed++
-                    console.error(`Upload failed for ${file.name}:`, err)
+                    console.error(`Upload failed for ${raw.name}:`, err)
                 }
             }
+            if (convertToastId !== undefined) toast.dismiss(convertToastId)
 
             if (succeeded > 0) {
                 toast.success(`${succeeded} photo${succeeded === 1 ? '' : 's'} uploaded${failed > 0 ? `, ${failed} failed` : ''}`)
@@ -149,7 +157,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                     <Input
                         id="asset-photo-upload"
                         type="file"
-                        accept="image/*"
+                        accept="image/*,.heic,.heif"
                         multiple
                         className="hidden"
                         onChange={handleFileInputChange}

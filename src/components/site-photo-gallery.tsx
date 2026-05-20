@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 import type { SitePhoto } from "@/types/database"
+import { ensureRenderable, isHeic } from "@/lib/image-prep"
 
 interface SitePhotoGalleryProps {
     storeId: string
@@ -45,17 +46,24 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     }, [storeId])
 
     const uploadFiles = async (files: File[]) => {
-        const images = files.filter(f => f.type.startsWith("image/"))
+        // Accept image/* AND HEIC files (some browsers ship them with empty MIME types).
+        const images = files.filter(f => f.type.startsWith("image/") || isHeic(f))
         if (images.length === 0) {
             toast.error("Please drop image files only")
             return
         }
         setUploading(true)
+        const heicCount = images.filter(isHeic).length
+        let convertToastId: string | number | undefined
+        if (heicCount > 0) {
+            convertToastId = toast.loading(`Converting ${heicCount} HEIC photo${heicCount === 1 ? '' : 's'}…`)
+        }
         let succeeded = 0
         let failed = 0
         try {
-            for (const file of images) {
+            for (const raw of images) {
                 try {
+                    const file = await ensureRenderable(raw)
                     const fileExt = file.name.split('.').pop()
                     const fileName = `${storeId}/${Math.random()}.${fileExt}`
                     const filePath = `photos/${fileName}`
@@ -77,9 +85,10 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                     succeeded++
                 } catch (err: unknown) {
                     failed++
-                    console.error(`Upload failed for ${file.name}:`, err)
+                    console.error(`Upload failed for ${raw.name}:`, err)
                 }
             }
+            if (convertToastId !== undefined) toast.dismiss(convertToastId)
 
             if (succeeded > 0) {
                 toast.success(`${succeeded} photo${succeeded === 1 ? '' : 's'} uploaded${failed > 0 ? `, ${failed} failed` : ''}`)
@@ -155,7 +164,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                         <Input
                             id="photo-upload"
                             type="file"
-                            accept="image/*"
+                            accept="image/*,.heic,.heif"
                             multiple
                             className="hidden"
                             onChange={handleFileInputChange}
