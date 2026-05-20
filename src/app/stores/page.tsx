@@ -73,10 +73,11 @@ export default function StoresListPage() {
     const [filterOverdue, setFilterOverdue] = useState(false)
     const [filterVendor, setFilterVendor] = useState<string>("all")
     const [filterRegion, setFilterRegion] = useState<string>("all")
+    const [filterUnverified, setFilterUnverified] = useState(false)
 
     const { clientId } = useCustomerFilter()
 
-    const storesKey = `stores-${page}-${search}-${filterRegion}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
+    const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
 
     const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
         storesKey,
@@ -111,6 +112,10 @@ export default function StoresListPage() {
 
             if (clientId) {
                 query = query.eq("client_id", clientId)
+            }
+
+            if (filterUnverified) {
+                query = query.is("lat", null)
             }
 
             query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
@@ -198,11 +203,17 @@ export default function StoresListPage() {
         setPage(1)
     }
 
+    const handleUnverifiedToggle = () => {
+        setFilterUnverified(prev => !prev)
+        setPage(1)
+    }
+
     const handleResetFilters = () => {
         setSearch("")
         setFilterOverdue(false)
         setFilterVendor("all")
         setFilterRegion("all")
+        setFilterUnverified(false)
         setPage(1)
     }
 
@@ -215,7 +226,7 @@ export default function StoresListPage() {
         setEditDialogOpen(true)
     }
 
-    const activeFilterCount = (search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0)
+    const activeFilterCount = (search !== "" ? 1 : 0) + (filterOverdue ? 1 : 0) + (filterVendor !== "all" ? 1 : 0) + (filterRegion !== "all" ? 1 : 0) + (filterUnverified ? 1 : 0)
 
     return (
         <DashboardLayout>
@@ -305,6 +316,15 @@ export default function StoresListPage() {
                             Overdue
                             {filterOverdue && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
                         </Button>
+                        <Button
+                            variant={filterUnverified ? "default" : "outline"}
+                            className="h-10 font-bold uppercase text-[10px] tracking-widest gap-2"
+                            onClick={handleUnverifiedToggle}
+                        >
+                            <MapPin className={`size-3.5 ${filterUnverified ? 'animate-pulse' : ''}`} />
+                            Unverified Only
+                            {filterUnverified && <Badge variant="secondary" className="bg-white/20 text-white border-none h-4 px-1 ml-0.5">ON</Badge>}
+                        </Button>
                     </div>
                 </div>
 
@@ -393,18 +413,28 @@ export default function StoresListPage() {
                                         </TableCell>
                                         <TableCell className="hidden md:table-cell">
                                             <div className="flex flex-col gap-1">
-                                                <Badge
-                                                    variant="outline"
-                                                    className={`
-                                                        font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit
-                                                        ${store.maintenance_score && store.maintenance_score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                            store.maintenance_score && store.maintenance_score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                                'bg-red-50 text-red-700 border-red-200'}
-                                                    `}
-                                                >
-                                                    <Heart className="size-2.5 fill-current" />
-                                                    {store.maintenance_score ?? 100}
-                                                </Badge>
+                                                {store.maintenance_score == null ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit text-muted-foreground"
+                                                    >
+                                                        <Heart className="size-2.5" />
+                                                        —
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`
+                                                            font-black text-[9px] tracking-widest uppercase gap-1 px-1.5 py-0.5 border-2 w-fit
+                                                            ${store.maintenance_score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                                store.maintenance_score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                                    'bg-red-50 text-red-700 border-red-200'}
+                                                        `}
+                                                    >
+                                                        <Heart className="size-2.5 fill-current" />
+                                                        {store.maintenance_score}
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell className="hidden lg:table-cell">
