@@ -19,8 +19,6 @@ export interface UserProfile {
   id: string
   email: string
   name: string | null
-  full_name: string | null
-  phone: string | null
   role: UserRole
   client_id: string | null
   store_ids: string[]

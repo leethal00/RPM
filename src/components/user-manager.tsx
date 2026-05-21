@@ -23,6 +23,7 @@ interface UserData {
     name?: string;
     role: string;
     client_id?: string;
+    developer_mode?: boolean;
     clients?: { name: string } | null;
 }
 
@@ -33,7 +34,7 @@ export function UserManager() {
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-    const [currentUserInfo, setCurrentUserInfo] = useState<{ id: string } | null>(null)
+    const [currentUserInfo, setCurrentUserInfo] = useState<{ id: string; role: string | null } | null>(null)
 
     // Form state
     const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -42,6 +43,11 @@ export function UserManager() {
     const [name, setName] = useState("")
     const [role, setRole] = useState("client_store")
     const [clientId, setClientId] = useState<string | null>("none")
+    const [developerMode, setDeveloperMode] = useState(false)
+
+    // Only the current super_admin can grant/revoke developer_mode, and the
+    // checkbox is hidden from everyone else.
+    const canEditDeveloperMode = currentUserInfo?.role === "super_admin"
 
     const fetchUsers = useCallback(async () => {
         setLoading(true)
@@ -68,7 +74,13 @@ export function UserManager() {
 
     const fetchCurrentUser = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
-        if (user) setCurrentUserInfo({ id: user.id })
+        if (!user) return
+        const { data: profile } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+        setCurrentUserInfo({ id: user.id, role: (profile?.role as string | undefined) ?? null })
     }, [supabase])
 
     useEffect(() => {
@@ -85,6 +97,7 @@ export function UserManager() {
         setName("")
         setRole("client_store")
         setClientId("none")
+        setDeveloperMode(false)
         setIsDialogOpen(true)
     }
 
@@ -95,6 +108,7 @@ export function UserManager() {
         setName(user.name || "")
         setRole(user.role || "client_store")
         setClientId(user.client_id || "none")
+        setDeveloperMode(Boolean(user.developer_mode))
         setIsDialogOpen(true)
     }
 
@@ -106,15 +120,21 @@ export function UserManager() {
             const finalClientId = clientId === "none" ? null : clientId
 
             if (editingUserId) {
-                // Edit user in our table
+                // Edit user in our table. developer_mode is only included in
+                // the update payload when the caller is a super_admin; the
+                // RLS policy refuses the change otherwise, but we also gate
+                // here so the wire doesn't carry an attempt that'll fail.
+                const updatePayload: Record<string, unknown> = {
+                    name,
+                    role,
+                    client_id: finalClientId,
+                    updated_at: new Date().toISOString(),
+                }
+                if (canEditDeveloperMode) updatePayload.developer_mode = developerMode
+
                 const { error } = await supabase
                     .from('users')
-                    .update({
-                        name,
-                        role,
-                        client_id: finalClientId,
-                        updated_at: new Date().toISOString()
-                    })
+                    .update(updatePayload)
                     .eq('id', editingUserId)
 
                 if (error) throw error
@@ -349,6 +369,26 @@ export function UserManager() {
                                 Only required for client-specific roles (HQ, Store).
                             </p>
                         </div>
+
+                        {canEditDeveloperMode && editingUserId && (
+                            <div className="space-y-1.5 pt-1">
+                                <label className="flex items-start gap-2 text-sm cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={developerMode}
+                                        onChange={(e) => setDeveloperMode(e.target.checked)}
+                                        className="size-4 accent-primary mt-0.5"
+                                    />
+                                    <span>
+                                        <span className="font-medium text-foreground">Developer mode</span>
+                                        <span className="block text-xs text-muted-foreground">
+                                            Grants access to AI Auto-Build on the feature-suggestion form.
+                                            Only grant to trusted developers — AI submissions can push code to dev.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                        )}
 
                         <div className="flex justify-end gap-3 pt-4 border-t">
                             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>

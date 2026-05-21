@@ -22,8 +22,7 @@ export default function ProfilePage() {
     const [user, setUser] = useState<SupabaseUser | null>(null)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [formData, setFormData] = useState({
-        full_name: "",
-        phone: "",
+        name: "",
     })
 
     useEffect(() => {
@@ -43,10 +42,7 @@ export default function ProfilePage() {
 
             if (profile) {
                 setProfile(profile)
-                setFormData({
-                    full_name: profile.full_name || "",
-                    phone: profile.phone || "",
-                })
+                setFormData({ name: profile.name || "" })
             }
             setLoading(false)
         }
@@ -61,8 +57,7 @@ export default function ProfilePage() {
         const { error } = await supabase
             .from('users')
             .update({
-                full_name: formData.full_name,
-                phone: formData.phone,
+                name: formData.name,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', user.id)
@@ -86,7 +81,7 @@ export default function ProfilePage() {
         )
     }
 
-    const userInitials = formData.full_name?.substring(0, 2).toUpperCase() || user?.email?.substring(0, 2).toUpperCase() || "U"
+    const userInitials = formData.name?.substring(0, 2).toUpperCase() || user?.email?.substring(0, 2).toUpperCase() || "U"
 
     return (
         <DashboardLayout>
@@ -104,7 +99,7 @@ export default function ProfilePage() {
                                     <AvatarImage src={profile?.avatar_url || ""} />
                                     <AvatarFallback className="text-xl font-medium">{userInitials}</AvatarFallback>
                                 </Avatar>
-                                <CardTitle className="mt-3 text-lg">{formData.full_name || "User"}</CardTitle>
+                                <CardTitle className="mt-3 text-lg">{formData.name || "User"}</CardTitle>
                                 <CardDescription className="text-xs text-muted-foreground capitalize">
                                     {profile?.role || "Member"}
                                 </CardDescription>
@@ -142,27 +137,17 @@ export default function ProfilePage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="full_name" className="text-xs font-medium text-muted-foreground">Full Name</Label>
+                                        <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">Name</Label>
                                         <div className="relative">
                                             <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                                             <Input
-                                                id="full_name"
-                                                placeholder="John Doe"
+                                                id="name"
+                                                placeholder="e.g. Lee Ross"
                                                 className="pl-10"
-                                                value={formData.full_name}
-                                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                             />
                                         </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="phone" className="text-xs font-medium text-muted-foreground">Phone Number</Label>
-                                        <Input
-                                            id="phone"
-                                            placeholder="+64 123 456 789"
-                                            value={formData.phone}
-                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        />
                                     </div>
                                 </CardContent>
                                 <CardFooter className="flex justify-end pt-4 border-t">

@@ -131,7 +131,7 @@ export function AppSidebar() {
         router.refresh()
     }
 
-    const userName = profile?.full_name || user?.email?.split('@')[0] || "User"
+    const userName = profile?.name || user?.email?.split('@')[0] || "User"
     const userEmail = user?.email || "user@example.com"
     const userInitials = userName.substring(0, 2).toUpperCase()
 
