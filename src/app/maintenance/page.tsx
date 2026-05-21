@@ -20,6 +20,7 @@ import type { Asset, Store, AssetType } from "@/types/database"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Wrench } from "lucide-react"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 interface DueScheduleItem {
     id: string
@@ -39,42 +40,51 @@ export default function MaintenanceDashboard() {
     const [dueSchedules, setDueSchedules] = useState<DueScheduleItem[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
+    const { clientId } = useCustomerFilter()
 
     async function fetchDueSchedules() {
         setLoading(true)
         const now = new Date()
 
         // 1. Fetch Explicit Maintenance Schedules
-        const { data: schedulesData } = await supabase
+        // Inner-join assets.stores so we can filter by client_id when the
+        // customer filter is active.
+        let schedulesQ = supabase
             .from('maintenance_schedules')
             .select(`
                 *,
-                assets (
+                assets!inner (
                     name,
                     id,
-                    stores (
+                    stores!inner (
                         name,
-                        id
+                        id,
+                        client_id
                     )
                 )
             `)
             .lte('next_due_at', now.toISOString())
             .order('next_due_at', { ascending: true })
+        if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
+        const { data: schedulesData } = await schedulesQ
 
         // 2. Fetch Assets with Overdue next_service_date
-        const { data: assetsData } = await supabase
+        let assetsQ = supabase
             .from('assets')
             .select(`
                 *,
-                stores (
+                stores!inner (
                     name,
-                    id
+                    id,
+                    client_id
                 ),
                 asset_types (
                     label
                 )
             `)
             .lte('next_service_date', now.toISOString())
+        if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
+        const { data: assetsData } = await assetsQ
 
         // Map overdue assets
         const overdueAssets = (assetsData || []).map((asset: Asset & { stores: Pick<Store, 'name' | 'id'>, asset_types: Pick<AssetType, 'label'> | null }) => {
@@ -152,7 +162,7 @@ export default function MaintenanceDashboard() {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchDueSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [clientId])
 
     return (
         <DashboardLayout>

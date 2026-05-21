@@ -3,6 +3,17 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // Mock DashboardLayout to just render children
+vi.mock('@/lib/customer-filter', () => ({
+  useCustomerFilter: () => ({
+    clientId: null,
+    setClientId: vi.fn(),
+    customers: [],
+    isAdmin: false,
+    role: null,
+    initialised: true,
+  }),
+}))
+
 vi.mock('@/components/dashboard-layout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div data-testid="layout">{children}</div>,
 }))

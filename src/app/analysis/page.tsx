@@ -34,6 +34,7 @@ import {
     MapPin,
     Layers
 } from "lucide-react"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 const STATUS_COLORS = {
     healthy: '#10b981',
@@ -86,21 +87,25 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const supabase = useMemo(() => createClient(), [])
+    const { clientId } = useCustomerFilter()
 
     const fetchAnalytics = async () => {
         setLoading(true)
         setError(null)
         const now = new Date()
 
-        // Fetch all assets with types, stores, and active jobs
-        const { data: assets, error: assetsError } = await supabase
+        // Fetch all assets with types, stores, and active jobs. Inner-join
+        // stores so we can filter by client_id when the customer filter is on.
+        let assetsQ = supabase
             .from('assets')
             .select(`
                 *,
                 asset_types (label),
-                stores (name, region),
+                stores!inner (name, region, client_id),
                 jobs (status)
             `)
+        if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
+        const { data: assets, error: assetsError } = await assetsQ
 
         if (assetsError) {
             console.error('Error fetching assets:', assetsError)
@@ -113,18 +118,20 @@ export default function AnalyticsPage() {
         const in90Days = new Date(now)
         in90Days.setDate(in90Days.getDate() + 90)
 
-        const { data: schedules, error: schedulesError } = await supabase
+        let schedulesQ = supabase
             .from('maintenance_schedules')
             .select(`
                 *,
-                assets (
+                assets!inner (
                     name,
-                    stores (name)
+                    stores!inner (name, client_id)
                 )
             `)
             .gte('next_due_at', now.toISOString())
             .lte('next_due_at', in90Days.toISOString())
             .order('next_due_at', { ascending: true })
+        if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
+        const { data: schedules, error: schedulesError } = await schedulesQ
 
         if (schedulesError) {
             console.error('Error fetching schedules:', schedulesError)
@@ -274,7 +281,7 @@ export default function AnalyticsPage() {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [supabase])
+    }, [supabase, clientId])
 
     if (loading) {
         return (

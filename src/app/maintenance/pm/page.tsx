@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import type { Asset, Store, AssetType, Job, ClientBrand } from "@/types/database"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 type PMAsset = Asset & {
     stores: Pick<Store, 'id' | 'name'> & {
@@ -33,18 +34,21 @@ export default function PMSchedulerPage() {
     const [pmAssets, setPmAssets] = useState<PMAsset[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
+    const { clientId } = useCustomerFilter()
 
     async function fetchPMData() {
         setLoading(true)
 
-        // Fetch assets with next service dates
-        const { data: assetsData, error } = await supabase
+        // Inner-join the store so we can filter by store.client_id when the
+        // customer filter is active.
+        let query = supabase
             .from('assets')
             .select(`
                 *,
-                stores (
+                stores!inner (
                     name,
                     id,
+                    client_id,
                     store_brands (
                         brand_id,
                         client_brands ( * )
@@ -60,6 +64,12 @@ export default function PMSchedulerPage() {
             .not('next_service_date', 'is', null)
             .order('next_service_date', { ascending: true })
 
+        if (clientId) {
+            query = query.eq('stores.client_id', clientId)
+        }
+
+        const { data: assetsData, error } = await query
+
         if (error) {
             toast.error("Failed to fetch PM data")
         } else {
@@ -72,7 +82,7 @@ export default function PMSchedulerPage() {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchPMData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [clientId])
 
     const getStatusColor = (asset: PMAsset) => {
         const activeFaults = asset.jobs?.filter((j: Pick<Job, 'status'>) => j.status === 'open' || j.status === 'in_progress')
