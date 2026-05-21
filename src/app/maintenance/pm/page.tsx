@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,58 +32,34 @@ type PMAsset = Asset & {
 }
 
 export default function PMSchedulerPage() {
-    const [pmAssets, setPmAssets] = useState<PMAsset[]>([])
-    const [loading, setLoading] = useState(true)
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
     const { clientId } = useCustomerFilter()
 
-    async function fetchPMData() {
-        setLoading(true)
+    const { data: pmAssets = [], isLoading: loading, mutate } = useSupabaseQuery<PMAsset[]>(
+        `pm-assets-${clientId ?? 'all'}`,
+        async () => {
+            let query = supabase
+                .from('assets')
+                .select(`
+                    id, asset_group, asset_details, next_service_date,
+                    stores!inner (
+                        name, id, client_id,
+                        store_brands ( brand_id, client_brands ( * ) )
+                    ),
+                    asset_types ( label ),
+                    jobs ( status )
+                `)
+                .not('next_service_date', 'is', null)
+                .order('next_service_date', { ascending: true })
 
-        // Inner-join the store so we can filter by store.client_id when the
-        // customer filter is active.
-        let query = supabase
-            .from('assets')
-            .select(`
-                *,
-                stores!inner (
-                    name,
-                    id,
-                    client_id,
-                    store_brands (
-                        brand_id,
-                        client_brands ( * )
-                    )
-                ),
-                asset_types (
-                    label
-                ),
-                jobs (
-                    status
-                )
-            `)
-            .not('next_service_date', 'is', null)
-            .order('next_service_date', { ascending: true })
+            if (clientId) query = query.eq('stores.client_id', clientId)
 
-        if (clientId) {
-            query = query.eq('stores.client_id', clientId)
+            const { data, error } = await query
+            return { data: data as PMAsset[] | null, error }
         }
+    )
 
-        const { data: assetsData, error } = await query
-
-        if (error) {
-            toast.error("Failed to fetch PM data")
-        } else {
-            setPmAssets(assetsData || [])
-        }
-        setLoading(false)
-    }
-
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        fetchPMData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [clientId])
+    const fetchPMData = () => mutate()
 
     const getStatusColor = (asset: PMAsset) => {
         const activeFaults = asset.jobs?.filter((j: Pick<Job, 'status'>) => j.status === 'open' || j.status === 'in_progress')

@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { SWRConfig } from 'swr'
+
+// Wrap each render with a fresh SWR cache so cached data doesn't leak
+// between tests (otherwise an error case sees the previous test's
+// successful payload and the assertion fails).
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        {children}
+      </SWRConfig>
+    ),
+  })
 
 // Mock DashboardLayout to just render children
 vi.mock('@/lib/customer-filter', () => ({

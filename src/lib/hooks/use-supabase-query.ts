@@ -14,6 +14,10 @@ export function useSupabaseQuery<T>(
     },
     {
       revalidateOnFocus: false,
+      // Show the previous result while a new one is fetching. Filter
+      // changes (e.g. flipping the customer dropdown) update in-place
+      // instead of flashing to skeleton on every keystroke.
+      keepPreviousData: true,
       ...config,
     }
   )

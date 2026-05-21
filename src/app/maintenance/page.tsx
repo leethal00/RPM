@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -37,79 +38,66 @@ interface DueScheduleItem {
 }
 
 export default function MaintenanceDashboard() {
-    const [dueSchedules, setDueSchedules] = useState<DueScheduleItem[]>([])
-    const [loading, setLoading] = useState(true)
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
     const { clientId } = useCustomerFilter()
 
-    async function fetchDueSchedules() {
-        setLoading(true)
-        const now = new Date()
+    const { data: dueSchedules = [], isLoading: loading, mutate } = useSupabaseQuery<DueScheduleItem[]>(
+        `maintenance-due-${clientId ?? 'all'}`,
+        async () => {
+            const now = new Date()
 
-        // 1. Fetch Explicit Maintenance Schedules
-        // Inner-join assets.stores so we can filter by client_id when the
-        // customer filter is active.
-        let schedulesQ = supabase
-            .from('maintenance_schedules')
-            .select(`
-                *,
-                assets!inner (
-                    name,
-                    id,
-                    stores!inner (
-                        name,
-                        id,
-                        client_id
+            // Inner-join assets.stores so we can filter by client_id when the
+            // customer filter is active. Both inner joins required for the
+            // PostgREST embedded filter to apply.
+            let schedulesQ = supabase
+                .from('maintenance_schedules')
+                .select(`
+                    id, next_due_at, task_name, frequency_days, asset_id,
+                    assets!inner (
+                        name, id,
+                        stores!inner ( name, id, client_id )
                     )
-                )
-            `)
-            .lte('next_due_at', now.toISOString())
-            .order('next_due_at', { ascending: true })
-        if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
-        const { data: schedulesData } = await schedulesQ
+                `)
+                .lte('next_due_at', now.toISOString())
+                .order('next_due_at', { ascending: true })
+            if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
+            const { data: schedulesData, error: e1 } = await schedulesQ
 
-        // 2. Fetch Assets with Overdue next_service_date
-        let assetsQ = supabase
-            .from('assets')
-            .select(`
-                *,
-                stores!inner (
-                    name,
-                    id,
-                    client_id
-                ),
-                asset_types (
-                    label
-                )
-            `)
-            .lte('next_service_date', now.toISOString())
-        if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
-        const { data: assetsData } = await assetsQ
+            let assetsQ = supabase
+                .from('assets')
+                .select(`
+                    id, next_service_date,
+                    stores!inner ( name, id, client_id ),
+                    asset_types ( label )
+                `)
+                .lte('next_service_date', now.toISOString())
+            if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
+            const { data: assetsData, error: e2 } = await assetsQ
 
-        // Map overdue assets
-        const overdueAssets = (assetsData || []).map((asset: Asset & { stores: Pick<Store, 'name' | 'id'>, asset_types: Pick<AssetType, 'label'> | null }) => {
-            return {
+            if (e1 || e2) return { data: null, error: e1 || e2 }
+
+            const overdueAssets = (assetsData || []).map((asset: Asset & { stores: Pick<Store, 'name' | 'id'>, asset_types: Pick<AssetType, 'label'> | null }) => ({
                 id: `asset-pm-${asset.id}`,
                 asset_id: asset.id,
                 task_name: `Preventative Maintenance: ${asset.asset_types?.label || 'Asset'}`,
-                next_due_at: asset.next_service_date,
+                next_due_at: asset.next_service_date as string,
                 assets: {
                     name: asset.asset_types?.label || 'Asset',
                     id: asset.id,
-                    stores: asset.stores
+                    stores: asset.stores,
                 },
                 isAssetLevel: true,
-                frequency_days: 547 // 18 months standard
-            }
-        })
+                frequency_days: 547,
+            } satisfies DueScheduleItem))
 
-        const combined = [...(schedulesData || []), ...overdueAssets].sort((a, b) =>
-            new Date(a.next_due_at).getTime() - new Date(b.next_due_at).getTime()
-        )
+            const combined = [...((schedulesData ?? []) as unknown as DueScheduleItem[]), ...overdueAssets].sort((a, b) =>
+                new Date(a.next_due_at).getTime() - new Date(b.next_due_at).getTime()
+            )
+            return { data: combined, error: null }
+        }
+    )
 
-        setDueSchedules(combined)
-        setLoading(false)
-    }
+    const fetchDueSchedules = () => mutate()
 
     async function createJobFromMaintenance(item: DueScheduleItem) {
         const { error: jobError } = await supabase
@@ -158,11 +146,6 @@ export default function MaintenanceDashboard() {
         fetchDueSchedules()
     }
 
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        fetchDueSchedules()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [clientId])
 
     return (
         <DashboardLayout>

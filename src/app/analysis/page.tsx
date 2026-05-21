@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PageShell } from "@/components/page-shell"
@@ -83,80 +84,65 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
-    const [data, setData] = useState<AnalyticsData | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const supabase = useMemo(() => createClient(), [])
     const { clientId } = useCustomerFilter()
 
-    const fetchAnalytics = async () => {
-        setLoading(true)
-        setError(null)
-        const now = new Date()
+    const { data, error, isLoading: loading, mutate } = useSupabaseQuery<AnalyticsData>(
+        `analytics-${clientId ?? 'all'}`,
+        async () => {
+            const now = new Date()
 
-        // Fetch all assets with types, stores, and active jobs. Inner-join
-        // stores so we can filter by client_id when the customer filter is on.
-        let assetsQ = supabase
-            .from('assets')
-            .select(`
-                *,
-                asset_types (label),
-                stores!inner (name, region, client_id),
-                jobs (status)
-            `)
-        if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
-        const { data: assets, error: assetsError } = await assetsQ
+            // Fetch all assets with types, stores, and active jobs. Inner-join
+            // stores so we can filter by client_id when the customer filter is on.
+            let assetsQ = supabase
+                .from('assets')
+                .select(`
+                    *,
+                    asset_types (label),
+                    stores!inner (name, region, client_id),
+                    jobs (status)
+                `)
+            if (clientId) assetsQ = assetsQ.eq('stores.client_id', clientId)
+            const { data: assets, error: assetsError } = await assetsQ
 
-        if (assetsError) {
-            console.error('Error fetching assets:', assetsError)
-            setError(`Failed to load asset data: ${assetsError.message}`)
-            setLoading(false)
-            return
-        }
+            if (assetsError) {
+                console.error('Error fetching assets:', assetsError)
+                return { data: null, error: new Error(`Failed to load asset data: ${assetsError.message}`) }
+            }
 
-        // Fetch upcoming maintenance schedules (next 90 days)
-        const in90Days = new Date(now)
-        in90Days.setDate(in90Days.getDate() + 90)
+            // Fetch upcoming maintenance schedules (next 90 days)
+            const in90Days = new Date(now)
+            in90Days.setDate(in90Days.getDate() + 90)
 
-        let schedulesQ = supabase
-            .from('maintenance_schedules')
-            .select(`
-                *,
-                assets!inner (
-                    name,
-                    stores!inner (name, client_id)
-                )
-            `)
-            .gte('next_due_at', now.toISOString())
-            .lte('next_due_at', in90Days.toISOString())
-            .order('next_due_at', { ascending: true })
-        if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
-        const { data: schedules, error: schedulesError } = await schedulesQ
+            let schedulesQ = supabase
+                .from('maintenance_schedules')
+                .select(`
+                    *,
+                    assets!inner (
+                        name,
+                        stores!inner (name, client_id)
+                    )
+                `)
+                .gte('next_due_at', now.toISOString())
+                .lte('next_due_at', in90Days.toISOString())
+                .order('next_due_at', { ascending: true })
+            if (clientId) schedulesQ = schedulesQ.eq('assets.stores.client_id', clientId)
+            const { data: schedules, error: schedulesError } = await schedulesQ
+            if (schedulesError) console.error('Error fetching schedules:', schedulesError)
 
-        if (schedulesError) {
-            console.error('Error fetching schedules:', schedulesError)
-            // Continue with empty schedules
-        }
+            // Fetch jobs for maintenance activity over time (last 6 months)
+            const sixMonthsAgo = new Date(now)
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
-        // Fetch jobs for maintenance activity over time (last 6 months)
-        const sixMonthsAgo = new Date(now)
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+            const { data: recentJobs, error: jobsError } = await supabase
+                .from('jobs')
+                .select('status, created_at, resolved_at, job_type')
+                .gte('created_at', sixMonthsAgo.toISOString())
+            if (jobsError) console.error('Error fetching jobs:', jobsError)
 
-        const { data: recentJobs, error: jobsError } = await supabase
-            .from('jobs')
-            .select('status, created_at, resolved_at, job_type')
-            .gte('created_at', sixMonthsAgo.toISOString())
-
-        if (jobsError) {
-            console.error('Error fetching jobs:', jobsError)
-            // Continue with empty jobs
-        }
-
-        if (!assets) {
-            setError('No asset data returned')
-            setLoading(false)
-            return
-        }
+            if (!assets) {
+                return { data: null, error: new Error('No asset data returned') }
+            }
 
             const typedAssets = assets as AssetWithRelations[]
             const typedSchedules = (schedules || []) as MaintenanceSchedule[]
@@ -262,26 +248,25 @@ export default function AnalyticsPage() {
                 }
             })
 
-            setData({
-                totalAssets: typedAssets.length,
-                healthyCount,
-                dueCount,
-                overdueCount,
-                faultedCount,
-                healthPieData,
-                assetsByType,
-                assetsByRegion,
-                maintenanceTimeline,
-                upcomingMaintenance
-            })
-            setLoading(false)
+            return {
+                data: {
+                    totalAssets: typedAssets.length,
+                    healthyCount,
+                    dueCount,
+                    overdueCount,
+                    faultedCount,
+                    healthPieData,
+                    assetsByType,
+                    assetsByRegion,
+                    maintenanceTimeline,
+                    upcomingMaintenance,
+                },
+                error: null,
+            }
         }
+    )
 
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        fetchAnalytics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [supabase, clientId])
+    const fetchAnalytics = () => mutate()
 
     if (loading) {
         return (
@@ -369,7 +354,7 @@ export default function AnalyticsPage() {
                     <AlertTriangle className="size-10 text-destructive" />
                     <div>
                         <h2 className="text-lg font-semibold">Failed to Load Analytics</h2>
-                        <p className="text-sm text-muted-foreground mt-1">{error}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{error instanceof Error ? error.message : String(error)}</p>
                     </div>
                     <Button variant="outline" onClick={() => fetchAnalytics()}>
                         Try Again
