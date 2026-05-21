@@ -23,6 +23,7 @@ import {
     Building2
 } from "lucide-react"
 import Link from "next/link"
+import { PageShell } from "@/components/page-shell"
 import { JobTimeline } from "@/components/job-timeline"
 import {
     Dialog,
@@ -137,7 +138,7 @@ export default function ProjectDetailPage({
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-6 py-6 font-primary max-w-7xl mx-auto">
+            <PageShell>
                 <div className="flex items-center justify-between">
                     <Button variant="ghost" size="sm" asChild className="-ml-2 h-8 text-muted-foreground">
                         <Link href="/projects" className="flex items-center gap-1">
@@ -311,7 +312,7 @@ export default function ProjectDetailPage({
                         )}
                     </div>
                 </div>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

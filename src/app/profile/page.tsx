@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageShell } from "@/components/page-shell"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { User, Mail, Shield, Loader2, Save } from "lucide-react"
@@ -85,8 +86,8 @@ export default function ProfilePage() {
 
     return (
         <DashboardLayout>
-            <div className="max-w-4xl mx-auto py-8 px-4 font-primary">
-                <div className="flex flex-col gap-8">
+            <PageShell width="narrow">
+                <div className="flex flex-col gap-6">
                     <div>
                         <h1 className="text-3xl font-semibold tracking-tight">Your profile</h1>
                         <p className="text-sm text-muted-foreground">Manage your account details and preferences.</p>
@@ -160,7 +161,7 @@ export default function ProfilePage() {
                         </Card>
                     </div>
                 </div>
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }
