@@ -258,6 +258,14 @@ export function AppSidebar() {
                                             </Link>
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/roles'}>
+                                            <Link href="/settings/roles" className="flex items-center gap-2">
+                                                <UserCog className="size-3.5" />
+                                                <span>Role permissions</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
                                 </SidebarMenuSub>
                             </SidebarMenuItem>
                         </SidebarMenu>

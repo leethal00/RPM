@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink, Lock } from "lucide-react"
 import { toast } from "sonner"
 import type { SitePhoto, AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
@@ -28,6 +28,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
     const [uploading, setUploading] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
     const [includeAssetPhotos, setIncludeAssetPhotos] = useState(false)
+    const [uploadInternalOnly, setUploadInternalOnly] = useState(false)
     const supabase = createClient()
 
     const fetchPhotos = async () => {
@@ -52,7 +53,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
             const { data, error } = await supabase
                 .from('asset_photos')
                 .select(`
-                    id, url, caption, created_at, asset_id,
+                    id, url, caption, created_at, asset_id, internal_only,
                     assets!inner ( id, store_id, asset_types ( label ) )
                 `)
                 .eq('assets.store_id', storeId)
@@ -65,6 +66,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                 caption: string | null
                 created_at: string
                 asset_id: string
+                internal_only: boolean
                 assets: { asset_types?: { label?: string } | null }
             }
             const enriched: AssetPhotoEnriched[] = ((data ?? []) as unknown as Row[]).map((r) => ({
@@ -73,6 +75,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                 url: r.url,
                 caption: r.caption,
                 created_at: r.created_at,
+                internal_only: r.internal_only,
                 asset_label: r.assets?.asset_types?.label ?? null,
             }))
             setAssetPhotos(enriched)
@@ -128,7 +131,12 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
 
                     const { error: dbError } = await supabase
                         .from('site_photos')
-                        .insert({ store_id: storeId, url: publicUrl, caption: file.name })
+                        .insert({
+                            store_id: storeId,
+                            url: publicUrl,
+                            caption: file.name,
+                            internal_only: uploadInternalOnly,
+                        })
                     if (dbError) throw dbError
 
                     succeeded++
@@ -207,34 +215,50 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                         Recent photos showing what this site looks like. Drag &amp; drop or click Upload.
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                        <Switch
-                            checked={includeAssetPhotos}
-                            onCheckedChange={setIncludeAssetPhotos}
+                <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                            <Switch
+                                checked={includeAssetPhotos}
+                                onCheckedChange={setIncludeAssetPhotos}
+                            />
+                            <span className="text-muted-foreground">
+                                Include asset photos
+                                {includeAssetPhotos && assetPhotos.length > 0 && (
+                                    <span className="text-foreground font-medium ml-1">({assetPhotos.length})</span>
+                                )}
+                            </span>
+                        </label>
+                        <Label htmlFor="photo-upload" className="cursor-pointer">
+                            <div className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium">
+                                {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                                Upload photo
+                            </div>
+                            <Input
+                                id="photo-upload"
+                                type="file"
+                                accept="image/*,.heic,.heif"
+                                multiple
+                                className="hidden"
+                                onChange={handleFileInputChange}
+                                disabled={uploading}
+                            />
+                        </Label>
+                    </div>
+                    {/* Internal-only toggle — applies to the *next* upload(s) so the
+                        service team can flag photos before dropping them in. */}
+                    <label className="flex items-center gap-2 text-xs cursor-pointer select-none text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={uploadInternalOnly}
+                            onChange={(e) => setUploadInternalOnly(e.target.checked)}
+                            className="size-3.5 accent-amber-500"
                         />
-                        <span className="text-muted-foreground">
-                            Include asset photos
-                            {includeAssetPhotos && assetPhotos.length > 0 && (
-                                <span className="text-foreground font-medium ml-1">({assetPhotos.length})</span>
-                            )}
+                        <Lock className="size-3" />
+                        <span>
+                            Mark next upload as <span className="font-medium text-foreground">service-team only</span>
                         </span>
                     </label>
-                    <Label htmlFor="photo-upload" className="cursor-pointer">
-                        <div className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium">
-                            {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-                            Upload photo
-                        </div>
-                        <Input
-                            id="photo-upload"
-                            type="file"
-                            accept="image/*,.heic,.heif"
-                            multiple
-                            className="hidden"
-                            onChange={handleFileInputChange}
-                            disabled={uploading}
-                        />
-                    </Label>
                 </div>
             </div>
 
@@ -265,7 +289,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3">
                         {photos.map((photo) => (
-                            <div key={`site-${photo.id}`} className="group relative aspect-square rounded-md overflow-hidden border border-border/60 bg-muted/40">
+                            <div key={`site-${photo.id}`} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Site photo"}
@@ -274,6 +298,12 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                     sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                                     loading="lazy"
                                 />
+                                {photo.internal_only && (
+                                    <div className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                        <Lock className="size-2.5" />
+                                        Internal
+                                    </div>
+                                )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                     <Button
                                         variant="destructive"
@@ -292,7 +322,7 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                             </div>
                         ))}
                         {visibleAssetPhotos.map((photo) => (
-                            <div key={`asset-${photo.id}`} className="group relative aspect-square rounded-md overflow-hidden border border-primary/30 bg-muted/40">
+                            <div key={`asset-${photo.id}`} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-primary/30'}`}>
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Asset photo"}
@@ -301,9 +331,16 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                     sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                                     loading="lazy"
                                 />
-                                {/* Top-left asset label chip — always visible so the source is obvious. */}
-                                <div className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 bg-card/95 border border-border/60 text-foreground text-[10px] font-medium px-1.5 py-0.5 rounded">
-                                    {photo.asset_label ?? "Asset"}
+                                <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
+                                    <div className="inline-flex items-center gap-1 bg-card/95 border border-border/60 text-foreground text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                        {photo.asset_label ?? "Asset"}
+                                    </div>
+                                    {photo.internal_only && (
+                                        <div className="inline-flex items-center gap-1 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                            <Lock className="size-2.5" />
+                                            Internal
+                                        </div>
+                                    )}
                                 </div>
                                 <Link
                                     href={`/stores/${storeId}/assets/${photo.asset_id}`}

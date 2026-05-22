@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, Lock } from "lucide-react"
 import { toast } from "sonner"
 import type { AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
@@ -20,6 +20,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+    const [uploadInternalOnly, setUploadInternalOnly] = useState(false)
     const supabase = createClient()
 
     const fetchPhotos = async () => {
@@ -78,7 +79,12 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
 
                     const { error: dbError } = await supabase
                         .from('asset_photos')
-                        .insert({ asset_id: assetId, url: publicUrl, caption: file.name })
+                        .insert({
+                            asset_id: assetId,
+                            url: publicUrl,
+                            caption: file.name,
+                            internal_only: uploadInternalOnly,
+                        })
                     if (dbError) throw dbError
 
                     succeeded++
@@ -144,26 +150,38 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
 
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <div className="flex items-start justify-between gap-3">
+                <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
                     <Camera className="size-3.5" />
                     Asset photos
                 </h3>
-                <Label htmlFor="asset-photo-upload" className="cursor-pointer">
-                    <div className="inline-flex items-center gap-1.5 border border-border/80 bg-card text-foreground px-2.5 py-1 rounded-md hover:bg-accent/40 transition-colors text-xs">
-                        {uploading ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
-                        Upload
-                    </div>
-                    <Input
-                        id="asset-photo-upload"
-                        type="file"
-                        accept="image/*,.heic,.heif"
-                        multiple
-                        className="hidden"
-                        onChange={handleFileInputChange}
-                        disabled={uploading}
-                    />
-                </Label>
+                <div className="flex flex-col items-end gap-1.5">
+                    <Label htmlFor="asset-photo-upload" className="cursor-pointer">
+                        <div className="inline-flex items-center gap-1.5 border border-border/80 bg-card text-foreground px-2.5 py-1 rounded-md hover:bg-accent/40 transition-colors text-xs">
+                            {uploading ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+                            Upload
+                        </div>
+                        <Input
+                            id="asset-photo-upload"
+                            type="file"
+                            accept="image/*,.heic,.heif"
+                            multiple
+                            className="hidden"
+                            onChange={handleFileInputChange}
+                            disabled={uploading}
+                        />
+                    </Label>
+                    <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={uploadInternalOnly}
+                            onChange={(e) => setUploadInternalOnly(e.target.checked)}
+                            className="size-3 accent-amber-500"
+                        />
+                        <Lock className="size-2.5" />
+                        <span>Service-team only</span>
+                    </label>
+                </div>
             </div>
 
             <div
@@ -189,7 +207,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                 ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 p-2">
                         {photos.map((photo) => (
-                            <div key={photo.id} className="group relative aspect-square rounded-md overflow-hidden border border-border/60 bg-muted/40">
+                            <div key={photo.id} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Asset photo"}
@@ -198,6 +216,12 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                                     sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 20vw"
                                     loading="lazy"
                                 />
+                                {photo.internal_only && (
+                                    <div className="absolute top-1 left-1 inline-flex items-center gap-0.5 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[9px] font-medium px-1 py-0.5 rounded">
+                                        <Lock className="size-2" />
+                                        Internal
+                                    </div>
+                                )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Button
                                         variant="destructive"

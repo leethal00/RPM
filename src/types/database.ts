@@ -181,6 +181,7 @@ export interface SitePhoto {
   store_id: string
   url: string
   caption: string | null
+  internal_only: boolean
   created_at: string
   updated_at: string
 }
@@ -190,5 +191,6 @@ export interface AssetPhoto {
   asset_id: string
   url: string
   caption: string | null
+  internal_only: boolean
   created_at: string
 }
