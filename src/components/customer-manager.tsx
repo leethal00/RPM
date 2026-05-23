@@ -126,15 +126,19 @@ export function CustomerManager() {
                             </TableRow>
                         ) : (
                             customers.map((customer) => (
-                                <TableRow key={customer.id} className="group transition-colors">
-                                    <TableCell className="font-medium">{customer.name}</TableCell>
+                                <TableRow
+                                    key={customer.id}
+                                    onClick={() => setBrandManagerFor(customer)}
+                                    className="group transition-colors cursor-pointer hover:bg-accent/30"
+                                >
+                                    <TableCell className="font-medium group-hover:text-primary transition-colors">{customer.name}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-1">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-8 gap-1.5 text-xs"
-                                                onClick={() => setBrandManagerFor(customer)}
+                                                onClick={(e) => { e.stopPropagation(); setBrandManagerFor(customer) }}
                                             >
                                                 <Palette className="size-3.5" />
                                                 Manage Brands
@@ -143,7 +147,7 @@ export function CustomerManager() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-destructive"
-                                                onClick={() => handleDelete(customer.id)}
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(customer.id) }}
                                             >
                                                 <Trash2 className="size-4" />
                                             </Button>

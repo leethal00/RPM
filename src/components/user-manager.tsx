@@ -253,8 +253,12 @@ export function UserManager() {
                             </TableRow>
                         ) : (
                             users.map((user) => (
-                                <TableRow key={user.id} className="group transition-colors">
-                                    <TableCell className="font-medium">{user.name || "—"}</TableCell>
+                                <TableRow
+                                    key={user.id}
+                                    onClick={() => openEditDialog(user)}
+                                    className="group transition-colors cursor-pointer hover:bg-accent/30"
+                                >
+                                    <TableCell className="font-medium group-hover:text-primary transition-colors">{user.name || "—"}</TableCell>
                                     <TableCell>{user.email}</TableCell>
                                     <TableCell>
                                         <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/10 text-primary">
@@ -268,7 +272,7 @@ export function UserManager() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-primary"
-                                                onClick={() => openEditDialog(user)}
+                                                onClick={(e) => { e.stopPropagation(); openEditDialog(user) }}
                                             >
                                                 <Edit2 className="size-4" />
                                             </Button>
@@ -276,7 +280,7 @@ export function UserManager() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-destructive"
-                                                onClick={() => handleDelete(user.id)}
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(user.id) }}
                                             >
                                                 <Trash2 className="size-4" />
                                             </Button>

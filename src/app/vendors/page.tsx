@@ -210,10 +210,14 @@ export default function VendorsPage() {
                                 </TableRow>
                             ) : (
                                 vendors.map((vendor) => (
-                                    <TableRow key={vendor.id} className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors">
+                                    <TableRow
+                                        key={vendor.id}
+                                        onClick={() => { setEditingVendor(vendor); setIsAddDialogOpen(true) }}
+                                        className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors cursor-pointer"
+                                    >
                                         <TableCell className="py-3">
                                             <div className="flex flex-col gap-0.5">
-                                                <div className="font-medium text-foreground">{vendor.name}</div>
+                                                <div className="font-medium text-foreground group-hover:text-primary transition-colors">{vendor.name}</div>
                                                 {(vendor.email || vendor.phone) && (
                                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                         {vendor.email && <span className="truncate">{vendor.email}</span>}
@@ -245,7 +249,8 @@ export default function VendorsPage() {
                                                 size="icon"
                                                 variant="ghost"
                                                 className="size-8 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
                                                     setEditingVendor(vendor)
                                                     setIsAddDialogOpen(true)
                                                 }}

@@ -15,6 +15,7 @@ import {
     SlidersHorizontal,
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { useCustomerFilter } from "@/lib/customer-filter"
@@ -60,6 +61,7 @@ const PAGE_SIZE = 20
 
 export default function StoresListPage() {
     const supabase = useMemo(() => createClient(), [])
+    const router = useRouter()
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -392,12 +394,16 @@ export default function StoresListPage() {
                                 </TableRow>
                             ) : (
                                 filteredStores.map((store) => (
-                                    <TableRow key={store.id} className="group border-b border-border/40 hover:bg-accent/30 transition-colors last:border-b-0">
+                                    <TableRow
+                                        key={store.id}
+                                        onClick={() => router.push(`/stores/${store.id}`)}
+                                        className="group border-b border-border/40 hover:bg-accent/30 transition-colors last:border-b-0 cursor-pointer"
+                                    >
                                         <TableCell className="py-3">
                                             <div className="flex flex-col gap-0.5">
-                                                <Link href={`/stores/${store.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                                                <span className="font-medium text-foreground group-hover:text-primary transition-colors">
                                                     {store.name}
-                                                </Link>
+                                                </span>
                                                 {store.has_drive_thru && (
                                                     <span className="text-[11px] text-muted-foreground">Drive-thru</span>
                                                 )}

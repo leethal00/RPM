@@ -195,15 +195,19 @@ export function AssetTypeManager() {
                             </TableRow>
                         ) : (
                             filteredTypes.map((type) => (
-                                <TableRow key={type.id} className="group transition-colors">
-                                    <TableCell className="font-bold">{type.label}</TableCell>
+                                <TableRow
+                                    key={type.id}
+                                    onClick={() => handleEdit(type)}
+                                    className="group transition-colors cursor-pointer hover:bg-accent/30"
+                                >
+                                    <TableCell className="font-medium group-hover:text-primary transition-colors">{type.label}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-primary"
-                                                onClick={() => handleEdit(type)}
+                                                onClick={(e) => { e.stopPropagation(); handleEdit(type) }}
                                             >
                                                 <Pencil className="size-4" />
                                             </Button>
@@ -211,7 +215,7 @@ export function AssetTypeManager() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-destructive"
-                                                onClick={() => handleDelete(type.id)}
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(type.id) }}
                                             >
                                                 <Trash2 className="size-4" />
                                             </Button>

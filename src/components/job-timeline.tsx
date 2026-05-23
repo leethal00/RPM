@@ -31,15 +31,19 @@ export function JobTimeline({ jobs }: JobTimelineProps) {
     return (
         <div className="divide-y divide-border/40">
             {jobs.map((job) => (
-                <div key={job.id} className="flex gap-3 p-4 hover:bg-accent/30 transition-colors">
+                <Link
+                    key={job.id}
+                    href={`/jobs/${job.id}`}
+                    className="flex gap-3 p-4 hover:bg-accent/30 transition-colors group cursor-pointer"
+                >
                     <div className="size-7 rounded-md border border-border/60 bg-card flex items-center justify-center shrink-0 mt-0.5">
                         {typeIcons[job.job_type]}
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between gap-2 mb-1">
-                            <Link href={`/jobs/${job.id}`} className="font-medium text-sm text-foreground hover:text-primary transition-colors truncate">
+                            <span className="font-medium text-sm text-foreground group-hover:text-primary transition-colors truncate">
                                 {job.title}
-                            </Link>
+                            </span>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                                 {new Date(job.created_at).toLocaleDateString()}
                             </span>
@@ -61,7 +65,7 @@ export function JobTimeline({ jobs }: JobTimelineProps) {
                             </p>
                         )}
                     </div>
-                </div>
+                </Link>
             ))}
         </div>
     )
