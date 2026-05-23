@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink, Lock } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink, Lock, LockOpen } from "lucide-react"
 import { toast } from "sonner"
 import type { SitePhoto, AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
@@ -196,6 +196,20 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
         }
     }
 
+    const toggleInternalOnly = async (photo: SitePhoto) => {
+        const next = !photo.internal_only
+        const { error } = await supabase
+            .from('site_photos')
+            .update({ internal_only: next })
+            .eq('id', photo.id)
+        if (error) {
+            toast.error(`Update failed: ${error.message}`)
+            return
+        }
+        setPhotos(photos.map(p => p.id === photo.id ? { ...p, internal_only: next } : p))
+        toast.success(next ? "Marked as service-team only" : "Made visible to clients")
+    }
+
     if (loading) {
         return <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
     }
@@ -306,9 +320,19 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                 )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                     <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-8 rounded-full"
+                                        title={photo.internal_only ? "Make visible to clients" : "Mark as service-team only"}
+                                        onClick={() => toggleInternalOnly(photo)}
+                                    >
+                                        {photo.internal_only ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+                                    </Button>
+                                    <Button
                                         variant="destructive"
                                         size="icon"
                                         className="size-8 rounded-full"
+                                        title="Delete photo"
                                         onClick={() => handleDelete(photo)}
                                     >
                                         <Trash2 className="size-4" />
