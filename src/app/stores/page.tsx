@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import { mutate } from "swr"
 import { Input } from "@/components/ui/input"
 import {
     Search,
@@ -393,10 +394,22 @@ export default function StoresListPage() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredStores.map((store) => (
+                                filteredStores.map((store) => {
+                                    const href = `/stores/${store.id}`
+                                    return (
                                     <TableRow
                                         key={store.id}
-                                        onClick={() => router.push(`/stores/${store.id}`)}
+                                        onClick={() => router.push(href)}
+                                        onMouseEnter={() => {
+                                            // Pre-warm both the route bundle and the SWR caches the
+                                            // detail page reads from. By the time the user clicks
+                                            // the row, both should be ready.
+                                            router.prefetch(href)
+                                            const storeP = supabase.from('stores').select('*, store_brands(brand_id, client_brands(*))').eq('id', store.id).single().then((r: { data: unknown }) => r.data)
+                                            mutate(`store-${store.id}`, storeP, { revalidate: false })
+                                            const assetsP = supabase.from('assets').select(`*, asset_types ( label ), jobs ( status ), asset_photos ( id )`).eq('store_id', store.id).then((r: { data: unknown[] | null }) => r.data ?? [])
+                                            mutate(`store-${store.id}-assets`, assetsP, { revalidate: false })
+                                        }}
                                         className="group border-b border-border/40 hover:bg-accent/30 transition-colors last:border-b-0 cursor-pointer"
                                     >
                                         <TableCell className="py-3">
@@ -468,14 +481,15 @@ export default function StoresListPage() {
                                                     <Edit2 className="size-3.5" />
                                                 </Button>
                                                 <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-foreground" asChild>
-                                                    <Link href={`/stores/${store.id}`}>
+                                                    <Link href={href}>
                                                         <ChevronRight className="size-4" />
                                                     </Link>
                                                 </Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
-                                ))
+                                    )
+                                })
                             )}
                         </TableBody>
                     </Table>

@@ -1,3 +1,5 @@
+"use client"
+
 import {
     Table,
     TableBody,
@@ -6,8 +8,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import Link from "next/link"
 import { ChevronRight } from "lucide-react"
+import { useRouter } from "next/navigation"
 import type { Asset } from "@/types/database"
 
 interface AssetTableProps {
@@ -16,6 +18,8 @@ interface AssetTableProps {
 }
 
 export function AssetTable({ assets, storeId }: AssetTableProps) {
+    const router = useRouter()
+
     const getStatus = (asset: Asset) => {
         const activeFaults = asset.jobs?.filter(j => j.status === 'open' || j.status === 'in_progress')
         if (activeFaults && activeFaults.length > 0) {
@@ -60,11 +64,17 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                     ) : (
                         assets.map((asset) => {
                             const status = getStatus(asset)
+                            const assetHref = `/stores/${storeId}/assets/${asset.id}`
                             return (
-                                <TableRow key={asset.id} className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors">
+                                <TableRow
+                                    key={asset.id}
+                                    onClick={() => router.push(assetHref)}
+                                    onMouseEnter={() => router.prefetch(assetHref)}
+                                    className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors cursor-pointer"
+                                >
                                     <TableCell className="py-3">
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="font-medium text-foreground">{asset.asset_types?.label}</span>
+                                            <span className="font-medium text-foreground group-hover:text-primary transition-colors">{asset.asset_types?.label}</span>
                                             {asset.asset_group && (
                                                 <span className="text-xs text-muted-foreground">{asset.asset_group}</span>
                                             )}
@@ -89,13 +99,10 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right py-3">
-                                        <Link
-                                            href={`/stores/${storeId}/assets/${asset.id}`}
-                                            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                                        >
+                                        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                                             Manage
                                             <ChevronRight className="size-3.5" />
-                                        </Link>
+                                        </span>
                                     </TableCell>
                                 </TableRow>
                             )

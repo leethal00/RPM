@@ -4,14 +4,18 @@ import { useState, useMemo, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import dynamic from "next/dynamic"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AssetForm } from "@/components/asset-form"
 import { ProjectCard } from "@/components/project-card"
-import { SiteForm } from "@/components/site-form"
 import { SitePhotoGallery } from "@/components/site-photo-gallery"
+
+// Forms only load when the user actually opens their dialog. Saves ~80KB
+// on the initial page bundle (Supabase client + brand picker + geocode UI).
+const AssetForm = dynamic(() => import("@/components/asset-form").then(m => m.AssetForm), { ssr: false })
+const SiteForm = dynamic(() => import("@/components/site-form").then(m => m.SiteForm), { ssr: false })
 import {
     Dialog,
     DialogContent,
