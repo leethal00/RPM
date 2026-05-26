@@ -210,6 +210,23 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
         toast.success(next ? "Marked as service-team only" : "Made visible to clients")
     }
 
+    // Asset photos surface in this gallery via the "Include asset photos" toggle.
+    // Mirroring the per-photo lock toggle here saves admins from drilling into
+    // each asset just to flip the flag.
+    const toggleAssetInternalOnly = async (photo: AssetPhotoEnriched) => {
+        const next = !photo.internal_only
+        const { error } = await supabase
+            .from('asset_photos')
+            .update({ internal_only: next })
+            .eq('id', photo.id)
+        if (error) {
+            toast.error(`Update failed: ${error.message}`)
+            return
+        }
+        setAssetPhotos(assetPhotos.map(p => p.id === photo.id ? { ...p, internal_only: next } : p))
+        toast.success(next ? "Marked as service-team only" : "Made visible to clients")
+    }
+
     if (loading) {
         return <div className="flex items-center justify-center p-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
     }
@@ -366,13 +383,28 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                         </div>
                                     )}
                                 </div>
-                                <Link
-                                    href={`/stores/${storeId}/assets/${photo.asset_id}`}
-                                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-medium"
-                                >
-                                    <ExternalLink className="size-3.5" />
-                                    Open asset
-                                </Link>
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-8 rounded-full"
+                                        title={photo.internal_only ? "Make visible to clients" : "Mark as service-team only"}
+                                        onClick={() => toggleAssetInternalOnly(photo)}
+                                    >
+                                        {photo.internal_only ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+                                    </Button>
+                                    <Button
+                                        asChild
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-8 rounded-full"
+                                        title="Open asset"
+                                    >
+                                        <Link href={`/stores/${storeId}/assets/${photo.asset_id}`}>
+                                            <ExternalLink className="size-4" />
+                                        </Link>
+                                    </Button>
+                                </div>
                                 {photo.caption && (
                                     <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/70 to-transparent">
                                         <p className="text-[10px] text-white truncate" title={photo.caption}>{photo.caption}</p>
