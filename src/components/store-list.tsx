@@ -7,6 +7,7 @@ import Link from "next/link"
 import type { Store } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
+import { computeTrafficLight } from "@/lib/health-score"
 
 interface StoreListProps {
     stores: Store[]
@@ -39,10 +40,16 @@ export function StoreList({ stores, onStoreClick, selectedStoreId, searchTerm, o
                 <div className="px-4 space-y-1.5 pb-4">
                     {stores.map((store) => {
                         const isSelected = selectedStoreId === store.id
+                        // Match the map: traffic-light tier derived from real
+                        // asset/job state, with inactive sites dimmed out.
+                        const traffic = store.status === 'inactive'
+                            ? 'muted'
+                            : computeTrafficLight({ assets: store.assets, jobs: store.jobs })
                         const statusDot =
-                            store.status === 'active' ? 'bg-emerald-500' :
-                            store.status === 'maintenance' ? 'bg-amber-500' :
-                            'bg-destructive'
+                            traffic === 'red'    ? 'bg-red-500' :
+                            traffic === 'orange' ? 'bg-amber-500' :
+                            traffic === 'green'  ? 'bg-emerald-500' :
+                            'bg-muted-foreground/40'
                         return (
                             <button
                                 key={store.id}

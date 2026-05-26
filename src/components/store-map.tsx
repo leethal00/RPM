@@ -19,10 +19,18 @@ L.Marker.prototype.options.icon = DefaultIcon
 
 // Memoised status icons — created once at module load, reused across every marker
 // (previously rebuilt per render, which caused visible flicker as the DOM swapped icons)
-const STATUS_COLORS: Record<string, string> = {
-    active: "#2D6A4F",
-    maintenance: "#F59E0B",
-    inactive: "#DC2626",
+//
+// Markers reflect the traffic-light tier computed from assets + jobs, not the
+// stored lifecycle status:
+//   green  → no active faults, all PMs current
+//   orange → at least one asset overdue for service
+//   red    → at least one open/in_progress fault job
+//   muted  → no data joined (shouldn't happen on this page) or lifecycle inactive
+const TRAFFIC_COLORS: Record<string, string> = {
+    green:  "#2D6A4F",
+    orange: "#F59E0B",
+    red:    "#DC2626",
+    muted:  "#94A3B8",
 }
 
 const buildStatusIcon = (color: string) =>
@@ -33,13 +41,26 @@ const buildStatusIcon = (color: string) =>
         iconAnchor: [8, 8],
     })
 
-const STATUS_ICONS: Record<string, L.DivIcon> = {
-    active: buildStatusIcon(STATUS_COLORS.active),
-    maintenance: buildStatusIcon(STATUS_COLORS.maintenance),
-    inactive: buildStatusIcon(STATUS_COLORS.inactive),
+const TRAFFIC_ICONS: Record<string, L.DivIcon> = {
+    green:  buildStatusIcon(TRAFFIC_COLORS.green),
+    orange: buildStatusIcon(TRAFFIC_COLORS.orange),
+    red:    buildStatusIcon(TRAFFIC_COLORS.red),
+    muted:  buildStatusIcon(TRAFFIC_COLORS.muted),
 }
 
-const getStatusIcon = (status: string) => STATUS_ICONS[status] ?? STATUS_ICONS.active
+const TRAFFIC_LABELS: Record<string, string> = {
+    green:  "Healthy",
+    orange: "Overdue",
+    red:    "Needs attention",
+    muted:  "No data",
+}
+
+const TRAFFIC_DOT_CLASS: Record<string, string> = {
+    green:  "bg-emerald-500",
+    orange: "bg-amber-500",
+    red:    "bg-red-500",
+    muted:  "bg-muted-foreground/40",
+}
 
 // NZ panning guard — generous box around the country
 const NZ_BOUNDS: L.LatLngBoundsLiteral = [
@@ -49,6 +70,7 @@ const NZ_BOUNDS: L.LatLngBoundsLiteral = [
 
 import type { Store } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
+import { computeTrafficLight } from "@/lib/health-score"
 
 interface StoreMapProps {
     stores: Store[]
@@ -87,11 +109,17 @@ function ResetViewControl({ nzCenter, nzZoom }: { nzCenter: [number, number]; nz
 
 function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: React.MutableRefObject<NodeJS.Timeout | null> }) {
     const map = useMap()
+    // Inactive sites are dimmed to grey regardless of asset/job state — they
+    // shouldn't compete visually with active sites that need attention.
+    const traffic = store.status === "inactive"
+        ? "muted"
+        : computeTrafficLight({ assets: store.assets, jobs: store.jobs })
+    const icon = TRAFFIC_ICONS[traffic] ?? TRAFFIC_ICONS.green
 
     return (
         <Marker
             position={[store.lat!, store.lng!]}
-            icon={getStatusIcon(store.status)}
+            icon={icon}
             eventHandlers={{
                 mouseover: (e) => {
                     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
@@ -137,11 +165,9 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
                     )}
 
                     <div className="flex items-center gap-2">
-                        <div className={`size-2 rounded-full ${store.status === 'active' ? 'bg-green-500' :
-                            store.status === 'maintenance' ? 'bg-amber-500' : 'bg-red-500'
-                            }`} />
+                        <div className={`size-2 rounded-full ${TRAFFIC_DOT_CLASS[traffic] ?? TRAFFIC_DOT_CLASS.green}`} />
                         <span className="text-[10px] uppercase font-bold tracking-wider">
-                            {store.status}
+                            {TRAFFIC_LABELS[traffic] ?? TRAFFIC_LABELS.green}
                         </span>
                     </div>
                     <div className="mt-3 pt-2 border-t">
