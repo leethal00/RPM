@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink, Lock, LockOpen } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, ExternalLink, Lock, LockOpen, Star } from "lucide-react"
 import { toast } from "sonner"
 import type { SitePhoto, AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
@@ -210,6 +210,41 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
         toast.success(next ? "Marked as service-team only" : "Made visible to clients")
     }
 
+    // Pin (or unpin) a photo as the site's primary — the one shown on the map
+    // popup and other summary views. The DB has a partial unique index that
+    // enforces "at most one primary per store", so we clear any existing
+    // primary first before setting the new one. Two round-trips, but the
+    // window of zero-primary is fine for our UX (map just falls back to the
+    // most recent upload).
+    const setAsPrimary = async (photo: SitePhoto) => {
+        const next = !photo.is_primary
+        if (next) {
+            // Clear any existing primary first so the unique index is happy.
+            const { error: clearError } = await supabase
+                .from('site_photos')
+                .update({ is_primary: false })
+                .eq('store_id', storeId)
+                .neq('id', photo.id)
+            if (clearError) {
+                toast.error(`Update failed: ${clearError.message}`)
+                return
+            }
+        }
+        const { error } = await supabase
+            .from('site_photos')
+            .update({ is_primary: next })
+            .eq('id', photo.id)
+        if (error) {
+            toast.error(`Update failed: ${error.message}`)
+            return
+        }
+        setPhotos(photos.map(p =>
+            p.id === photo.id ? { ...p, is_primary: next } :
+            next ? { ...p, is_primary: false } : p
+        ))
+        toast.success(next ? "Set as primary photo for this site" : "Unpinned primary photo")
+    }
+
     // Asset photos surface in this gallery via the "Include asset photos" toggle.
     // Mirroring the per-photo lock toggle here saves admins from drilling into
     // each asset just to flip the flag.
@@ -320,7 +355,11 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3">
                         {photos.map((photo) => (
-                            <div key={`site-${photo.id}`} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
+                            <div key={`site-${photo.id}`} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${
+                                photo.is_primary ? 'border-primary/60 ring-1 ring-primary/40' :
+                                photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' :
+                                'border-border/60'
+                            }`}>
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Site photo"}
@@ -329,13 +368,30 @@ export function SitePhotoGallery({ storeId }: SitePhotoGalleryProps) {
                                     sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                                     loading="lazy"
                                 />
-                                {photo.internal_only && (
-                                    <div className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[10px] font-medium px-1.5 py-0.5 rounded">
-                                        <Lock className="size-2.5" />
-                                        Internal
-                                    </div>
-                                )}
+                                <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
+                                    {photo.is_primary && (
+                                        <div className="inline-flex items-center gap-1 bg-primary/95 text-primary-foreground text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                            <Star className="size-2.5 fill-current" />
+                                            Primary
+                                        </div>
+                                    )}
+                                    {photo.internal_only && (
+                                        <div className="inline-flex items-center gap-1 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                                            <Lock className="size-2.5" />
+                                            Internal
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-8 rounded-full"
+                                        title={photo.is_primary ? "Unpin as primary photo" : "Set as primary photo (shown on the map)"}
+                                        onClick={() => setAsPrimary(photo)}
+                                    >
+                                        <Star className={`size-4 ${photo.is_primary ? 'fill-current text-amber-500' : ''}`} />
+                                    </Button>
                                     <Button
                                         variant="secondary"
                                         size="icon"

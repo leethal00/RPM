@@ -20,7 +20,7 @@ const StoreMap = dynamic(() => import("@/components/store-map"), {
 // traffic-light marker colour — see computeTrafficLight in health-score.ts.
 const STORE_COLS = "id, name, address, region, status, lat, lng, " +
   "location_approximate, site_category, has_drive_thru, manager_name, " +
-  "client:clients(name), site_photos(url), store_brands(brand_id, client_brands(*)), " +
+  "client:clients(name), site_photos(url, is_primary, created_at), store_brands(brand_id, client_brands(*)), " +
   "assets(next_service_date), jobs(status, job_type)"
 
 export default function MapPage() {

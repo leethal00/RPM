@@ -116,6 +116,16 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
         : computeTrafficLight({ assets: store.assets, jobs: store.jobs })
     const icon = TRAFFIC_ICONS[traffic] ?? TRAFFIC_ICONS.green
 
+    // Popup image: explicit primary (set via Star toggle in the gallery)
+    // wins, otherwise fall back to the newest upload. Older sites with no
+    // primary pinned still get a reasonable shot.
+    const photos = store.site_photos ?? []
+    const popupPhoto =
+        photos.find(p => p.is_primary) ??
+        [...photos].sort((a, b) =>
+            (b.created_at ?? "").localeCompare(a.created_at ?? "")
+        )[0]
+
     return (
         <Marker
             position={[store.lat!, store.lng!]}
@@ -151,10 +161,10 @@ function StoreMarker({ store, closeTimerRef }: { store: Store; closeTimerRef: Re
                     </div>
                     <p className="text-xs text-muted-foreground mb-2">{store.address}</p>
 
-                    {store.site_photos && store.site_photos.length > 0 && (
+                    {popupPhoto && (
                         <div className="relative w-full aspect-video rounded-lg overflow-hidden mb-2 border shadow-sm">
                             <Image
-                                src={store.site_photos[0].url}
+                                src={popupPhoto.url}
                                 alt={store.name}
                                 fill
                                 className="object-cover"
