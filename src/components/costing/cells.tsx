@@ -46,6 +46,24 @@ export function TextCell({ value, onCommit, placeholder }: {
     )
 }
 
+// Supplier cell: free text + autocomplete from a shared <datalist> (see listId).
+export function SupplierCell({ value, onCommit, listId, placeholder }: {
+    value: string
+    onCommit: (v: string) => void
+    listId: string
+    placeholder?: string
+}) {
+    return (
+        <input
+            key={value}
+            type="text" defaultValue={value} placeholder={placeholder} list={listId}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
+            onBlur={(e) => { if (e.target.value !== value) onCommit(e.target.value) }}
+            className={cls}
+        />
+    )
+}
+
 export function DateCell({ value, onCommit }: {
     value: string | null
     onCommit: (v: string | null) => void

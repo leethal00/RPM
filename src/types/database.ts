@@ -177,6 +177,12 @@ export interface CostingSection {
   sort: number
 }
 
+export interface CostingSupplier {
+  id: string
+  name: string
+  created_at: string
+}
+
 export interface CostingJob {
   id: string
   job_number: string | null
