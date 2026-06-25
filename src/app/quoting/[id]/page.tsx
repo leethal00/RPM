@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calculator } from "lucide-react"
+import { ArrowLeft, Calculator, FileText } from "lucide-react"
+import Link from "next/link"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -57,7 +58,16 @@ export default function CostingJobDetailPage() {
                             kicker={job.reference || "Costing job"}
                             title={job.title}
                             description={[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}
-                            actions={<Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>}
+                            actions={
+                                <div className="flex items-center gap-2">
+                                    <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
+                                        <Link href={`/quoting/${id}/job-card`} target="_blank">
+                                            <FileText className="size-3.5" /> Job card
+                                        </Link>
+                                    </Button>
+                                    <Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>
+                                </div>
+                            }
                         />
 
                         <Tabs defaultValue="cost-sheet" className="mt-2">
