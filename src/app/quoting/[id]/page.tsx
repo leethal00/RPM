@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calculator } from "lucide-react"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { CostSheet } from "@/components/costing/cost-sheet"
+import { CostingActuals } from "@/components/costing/costing-actuals"
+import { EstVsActual } from "@/components/costing/est-vs-actual"
 import type { CostingJob, CostingStatus } from "@/types/database"
 
 const STATUS_LABEL: Record<CostingStatus, string> = {
@@ -57,7 +60,16 @@ export default function CostingJobDetailPage() {
                             actions={<Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>}
                         />
 
-                        <CostSheet job={job} />
+                        <Tabs defaultValue="cost-sheet" className="mt-2">
+                            <TabsList>
+                                <TabsTrigger value="cost-sheet">Cost sheet</TabsTrigger>
+                                <TabsTrigger value="actuals">Actuals</TabsTrigger>
+                                <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="cost-sheet"><CostSheet job={job} /></TabsContent>
+                            <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>
+                            <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>
+                        </Tabs>
                     </>
                 )}
             </PageShell>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Plus, Trash2, Package, ChevronUp, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
+import { NumCell, TextCell } from "./cells"
 import type { CostingJob, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SECTIONS = ["Materials", "Wiring - LED", "Labour", "Pack/Despatch/Freight"] as const
@@ -245,46 +246,5 @@ function Tile({ label, value, className = "" }: { label: string; value: string; 
             <div className="text-xs text-muted-foreground">{label}</div>
             <div className={`text-lg font-semibold tabular-nums mt-0.5 ${className}`}>{value}</div>
         </div>
-    )
-}
-
-// Uncontrolled inputs keyed to the committed value: typing stays local; a commit
-// (or external change) updates the prop -> key changes -> input re-seeds. Enter commits.
-function NumCell({ value, onCommit, step, placeholder }: {
-    value: number | null
-    onCommit: (v: number | null) => void
-    step?: string
-    placeholder?: string
-}) {
-    const committed = value == null ? "" : String(value)
-    return (
-        <input
-            key={committed}
-            type="number" step={step ?? "any"} defaultValue={committed} placeholder={placeholder}
-            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
-            onBlur={(e) => {
-                const raw = e.target.value
-                const n = raw.trim() === "" ? null : Number(raw)
-                if (n != null && isNaN(n)) { e.target.value = committed; return }
-                if (n !== value) onCommit(n)
-            }}
-            className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm text-right tabular-nums outline-none"
-        />
-    )
-}
-
-function TextCell({ value, onCommit, placeholder }: {
-    value: string
-    onCommit: (v: string) => void
-    placeholder?: string
-}) {
-    return (
-        <input
-            key={value}
-            type="text" defaultValue={value} placeholder={placeholder}
-            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
-            onBlur={(e) => { if (e.target.value !== value) onCommit(e.target.value) }}
-            className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
-        />
     )
 }
