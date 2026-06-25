@@ -3,6 +3,7 @@ export type StoreStatus = 'active' | 'inactive' | 'maintenance'
 export type JobType = 'fault' | 'maintenance' | 'project'
 export type JobStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
+export type CostingStatus = 'quote' | 'quoted' | 'approved' | 'in_progress' | 'complete' | 'invoiced' | 'cancelled'
 
 export interface Client {
   id: string
@@ -145,6 +146,126 @@ export interface Project {
   // Joined relations
   stores?: Store
   jobs?: Job[]
+}
+
+// ── Job Costing module ───────────────────────────────────────────────
+// Rodier-internal signage costing. New `costing_*` tables; see
+// docs/job-costing-data-model.md. Not exposed to client roles.
+
+export interface Material {
+  id: string
+  code: string | null
+  description: string
+  supplier: string | null
+  unit: string | null
+  unit_cost: number
+  default_markup: number
+  section: string
+  subsection: string | null
+  date_last_checked: string | null
+  check_note: string | null
+  is_labour: boolean
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CostingSection {
+  id: number
+  section: string
+  subsection: string | null
+  sort: number
+}
+
+export interface CostingJob {
+  id: string
+  job_number: string | null
+  title: string
+  client_id: string | null
+  store_id: string | null
+  reference: string | null
+  details: string | null
+  quoted_by: string | null
+  qty: number
+  status: CostingStatus
+  adjusted_total: number | null
+  xero_quote_id: string | null
+  xero_quote_number: string | null
+  xero_invoice_number: string | null
+  folder_ref: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Joined relations
+  clients?: Client | null
+  stores?: Store | null
+  costing_lines?: CostingLine[]
+}
+
+export interface CostingLine {
+  id: string
+  job_id: string
+  section: string
+  subsection: string | null
+  sort: number
+  material_id: string | null
+  description: string
+  supplier: string | null
+  qty: number
+  unit_cost: number
+  markup: number
+  unit_sell_override: number | null
+  internal_note: string | null
+  weight_kg: number | null
+  line_cost: number // generated
+  line_sell: number // generated
+  created_at: string
+  updated_at: string
+}
+
+export interface CostingQuoteItem {
+  id: string
+  job_id: string
+  sign_code: string | null
+  name: string
+  size: string | null
+  details: string | null
+  delivery: string | null
+  qty: number
+  unit_price: number
+  sort: number
+  amount: number // generated
+  created_at: string
+  updated_at: string
+}
+
+export interface CostingTimeEntry {
+  id: string
+  job_id: string
+  work_date: string | null
+  user_id: string | null
+  person_name: string | null
+  hours: number
+  description: string | null
+  labour_type: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CostingMaterialActual {
+  id: string
+  job_id: string
+  order_date: string | null
+  supplier: string | null
+  description: string | null
+  qty: number | null
+  cost: number | null
+  material_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Vendor {

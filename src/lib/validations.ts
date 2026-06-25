@@ -66,6 +66,15 @@ export const projectSchema = z.object({
   { message: "End date must be on or after start date", path: ["end_date"] }
 )
 
+export const costingJobSchema = z.object({
+  title: z.string().min(2, "Job title is required").max(200, "Job title must be 200 characters or less"),
+  reference: z.string().max(200).optional().or(z.literal("")),
+  details: z.string().optional().or(z.literal("")),
+  qty: z.string().refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), "Qty must be a positive number").optional().or(z.literal("")),
+  client_id: z.string().optional(),
+  store_id: z.string().optional(),
+})
+
 export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),

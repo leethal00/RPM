@@ -43,3 +43,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# job-costing source attachments — sensitive client/financial docs, keep local only
+docs/*.xlsx
+docs/*.pdf
+docs/*.png
+docs/*.jpg

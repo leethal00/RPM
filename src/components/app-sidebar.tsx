@@ -17,6 +17,7 @@ import {
     UserCog,
     Lightbulb,
     HelpCircle,
+    Calculator,
 } from "lucide-react"
 
 import {
@@ -95,6 +96,14 @@ const projectItems = [
         title: "HQ Projects",
         url: "/projects",
         icon: PlusCircle,
+    },
+]
+
+const quotingItems = [
+    {
+        title: "Jobs & Quotes",
+        url: "/quoting",
+        icon: Calculator,
     },
 ]
 
@@ -203,6 +212,24 @@ export function AppSidebar() {
                             {projectItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                        <Link href={item.url}>
+                                            <item.icon className="size-4" />
+                                            <span>{item.title}</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel>Quoting &amp; Costing</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {quotingItems.map((item) => (
+                                <SidebarMenuItem key={item.title}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname.startsWith(item.url)}>
                                         <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
