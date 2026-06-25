@@ -10,14 +10,13 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calculator } from "lucide-react"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
-import type { CostingJob, CostingLine, CostingStatus } from "@/types/database"
+import { CostSheet } from "@/components/costing/cost-sheet"
+import type { CostingJob, CostingStatus } from "@/types/database"
 
 const STATUS_LABEL: Record<CostingStatus, string> = {
     quote: "Quote", quoted: "Quoted", approved: "Approved", in_progress: "In progress",
     complete: "Complete", invoiced: "Invoiced", cancelled: "Cancelled",
 }
-
-const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 
 export default function CostingJobDetailPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -25,26 +24,17 @@ export default function CostingJobDetailPage() {
     const params = useParams()
     const id = params.id as string
 
-    const { data, isLoading } = useSupabaseQuery<{ job: CostingJob; lines: CostingLine[] } | null>(
+    const { data, isLoading } = useSupabaseQuery<CostingJob | null>(
         id ? `costing-job-${id}` : null,
         async () => {
-            const [{ data: job, error: je }, { data: lines, error: le }] = await Promise.all([
-                supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("id", id).single(),
-                supabase.from("costing_lines").select("*").eq("job_id", id).order("sort"),
-            ])
-            if (je) throw je
-            if (le) throw le
-            return { data: { job: job as CostingJob, lines: (lines as CostingLine[]) || [] }, error: null }
+            const { data: job, error } = await supabase
+                .from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("id", id).single()
+            if (error) throw error
+            return { data: job as CostingJob, error: null }
         }
     )
 
-    const job = data?.job
-    const lines = data?.lines || []
-
-    const cost = lines.reduce((s, l) => s + Number(l.line_cost), 0)
-    const sell = lines.reduce((s, l) => s + Number(l.line_sell), 0)
-    const margin = sell > 0 ? 1 - cost / sell : 0
-    const grandSell = job?.adjusted_total ?? sell
+    const job = data ?? undefined
 
     return (
         <DashboardLayout>
@@ -67,27 +57,7 @@ export default function CostingJobDetailPage() {
                             actions={<Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>}
                         />
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
-                            {[
-                                { label: "Cost", value: nz(cost) },
-                                { label: "Sell", value: nz(sell) },
-                                { label: "Margin", value: `${(margin * 100).toFixed(1)}%` },
-                                { label: "Quoted total", value: nz(grandSell) },
-                            ].map((s) => (
-                                <div key={s.label} className="rounded-lg border border-border/60 p-4">
-                                    <div className="text-xs text-muted-foreground">{s.label}</div>
-                                    <div className="text-lg font-semibold tabular-nums mt-0.5">{s.value}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-6 rounded-lg border border-dashed border-border/60 p-8 text-center">
-                            <h3 className="text-base font-medium text-foreground">Cost sheet</h3>
-                            <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1">
-                                The BOM editor (add materials &amp; labour from the catalogue, sectioned, with
-                                estimated vs. actual) lands here next. {lines.length} line{lines.length === 1 ? "" : "s"} so far.
-                            </p>
-                        </div>
+                        <CostSheet job={job} />
                     </>
                 )}
             </PageShell>
