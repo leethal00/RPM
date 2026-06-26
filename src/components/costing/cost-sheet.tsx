@@ -22,6 +22,8 @@ const unitSell = (l: CostingLine) =>
 const lineCost = (l: CostingLine) => Number(l.qty) * Number(l.unit_cost)
 const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
 const lineMargin = (l: CostingLine) => { const s = lineSell(l); return s > 0 ? 1 - lineCost(l) / s : 0 }
+// Galvanising lines priced "per kg of object" — their qty is the total steel weight.
+const isGalvPerKg = (l: CostingLine) => l.description.toLowerCase().includes("per kg of object")
 
 export function CostSheet({ job }: { job: CostingJob }) {
     const supabase = useMemo(() => createClient(), [])
@@ -272,7 +274,16 @@ export function CostSheet({ job }: { job: CostingJob }) {
                                                         <td className="px-2 py-1">
                                                             <SupplierCell value={l.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => commitSupplier(l, v)} />
                                                         </td>
-                                                        <td className="px-2 py-1"><NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} /></td>
+                                                        <td className="px-2 py-1">
+                                                            <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />
+                                                            {showWeights && isGalvPerKg(l) && totalWeight > 0 && Math.abs(Number(l.qty) - totalWeight) > 0.01 && (
+                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(totalWeight * 100) / 100 })}
+                                                                    className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
+                                                                    title="Set qty to the total steel weight">
+                                                                    = {totalWeight.toFixed(1)} kg
+                                                                </button>
+                                                            )}
+                                                        </td>
                                                         <td className="px-2 py-1"><NumCell value={l.unit_cost} onCommit={(v) => patchLine(l.id, { unit_cost: v ?? 0 })} /></td>
                                                         <td className="px-2 py-1"><NumCell value={l.markup} step="0.05" onCommit={(v) => patchLine(l.id, { markup: v ?? 0 })} /></td>
                                                         <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
