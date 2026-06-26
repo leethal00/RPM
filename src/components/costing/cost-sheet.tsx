@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react"
+import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale } from "lucide-react"
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
 import { NumCell, TextCell, SupplierCell } from "./cells"
@@ -33,6 +33,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
     const [pickerSub, setPickerSub] = useState<string | null>(null)
     const [pickerNonce, setPickerNonce] = useState(0)
     const [addingSubFor, setAddingSubFor] = useState<string | null>(null)
+    const [showWeights, setShowWeights] = useState(false)
     const [adjusted, setAdjusted] = useState<string>(job.adjusted_total != null ? String(job.adjusted_total) : "")
 
     useEffect(() => {
@@ -45,7 +46,9 @@ export function CostSheet({ job }: { job: CostingJob }) {
             ])
             if (!active) return
             if (error) toast.error(error.message)
-            setLines((ls as CostingLine[]) || [])
+            const loaded = (ls as CostingLine[]) || []
+            setLines(loaded)
+            if (loaded.some((l) => l.weight_kg != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
             ;((secs as CostingSection[]) || []).forEach((s) => { if (s.subsection) order[`${s.section}|${s.subsection}`] = s.sort })
             setSubOrder(order)
@@ -179,6 +182,14 @@ export function CostSheet({ job }: { job: CostingJob }) {
             <datalist id={SUPPLIER_LIST_ID}>
                 {suppliers.map((s) => <option key={s} value={s} />)}
             </datalist>
+
+            <div className="flex justify-end">
+                <Button size="sm" variant={showWeights ? "secondary" : "ghost"} className="h-7 gap-1.5 text-xs"
+                    onClick={() => setShowWeights((v) => !v)}>
+                    <Scale className="size-3" /> {showWeights ? "Hide weights" : "Weights (steel)"}
+                </Button>
+            </div>
+
             {SECTIONS.map((section) => {
                 const secLines = lines.filter((l) => l.section === section)
                 const secCost = secLines.reduce((s, l) => s + lineCost(l), 0)
@@ -227,7 +238,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
                                             <th className="font-medium px-2 py-2 w-24 text-right">Unit sell</th>
                                             <th className="font-medium px-2 py-2 w-24 text-right">Sell</th>
                                             <th className="font-medium px-2 py-2 w-16 text-right">Margin</th>
-                                            <th className="font-medium px-2 py-2 w-20 text-right" title="Weight per unit (kg) — for galvanising">Wt (kg)</th>
+                                            {showWeights && <th className="font-medium px-2 py-2 w-20 text-right" title="Weight per unit (kg) — for galvanising">Wt (kg)</th>}
                                             <th className="w-16"></th>
                                         </tr>
                                     </thead>
@@ -236,7 +247,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
                                             <Fragment key={`g-${section}-${sub || "none"}`}>
                                                 {sub && (
                                                     <tr className="group/sub">
-                                                        <td colSpan={10} className="bg-muted/20 px-3 py-1.5">
+                                                        <td colSpan={showWeights ? 10 : 9} className="bg-muted/20 px-3 py-1.5">
                                                             <div className="flex items-center justify-between">
                                                                 <div className="text-xs font-medium text-muted-foreground w-48" title="Click to rename subsection">
                                                                     <TextCell value={sub} onCommit={(v) => renameSubsection(section, sub, v)} />
@@ -267,7 +278,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
                                                         <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
                                                         <td className="px-2 py-1 text-right tabular-nums">{nz(lineSell(l))}</td>
                                                         <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{pct(lineMargin(l))}</td>
-                                                        <td className="px-2 py-1"><NumCell value={l.weight_kg} placeholder="—" onCommit={(v) => patchLine(l.id, { weight_kg: v })} /></td>
+                                                        {showWeights && <td className="px-2 py-1"><NumCell value={l.weight_kg} placeholder="—" onCommit={(v) => patchLine(l.id, { weight_kg: v })} /></td>}
                                                         <td className="px-1 py-1">
                                                             <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 {l.material_id == null && (
@@ -319,11 +330,13 @@ export function CostSheet({ job }: { job: CostingJob }) {
                     </div>
                     <Tile label="Profit" value={nz(profit)} className={profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"} />
                     <Tile label={`Per unit (÷ ${Number(job.qty)})`} value={nz(perUnit)} />
-                    <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />
+                    {showWeights && <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />}
                 </div>
+                {showWeights && (
                 <div className="mt-3 text-xs text-muted-foreground">
                     Total weight feeds the galvanising calc (per-kg) — final formula to come once Stu shares a galvanised sample sheet.
                 </div>
+                )}
             </div>
 
             <MaterialPicker
