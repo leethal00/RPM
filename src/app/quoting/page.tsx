@@ -7,11 +7,13 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Calculator } from "lucide-react"
+import { Plus, Calculator, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -50,6 +52,8 @@ export default function QuotingPage() {
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<CostingJobRow | null>(null)
+    const [deleting, setDeleting] = useState(false)
     const { clientId } = useCustomerFilter()
 
     const key = `costing-jobs-${page}-${statusFilter}-${clientId ?? "all"}`
@@ -77,6 +81,17 @@ export default function QuotingPage() {
     const jobs = result?.items || []
     const totalCount = result?.count ?? 0
     const pageCount = Math.ceil(totalCount / PAGE_SIZE)
+
+    async function confirmDelete() {
+        if (!deleteTarget) return
+        setDeleting(true)
+        const { error } = await supabase.from("costing_jobs").delete().eq("id", deleteTarget.id)
+        setDeleting(false)
+        if (error) return toast.error(error.message)
+        toast.success("Job deleted")
+        setDeleteTarget(null)
+        mutate()
+    }
 
     return (
         <DashboardLayout>
@@ -144,6 +159,7 @@ export default function QuotingPage() {
                                         <th className="font-medium px-4 py-2.5">Client / Site</th>
                                         <th className="font-medium px-4 py-2.5 w-28">Number</th>
                                         <th className="font-medium px-4 py-2.5 w-32">Status</th>
+                                        <th className="w-12"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -170,6 +186,15 @@ export default function QuotingPage() {
                                                 <Badge variant="secondary" className={STATUS_META[job.status].className}>
                                                     {STATUS_META[job.status].label}
                                                 </Badge>
+                                            </td>
+                                            <td className="px-2 py-3 text-right">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
+                                                    className="text-muted-foreground hover:text-destructive p-1.5 rounded transition-colors"
+                                                    title="Delete job"
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -198,6 +223,24 @@ export default function QuotingPage() {
                         </Button>
                     </div>
                 )}
+
+                <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
+                    <DialogContent className="sm:max-w-[440px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete this job?</DialogTitle>
+                            <DialogDescription>
+                                <strong>{deleteTarget?.title}</strong> and its cost sheet, actuals and quote items
+                                will be permanently deleted. This can&apos;t be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+                            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+                                {deleting ? "Deleting…" : "Delete job"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </PageShell>
         </DashboardLayout>
     )
