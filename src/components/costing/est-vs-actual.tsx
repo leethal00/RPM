@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import type { CostingJob, CostingLine, CostingTimeEntry, CostingMaterialActual } from "@/types/database"
+import type { CostingJob, CostingItem, CostingLine, CostingTimeEntry, CostingMaterialActual } from "@/types/database"
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -10,6 +10,7 @@ const unitSell = (l: CostingLine) => l.unit_sell_override != null ? Number(l.uni
 
 export function EstVsActual({ job }: { job: CostingJob }) {
     const supabase = useMemo(() => createClient(), [])
+    const [items, setItems] = useState<CostingItem[]>([])
     const [lines, setLines] = useState<CostingLine[]>([])
     const [time, setTime] = useState<CostingTimeEntry[]>([])
     const [mats, setMats] = useState<CostingMaterialActual[]>([])
@@ -18,12 +19,14 @@ export function EstVsActual({ job }: { job: CostingJob }) {
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data: l }, { data: t }, { data: m }] = await Promise.all([
+            const [{ data: it }, { data: l }, { data: t }, { data: m }] = await Promise.all([
+                supabase.from("costing_items").select("*").eq("job_id", job.id),
                 supabase.from("costing_lines").select("*").eq("job_id", job.id),
                 supabase.from("costing_time_entries").select("*").eq("job_id", job.id),
                 supabase.from("costing_material_actuals").select("*").eq("job_id", job.id),
             ])
             if (!active) return
+            setItems((it as CostingItem[]) || [])
             setLines((l as CostingLine[]) || [])
             setTime((t as CostingTimeEntry[]) || [])
             setMats((m as CostingMaterialActual[]) || [])
@@ -34,21 +37,29 @@ export function EstVsActual({ job }: { job: CostingJob }) {
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
 
-    // Estimate (from the BOM)
+    // item qty multiplier for a build line
+    const qtyOf = (l: CostingLine) => Number(items.find((i) => i.id === l.item_id)?.qty ?? 1)
+    const simpleItems = items.filter((i) => i.mode === "simple")
+
+    // Estimate (build items' BOM × item qty, + simple items' cost/sell)
     const labourLines = lines.filter((l) => l.section === "Labour")
     const matLines = lines.filter((l) => l.section !== "Labour")
-    const estLabourHours = labourLines.reduce((s, l) => s + Number(l.qty), 0)
-    const estLabourCost = labourLines.reduce((s, l) => s + Number(l.qty) * Number(l.unit_cost), 0)
-    const estMatCost = matLines.reduce((s, l) => s + Number(l.qty) * Number(l.unit_cost), 0)
-    const estTotalCost = estLabourCost + estMatCost
-    const sell = job.adjusted_total != null ? Number(job.adjusted_total) : lines.reduce((s, l) => s + Number(l.qty) * unitSell(l), 0)
+    const estLabourHours = labourLines.reduce((s, l) => s + qtyOf(l) * Number(l.qty), 0)
+    const estLabourCost = labourLines.reduce((s, l) => s + qtyOf(l) * Number(l.qty) * Number(l.unit_cost), 0)
+    const estMatCost = matLines.reduce((s, l) => s + qtyOf(l) * Number(l.qty) * Number(l.unit_cost), 0)
+    const estSimpleCost = simpleItems.reduce((s, i) => s + Number(i.qty) * Number(i.unit_cost), 0)
+    const estTotalCost = estLabourCost + estMatCost + estSimpleCost
+    const sell = job.adjusted_total != null
+        ? Number(job.adjusted_total)
+        : lines.reduce((s, l) => s + qtyOf(l) * Number(l.qty) * unitSell(l), 0)
+          + simpleItems.reduce((s, i) => s + Number(i.qty) * Number(i.unit_price), 0)
 
-    // Actuals
+    // Actuals (simple items have no actual to log — carried at estimate)
     const actHours = time.reduce((s, r) => s + Number(r.hours), 0)
     const blendedRate = estLabourHours > 0 ? estLabourCost / estLabourHours : 0
     const actLabourCost = actHours * blendedRate          // actual hours costed at the estimated rate
     const actMatCost = mats.reduce((s, r) => s + Number(r.qty ?? 1) * Number(r.cost ?? 0), 0)
-    const actTotalCost = actLabourCost + actMatCost
+    const actTotalCost = actLabourCost + actMatCost + estSimpleCost
 
     const estProfit = sell - estTotalCost
     const actProfit = sell - actTotalCost
@@ -95,6 +106,10 @@ export function EstVsActual({ job }: { job: CostingJob }) {
                             variance={actLabourCost - estLabourCost} fmt={(n) => `${n > 0 ? "+" : ""}${nz(n)}`} overIsBad sub="actual hrs × est. rate" />
                         <Row label="Material cost" est={nz(estMatCost)} act={nz(actMatCost)}
                             variance={actMatCost - estMatCost} fmt={(n) => `${n > 0 ? "+" : ""}${nz(n)}`} overIsBad />
+                        {estSimpleCost > 0 && (
+                            <Row label="Other (simple items)" est={nz(estSimpleCost)} act={nz(estSimpleCost)}
+                                variance={0} fmt={() => "—"} sub="travel / freight / etc." />
+                        )}
                         <Row label="Total cost" est={nz(estTotalCost)} act={nz(actTotalCost)}
                             variance={actTotalCost - estTotalCost} fmt={(n) => `${n > 0 ? "+" : ""}${nz(n)}`} overIsBad strong />
                         <Row label="Profit" est={nz(estProfit)} act={nz(actProfit)}

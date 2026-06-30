@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Printer, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import type { CostingJob, CostingLine } from "@/types/database"
+import type { CostingJob, CostingItem, CostingLine } from "@/types/database"
 
 const SECTIONS = ["Materials", "Wiring - LED", "Labour", "Pack/Despatch/Freight"] as const
 const DEPARTMENTS = ["Design", "CNC Router", "Metal Fab", "Welding", "Paint", "Vinyl / Print", "Electrical", "Assembly", "Install", "Pack / Freight"]
@@ -17,18 +17,21 @@ export default function JobCardPage() {
     const params = useParams()
     const id = params.id as string
     const [job, setJob] = useState<CostingJob | null>(null)
+    const [items, setItems] = useState<CostingItem[]>([])
     const [lines, setLines] = useState<CostingLine[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data: j }, { data: l }] = await Promise.all([
+            const [{ data: j }, { data: it }, { data: l }] = await Promise.all([
                 supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("id", id).single(),
+                supabase.from("costing_items").select("*").eq("job_id", id).order("sort"),
                 supabase.from("costing_lines").select("*").eq("job_id", id).order("section").order("subsection").order("sort"),
             ])
             if (!active) return
             setJob(j as CostingJob)
+            setItems((it as CostingItem[]) || [])
             setLines((l as CostingLine[]) || [])
             setLoading(false)
         })()
@@ -38,9 +41,11 @@ export default function JobCardPage() {
     if (loading) return <div className="p-10 text-sm text-muted-foreground">Loading job card…</div>
     if (!job) return <div className="p-10 text-sm text-muted-foreground">Job not found.</div>
 
-    const labour = lines.filter((l) => l.section === "Labour")
-    const buildLines = lines.filter((l) => l.section !== "Labour")
-    const estHours = labour.reduce((s, l) => s + Number(l.qty), 0)
+    const buildItems = items.filter((i) => i.mode === "build").sort((a, b) => a.sort - b.sort)
+    const simpleItems = items.filter((i) => i.mode === "simple").sort((a, b) => a.sort - b.sort)
+    const showItemHeaders = items.length > 1
+    const qtyOf = (l: CostingLine) => Number(items.find((i) => i.id === l.item_id)?.qty ?? 1)
+    const estHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + qtyOf(l) * Number(l.qty), 0)
 
     return (
         <div className="min-h-screen bg-neutral-100 print:bg-white text-black">
@@ -96,46 +101,75 @@ export default function JobCardPage() {
                     ))}
                 </div>
 
-                {/* Build spec from the BOM */}
-                <SectionTitle>Build spec</SectionTitle>
-                <table className="w-full border border-neutral-300 border-collapse">
-                    <thead>
-                        <tr className="bg-neutral-100 text-left">
-                            <th className="border border-neutral-300 px-2 py-1 font-semibold">Item</th>
-                            <th className="border border-neutral-300 px-2 py-1 font-semibold w-16 text-right">Est. qty</th>
-                            <th className="border border-neutral-300 px-2 py-1 font-semibold w-24">Done ✓ / notes</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {SECTIONS.filter((s) => s !== "Labour").map((section) => {
-                            const rows = buildLines.filter((l) => l.section === section)
-                            if (!rows.length) return null
-                            return (
-                                <FragmentRows key={section} title={section} rows={rows} />
-                            )
-                        })}
-                        {buildLines.length === 0 && (
-                            <tr><td colSpan={3} className="px-2 py-3 text-center text-neutral-400">No build lines on the cost sheet yet.</td></tr>
-                        )}
-                    </tbody>
-                </table>
+                {/* Build spec + labour, per item */}
+                {buildItems.map((item) => {
+                    const itemLines = lines.filter((l) => l.item_id === item.id)
+                    const itemBuild = itemLines.filter((l) => l.section !== "Labour")
+                    const itemLabour = itemLines.filter((l) => l.section === "Labour")
+                    return (
+                        <div key={item.id}>
+                            <SectionTitle>
+                                {showItemHeaders ? `${item.name || "Item"}${Number(item.qty) > 1 ? ` × ${Number(item.qty)}` : ""} — build spec` : "Build spec"}
+                            </SectionTitle>
+                            <table className="w-full border border-neutral-300 border-collapse">
+                                <thead>
+                                    <tr className="bg-neutral-100 text-left">
+                                        <th className="border border-neutral-300 px-2 py-1 font-semibold">Item</th>
+                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-16 text-right">Est. qty</th>
+                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-24">Done ✓ / notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {SECTIONS.filter((s) => s !== "Labour").map((section) => {
+                                        const rows = itemBuild.filter((l) => l.section === section)
+                                        if (!rows.length) return null
+                                        return <FragmentRows key={section} title={section} rows={rows} />
+                                    })}
+                                    {itemBuild.length === 0 && (
+                                        <tr><td colSpan={3} className="px-2 py-3 text-center text-neutral-400">No build lines yet.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            {itemLabour.length > 0 && (
+                                <table className="w-full border border-neutral-300 border-collapse mt-1">
+                                    <thead>
+                                        <tr className="bg-neutral-100 text-left">
+                                            <th className="border border-neutral-300 px-2 py-1 font-semibold">Labour task</th>
+                                            <th className="border border-neutral-300 px-2 py-1 font-semibold w-20 text-right">Est. hrs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {itemLabour.map((l) => (
+                                            <tr key={l.id}>
+                                                <td className="border border-neutral-300 px-2 py-1">{l.description}{l.internal_note && <span className="text-neutral-500 italic"> — {l.internal_note}</span>}</td>
+                                                <td className="border border-neutral-300 px-2 py-1 text-right tabular-nums">{Number(l.qty)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    )
+                })}
 
-                {/* Labour plan */}
-                {labour.length > 0 && (
+                {/* Simple items */}
+                {simpleItems.length > 0 && (
                     <>
-                        <SectionTitle>Labour plan (estimated)</SectionTitle>
+                        <SectionTitle>Other items</SectionTitle>
                         <table className="w-full border border-neutral-300 border-collapse">
                             <thead>
                                 <tr className="bg-neutral-100 text-left">
-                                    <th className="border border-neutral-300 px-2 py-1 font-semibold">Task</th>
-                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-20 text-right">Est. hrs</th>
+                                    <th className="border border-neutral-300 px-2 py-1 font-semibold">Item</th>
+                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-16 text-right">Qty</th>
+                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-24">Done ✓ / notes</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {labour.map((l) => (
-                                    <tr key={l.id}>
-                                        <td className="border border-neutral-300 px-2 py-1">{l.description}{l.internal_note && <span className="text-neutral-500 italic"> — {l.internal_note}</span>}</td>
-                                        <td className="border border-neutral-300 px-2 py-1 text-right tabular-nums">{Number(l.qty)}</td>
+                                {simpleItems.map((i) => (
+                                    <tr key={i.id}>
+                                        <td className="border border-neutral-300 px-2 py-1">{i.name || "—"}</td>
+                                        <td className="border border-neutral-300 px-2 py-1 text-right tabular-nums">{Number(i.qty)}</td>
+                                        <td className="border border-neutral-300 px-2 py-1" />
                                     </tr>
                                 ))}
                             </tbody>
