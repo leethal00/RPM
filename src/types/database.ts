@@ -212,6 +212,7 @@ export interface CostingJob {
 export interface CostingLine {
   id: string
   job_id: string
+  item_id: string | null
   section: string
   subsection: string | null
   sort: number
@@ -230,20 +231,25 @@ export interface CostingLine {
   updated_at: string
 }
 
-export interface CostingQuoteItem {
+export type CostingItemMode = "simple" | "build"
+
+export interface CostingItem {
   id: string
   job_id: string
-  sign_code: string | null
   name: string
+  sign_code: string | null
   size: string | null
   details: string | null
   delivery: string | null
+  mode: CostingItemMode
   qty: number
-  unit_price: number
+  unit_cost: number   // simple items
+  unit_price: number  // simple items (sell)
   sort: number
-  amount: number // generated
   created_at: string
   updated_at: string
+  // computed in app for build items
+  costing_lines?: CostingLine[]
 }
 
 export interface CostingTimeEntry {
