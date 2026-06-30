@@ -40,6 +40,31 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
     const [stores, setStores] = useState<Pick<Store, "id" | "name">[]>([])
     const [fetching, setFetching] = useState(true)
+    const [addingClient, setAddingClient] = useState(false)
+    const [newClientName, setNewClientName] = useState("")
+    const [addingStore, setAddingStore] = useState(false)
+    const [newStoreName, setNewStoreName] = useState("")
+
+    async function createClientInline() {
+        const name = newClientName.trim()
+        if (!name) return
+        const { data, error } = await supabase.from("clients").insert({ name }).select("id, name").single()
+        if (error) return toast.error(error.message)
+        setClients((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+        setFormData((f) => ({ ...f, client_id: data.id }))
+        setAddingClient(false); setNewClientName("")
+    }
+
+    async function createStoreInline() {
+        const name = newStoreName.trim()
+        if (!name) return
+        if (formData.client_id === "none") return toast.error("Pick a client first, then add its site")
+        const { data, error } = await supabase.from("stores").insert({ name, client_id: formData.client_id }).select("id, name").single()
+        if (error) return toast.error(error.message)
+        setStores((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+        setFormData((f) => ({ ...f, store_id: data.id }))
+        setAddingStore(false); setNewStoreName("")
+    }
 
     useEffect(() => {
         async function fetchRefs() {
@@ -148,39 +173,67 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label htmlFor="client_id" className="text-xs font-medium text-muted-foreground">Client (optional)</Label>
-                        <Select
-                            value={formData.client_id}
-                            onValueChange={(v) => setFormData({ ...formData, client_id: v })}
-                            disabled={fetching}
-                        >
-                            <SelectTrigger id="client_id">
-                                <SelectValue placeholder={fetching ? "Loading…" : "Select client"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">Ad-hoc / wholesale (no client)</SelectItem>
-                                {clients.map((c) => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        {addingClient ? (
+                            <div className="flex gap-1.5">
+                                <Input autoFocus value={newClientName} placeholder="New client name"
+                                    onChange={(e) => setNewClientName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") { e.preventDefault(); createClientInline() }
+                                        else if (e.key === "Escape") setAddingClient(false)
+                                    }} />
+                                <Button type="button" size="sm" className="shrink-0" onClick={createClientInline}>Add</Button>
+                                <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2" onClick={() => setAddingClient(false)}>×</Button>
+                            </div>
+                        ) : (
+                            <Select
+                                value={formData.client_id}
+                                onValueChange={(v) => v === "__new__" ? setAddingClient(true) : setFormData({ ...formData, client_id: v })}
+                                disabled={fetching}
+                            >
+                                <SelectTrigger id="client_id">
+                                    <SelectValue placeholder={fetching ? "Loading…" : "Select client"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Ad-hoc / wholesale (no client)</SelectItem>
+                                    <SelectItem value="__new__" className="text-primary">+ New client…</SelectItem>
+                                    {clients.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                     <div className="grid gap-2">
                         <Label htmlFor="store_id" className="text-xs font-medium text-muted-foreground">Site (optional)</Label>
-                        <Select
-                            value={formData.store_id}
-                            onValueChange={(v) => setFormData({ ...formData, store_id: v })}
-                            disabled={fetching}
-                        >
-                            <SelectTrigger id="store_id">
-                                <SelectValue placeholder={fetching ? "Loading…" : "Select site"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">No site</SelectItem>
-                                {stores.map((s) => (
-                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        {addingStore ? (
+                            <div className="flex gap-1.5">
+                                <Input autoFocus value={newStoreName} placeholder="New site name"
+                                    onChange={(e) => setNewStoreName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") { e.preventDefault(); createStoreInline() }
+                                        else if (e.key === "Escape") setAddingStore(false)
+                                    }} />
+                                <Button type="button" size="sm" className="shrink-0" onClick={createStoreInline}>Add</Button>
+                                <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2" onClick={() => setAddingStore(false)}>×</Button>
+                            </div>
+                        ) : (
+                            <Select
+                                value={formData.store_id}
+                                onValueChange={(v) => v === "__new__" ? setAddingStore(true) : setFormData({ ...formData, store_id: v })}
+                                disabled={fetching}
+                            >
+                                <SelectTrigger id="store_id">
+                                    <SelectValue placeholder={fetching ? "Loading…" : "Select site"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No site</SelectItem>
+                                    <SelectItem value="__new__" className="text-primary">+ New site…</SelectItem>
+                                    {stores.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 </div>
 
