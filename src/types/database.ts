@@ -165,6 +165,7 @@ export interface Material {
   date_last_checked: string | null
   check_note: string | null
   is_labour: boolean
+  watts: number | null   // LED module consumption / transformer capacity
   active: boolean
   created_at: string
   updated_at: string
@@ -228,6 +229,7 @@ export interface CostingLine {
   wt_factor: number | null  // kg/m (linear) or kg/m² (plate)
   wt_size: number | null     // length (m) or area (m²)
   wt_qty: number | null      // number of pieces
+  watts: number | null       // LED module consumption / transformer capacity
   line_cost: number // generated
   line_sell: number // generated
   created_at: string

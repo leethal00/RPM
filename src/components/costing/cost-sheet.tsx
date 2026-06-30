@@ -27,6 +27,9 @@ const lineMargin = (l: CostingLine) => { const s = lineSell(l); return s > 0 ? 1
 const isGalvPerKg = (l: CostingLine) => l.description.toLowerCase().includes("per kg of object")
 // Weight (kg) for galvanising = factor × size × qty (manual; independent of cost qty).
 const lineWeight = (l: CostingLine) => Number(l.wt_factor ?? 0) * Number(l.wt_size ?? 0) * Number(l.wt_qty ?? 0)
+const LED_LOADING = 1.2          // fixed 20% "fuck factor" — keeps drivers ≤ 80% load
+const MODULES_PER_HOUR = 25
+const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
 
 // Scoped to a single item's BOM. Lines carry both job_id (for job-level rollups)
 // and item_id (this item).
@@ -79,7 +82,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         const payload = {
             job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
             description: m?.description ?? "", supplier: m?.supplier ?? null,
-            qty: m ? 1 : 0, unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, sort: maxSort + 1,
+            qty: m ? 1 : 0, unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
         }
         const { data, error } = await supabase.from("costing_lines").insert(payload).select("*").single()
         if (error) return toast.error(error.message)
@@ -231,6 +234,14 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                 const secCost = secLines.reduce((s, l) => s + lineCost(l), 0)
                 const secSell = secLines.reduce((s, l) => s + lineSell(l), 0)
                 const groups = groupsFor(section)
+                // LED sizing calc (Wiring - LED only)
+                const isWiring = section === "Wiring - LED"
+                const modLines = isWiring ? secLines.filter((l) => l.subsection === "Modules") : []
+                const ledLoad = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
+                const ledRequired = ledLoad * LED_LOADING
+                const driverCap = isWiring ? secLines.filter((l) => l.subsection === "Transformers").reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0) : 0
+                const moduleCount = modLines.reduce((s, l) => s + Number(l.qty), 0)
+                const wiringHrs = moduleCount / MODULES_PER_HOUR
                 return (
                     <section key={section} className="rounded-lg border border-border/60 overflow-hidden">
                         <div className="flex items-center justify-between bg-muted/40 px-4 py-2.5">
@@ -260,6 +271,17 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                 )}
                             </div>
                         </div>
+
+                        {isWiring && (ledLoad > 0 || moduleCount > 0) && (
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border/60 bg-amber-500/5 px-4 py-2 text-xs">
+                                <span>LED load <span className="font-semibold tabular-nums">{ledLoad.toFixed(1)}w</span> × 1.2 = <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>
+                                <span className={driverCap >= ledRequired ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                                    Drivers selected <span className="font-semibold tabular-nums">{driverCap.toFixed(0)}w</span>{" "}
+                                    {ledRequired === 0 ? "" : driverCap >= ledRequired ? "✓ covered" : `⚠ short ${(ledRequired - driverCap).toFixed(0)}w`}
+                                </span>
+                                <span className="text-muted-foreground tabular-nums">{moduleCount} modules ≈ {wiringHrs.toFixed(2)} hr wiring labour</span>
+                            </div>
+                        )}
 
                         {secLines.length > 0 && (
                             <div className="overflow-x-auto">
@@ -322,6 +344,13 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
                                                                     title="Set qty to the total steel weight">
                                                                     = {totalWeight.toFixed(1)} kg
+                                                                </button>
+                                                            )}
+                                                            {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
+                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(wiringHrs * 100) / 100 })}
+                                                                    className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
+                                                                    title="Set wiring labour to modules ÷ 25">
+                                                                    = {wiringHrs.toFixed(2)} hr
                                                                 </button>
                                                             )}
                                                         </td>
