@@ -78,6 +78,41 @@ export default function ItemCostSheetPage() {
                             </div>
                         </div>
 
+                        {/* Quote description — feeds the customer quote line */}
+                        <div className="mt-5 rounded-lg border border-border/60 p-4 space-y-3">
+                            <div className="text-xs font-medium text-muted-foreground">Quote description — shows on the customer quote</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid gap-1.5">
+                                    <label className="text-xs text-muted-foreground">Size</label>
+                                    <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
+                                        onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
+                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
+                                </div>
+                                <div className="grid gap-1.5">
+                                    <label className="text-xs text-muted-foreground">Delivery</label>
+                                    <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
+                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring">
+                                        <option value="">—</option>
+                                        <option value="Ex-factory">Ex-factory</option>
+                                        <option value="Freight to site">Freight to site</option>
+                                        <option value="Install on site">Install on site</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid gap-1.5">
+                                <label className="text-xs text-muted-foreground">Details</label>
+                                <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
+                                    onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
+                                    className="min-h-[80px] rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
+                            </div>
+                            <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground whitespace-pre-line">
+                                {[item.name || "Item", `Qty: ${Number(item.qty)}`,
+                                  item.size ? `Size: ${item.size}` : null,
+                                  item.details ? `Details: ${item.details}` : null,
+                                  item.delivery || null].filter(Boolean).join("\n")}
+                            </div>
+                        </div>
+
                         <CostSheet jobId={jobId} item={item} />
                     </>
                 )}
