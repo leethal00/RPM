@@ -7,7 +7,7 @@ import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale } fr
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
 import { NumCell, TextCell, SupplierCell } from "./cells"
-import type { CostingJob, CostingLine, CostingSection, Material } from "@/types/database"
+import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
 
@@ -25,7 +25,9 @@ const lineMargin = (l: CostingLine) => { const s = lineSell(l); return s > 0 ? 1
 // Galvanising lines priced "per kg of object" — their qty is the total steel weight.
 const isGalvPerKg = (l: CostingLine) => l.description.toLowerCase().includes("per kg of object")
 
-export function CostSheet({ job }: { job: CostingJob }) {
+// Scoped to a single item's BOM. Lines carry both job_id (for job-level rollups)
+// and item_id (this item).
+export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem }) {
     const supabase = useMemo(() => createClient(), [])
     const [lines, setLines] = useState<CostingLine[]>([])
     const [subOrder, setSubOrder] = useState<Record<string, number>>({})
@@ -36,13 +38,12 @@ export function CostSheet({ job }: { job: CostingJob }) {
     const [pickerNonce, setPickerNonce] = useState(0)
     const [addingSubFor, setAddingSubFor] = useState<string | null>(null)
     const [showWeights, setShowWeights] = useState(false)
-    const [adjusted, setAdjusted] = useState<string>(job.adjusted_total != null ? String(job.adjusted_total) : "")
 
     useEffect(() => {
         let active = true
         ;(async () => {
             const [{ data: ls, error }, { data: secs }, { data: sups }] = await Promise.all([
-                supabase.from("costing_lines").select("*").eq("job_id", job.id),
+                supabase.from("costing_lines").select("*").eq("item_id", item.id),
                 supabase.from("costing_sections").select("*"),
                 supabase.from("costing_suppliers").select("name").order("name"),
             ])
@@ -58,7 +59,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
             setLoading(false)
         })()
         return () => { active = false }
-    }, [supabase, job.id])
+    }, [supabase, item.id])
 
     function openPicker(section: string, sub: string | null = null) {
         setPickerSection(section); setPickerSub(sub); setPickerNonce((n) => n + 1)
@@ -72,7 +73,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
         const subsection = subOverride !== undefined ? subOverride : (m?.subsection ?? null)
         const maxSort = Math.max(0, ...lines.filter((l) => l.section === sec).map((l) => l.sort))
         const payload = {
-            job_id: job.id, section: sec, subsection, material_id: m?.id ?? null,
+            job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
             description: m?.description ?? "", supplier: m?.supplier ?? null,
             qty: m ? 1 : 0, unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, sort: maxSort + 1,
         }
@@ -94,7 +95,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
         if (!name || name === oldSub) return
         setLines((prev) => prev.map((l) => (l.section === section && (l.subsection ?? "") === oldSub ? { ...l, subsection: name } : l)))
         const { error } = await supabase.from("costing_lines").update({ subsection: name })
-            .eq("job_id", job.id).eq("section", section).eq("subsection", oldSub)
+            .eq("item_id", item.id).eq("section", section).eq("subsection", oldSub)
         if (error) toast.error(error.message)
     }
 
@@ -146,22 +147,13 @@ export function CostSheet({ job }: { job: CostingJob }) {
         if (err) toast.error(err.message)
     }
 
-    async function saveAdjusted(value: string) {
-        const num = value.trim() === "" ? null : Number(value)
-        if (num != null && isNaN(num)) return
-        const { error } = await supabase.from("costing_jobs").update({ adjusted_total: num }).eq("id", job.id)
-        if (error) toast.error(error.message)
-    }
-
-    // ── totals ──────────────────────────────────────────────────
+    // ── totals (per one of this item) ───────────────────────────
     const cost = lines.reduce((s, l) => s + lineCost(l), 0)
     const sell = lines.reduce((s, l) => s + lineSell(l), 0)
     const margin = sell > 0 ? 1 - cost / sell : 0
     const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
     const totalWeight = lines.reduce((s, l) => s + Number(l.qty) * Number(l.weight_kg ?? 0), 0)
-    const adjustedNum = adjusted.trim() === "" ? sell : Number(adjusted) || sell
-    const profit = adjustedNum - cost
-    const perUnit = job.qty ? adjustedNum / Number(job.qty) : adjustedNum
+    const itemQty = Number(item.qty) || 1
 
     // Order a section's lines by subsection (seed order, then name), then by sort.
     function groupsFor(section: string) {
@@ -324,7 +316,7 @@ export function CostSheet({ job }: { job: CostingJob }) {
                 )
             })}
 
-            {/* Grand totals */}
+            {/* Item totals (per one of this item) */}
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Tile label="Cost" value={nz(cost)} />
@@ -332,21 +324,16 @@ export function CostSheet({ job }: { job: CostingJob }) {
                     <Tile label="Margin" value={pct(margin)} />
                     <Tile label="Total hours" value={totalHours.toFixed(2)} />
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border/60 items-end">
-                    <div>
-                        <label className="text-xs text-muted-foreground">Adjusted total (override)</label>
-                        <input type="number" step="any" value={adjusted} placeholder={sell.toFixed(2)}
-                            onChange={(e) => setAdjusted(e.target.value)} onBlur={(e) => saveAdjusted(e.target.value)}
-                            className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums" />
+                {(itemQty !== 1 || showWeights) && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border/60">
+                        {itemQty !== 1 && <Tile label={`Line total (× ${itemQty})`} value={nz(sell * itemQty)} />}
+                        {showWeights && <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />}
                     </div>
-                    <Tile label="Profit" value={nz(profit)} className={profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"} />
-                    <Tile label={`Per unit (÷ ${Number(job.qty)})`} value={nz(perUnit)} />
-                    {showWeights && <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />}
-                </div>
+                )}
                 {showWeights && (
-                <div className="mt-3 text-xs text-muted-foreground">
-                    Total weight feeds the galvanising calc (per-kg) — final formula to come once Stu shares a galvanised sample sheet.
-                </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                        Total weight feeds the galvanising calc — set a galvanising line&apos;s qty to it via its &quot;= kg&quot; link.
+                    </div>
                 )}
             </div>
 

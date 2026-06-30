@@ -12,7 +12,7 @@ import Link from "next/link"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { CostSheet } from "@/components/costing/cost-sheet"
+import { ItemsList } from "@/components/costing/items-list"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import type { CostingJob, CostingStatus } from "@/types/database"
@@ -70,13 +70,13 @@ export default function CostingJobDetailPage() {
                             }
                         />
 
-                        <Tabs defaultValue="cost-sheet" className="mt-2">
+                        <Tabs defaultValue="items" className="mt-2">
                             <TabsList>
-                                <TabsTrigger value="cost-sheet">Cost sheet</TabsTrigger>
+                                <TabsTrigger value="items">Items</TabsTrigger>
                                 <TabsTrigger value="actuals">Actuals</TabsTrigger>
                                 <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
                             </TabsList>
-                            <TabsContent value="cost-sheet"><CostSheet job={job} /></TabsContent>
+                            <TabsContent value="items"><ItemsList job={job} /></TabsContent>
                             <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>
                             <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>
                         </Tabs>

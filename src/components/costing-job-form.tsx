@@ -90,14 +90,22 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
             .select("id")
             .single()
 
-        setLoading(false)
-
         if (error) {
+            setLoading(false)
             toast.error(error.message)
-        } else {
-            toast.success(job ? "Job updated" : "Job created")
-            onSuccess(data?.id)
+            return
         }
+
+        // New jobs get one default "build" item so single-item jobs are one-click.
+        if (!job && data?.id) {
+            await supabase.from("costing_items").insert({
+                job_id: data.id, name: formData.title, mode: "build", qty: parseFloat(formData.qty) || 1, sort: 0,
+            })
+        }
+
+        setLoading(false)
+        toast.success(job ? "Job updated" : "Job created")
+        onSuccess(data?.id)
     }
 
     return (
