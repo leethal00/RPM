@@ -24,6 +24,8 @@ const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
 const lineMargin = (l: CostingLine) => { const s = lineSell(l); return s > 0 ? 1 - lineCost(l) / s : 0 }
 // Galvanising lines priced "per kg of object" — their qty is the total steel weight.
 const isGalvPerKg = (l: CostingLine) => l.description.toLowerCase().includes("per kg of object")
+// Weight (kg) for galvanising = factor × size × qty (manual; independent of cost qty).
+const lineWeight = (l: CostingLine) => Number(l.wt_factor ?? 0) * Number(l.wt_size ?? 0) * Number(l.wt_qty ?? 0)
 
 // Scoped to a single item's BOM. Lines carry both job_id (for job-level rollups)
 // and item_id (this item).
@@ -51,7 +53,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             if (error) toast.error(error.message)
             const loaded = (ls as CostingLine[]) || []
             setLines(loaded)
-            if (loaded.some((l) => l.weight_kg != null)) setShowWeights(true)  // steel jobs auto-show
+            if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
             ;((secs as CostingSection[]) || []).forEach((s) => { if (s.subsection) order[`${s.section}|${s.subsection}`] = s.sort })
             setSubOrder(order)
@@ -152,7 +154,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const sell = lines.reduce((s, l) => s + lineSell(l), 0)
     const margin = sell > 0 ? 1 - cost / sell : 0
     const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
-    const totalWeight = lines.reduce((s, l) => s + Number(l.qty) * Number(l.weight_kg ?? 0), 0)
+    const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
     const itemQty = Number(item.qty) || 1
 
     // Order a section's lines by subsection (seed order, then name), then by sort.
@@ -232,7 +234,12 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                             <th className="font-medium px-2 py-2 w-24 text-right">Unit sell</th>
                                             <th className="font-medium px-2 py-2 w-24 text-right">Sell</th>
                                             <th className="font-medium px-2 py-2 w-16 text-right">Margin</th>
-                                            {showWeights && <th className="font-medium px-2 py-2 w-20 text-right" title="Weight per unit (kg) — for galvanising">Wt (kg)</th>}
+                                            {showWeights && <>
+                                                <th className="font-medium px-2 py-2 w-20 text-right" title="kg per metre (linear) or per m² (plate)">kg/unit</th>
+                                                <th className="font-medium px-2 py-2 w-20 text-right" title="Length used (m) or area (m²)">Size</th>
+                                                <th className="font-medium px-2 py-2 w-16 text-right" title="Number of pieces">Wt qty</th>
+                                                <th className="font-medium px-2 py-2 w-20 text-right" title="Weight = kg/unit × size × qty">Weight</th>
+                                            </>}
                                             <th className="w-16"></th>
                                         </tr>
                                     </thead>
@@ -241,7 +248,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                             <Fragment key={`g-${section}-${sub || "none"}`}>
                                                 {sub && (
                                                     <tr className="group/sub">
-                                                        <td colSpan={showWeights ? 10 : 9} className="bg-muted/20 px-3 py-1.5">
+                                                        <td colSpan={showWeights ? 13 : 9} className="bg-muted/20 px-3 py-1.5">
                                                             <div className="flex items-center justify-between">
                                                                 <div className="text-xs font-medium text-muted-foreground w-48" title="Click to rename subsection">
                                                                     <TextCell value={sub} onCommit={(v) => renameSubsection(section, sub, v)} />
@@ -281,7 +288,12 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                         <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
                                                         <td className="px-2 py-1 text-right tabular-nums">{nz(lineSell(l))}</td>
                                                         <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{pct(lineMargin(l))}</td>
-                                                        {showWeights && <td className="px-2 py-1"><NumCell value={l.weight_kg} placeholder="—" onCommit={(v) => patchLine(l.id, { weight_kg: v })} /></td>}
+                                                        {showWeights && <>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_factor} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_factor: v })} /></td>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_size} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_size: v })} /></td>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_qty} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_qty: v })} /></td>
+                                                            <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{lineWeight(l) > 0 ? `${lineWeight(l).toFixed(1)}` : "—"}</td>
+                                                        </>}
                                                         <td className="px-1 py-1">
                                                             <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 {l.material_id == null && (

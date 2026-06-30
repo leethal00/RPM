@@ -225,6 +225,9 @@ export interface CostingLine {
   unit_sell_override: number | null
   internal_note: string | null
   weight_kg: number | null
+  wt_factor: number | null  // kg/m (linear) or kg/m² (plate)
+  wt_size: number | null     // length (m) or area (m²)
+  wt_qty: number | null      // number of pieces
   line_cost: number // generated
   line_sell: number // generated
   created_at: string
