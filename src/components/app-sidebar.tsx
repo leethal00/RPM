@@ -105,6 +105,11 @@ const quotingItems = [
         url: "/quoting",
         icon: Calculator,
     },
+    {
+        title: "Catalogue",
+        url: "/quoting/catalogue",
+        icon: Layers,
+    },
 ]
 
 export function AppSidebar() {
@@ -229,7 +234,7 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {quotingItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname.startsWith(item.url)}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={item.url === "/quoting" ? (pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/catalogue"))) : pathname.startsWith(item.url)}>
                                         <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
