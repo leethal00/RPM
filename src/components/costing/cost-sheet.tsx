@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale } from "lucide-react"
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
+import { MaterialCombobox } from "./material-combobox"
 import { NumCell, TextCell, SupplierCell } from "./cells"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
@@ -40,6 +41,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const [pickerNonce, setPickerNonce] = useState(0)
     const [addingSubFor, setAddingSubFor] = useState<string | null>(null)
     const [showWeights, setShowWeights] = useState(false)
+    const [extraSections, setExtraSections] = useState<string[]>([])
 
     useEffect(() => {
         let active = true
@@ -105,6 +107,11 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
         const { error } = await supabase.from("costing_lines").update(patch).eq("id", id)
         if (error) toast.error(error.message)
+    }
+
+    // Type-ahead pick on a line: fill it from a catalogue material (keep its section/subsection).
+    function fillLineFromMaterial(line: CostingLine, m: Material) {
+        patchLine(line.id, { description: m.description, supplier: m.supplier, unit_cost: m.unit_cost, markup: m.default_markup, material_id: m.id })
     }
 
     async function removeLine(id: string) {
@@ -173,20 +180,53 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
 
+    // Only show sections that have lines (or were added manually). Canonical order first, then any others.
+    const withLines = Array.from(new Set(lines.map((l) => l.section)))
+    const activeSections = [
+        ...SECTIONS.filter((s) => withLines.includes(s) || extraSections.includes(s)),
+        ...withLines.filter((s) => !(SECTIONS as readonly string[]).includes(s)),
+    ]
+    const addableSections = SECTIONS.filter((s) => !activeSections.includes(s))
+
     return (
         <div className="mt-6 space-y-6">
             <datalist id={SUPPLIER_LIST_ID}>
                 {suppliers.map((s) => <option key={s} value={s} />)}
             </datalist>
 
-            <div className="flex justify-end">
-                <Button size="sm" variant={showWeights ? "secondary" : "ghost"} className="h-7 gap-1.5 text-xs"
+            {/* Add-item type-ahead — builds sections/subsections from what you pick */}
+            <div className="flex items-center gap-2">
+                <div className="flex-1 max-w-2xl relative">
+                    <MaterialCombobox
+                        clearOnSelect
+                        placeholder="Add an item — type to search the catalogue (e.g. SHS, crimp, ACM)…"
+                        onSelect={(m) => addLine(m.section, m, m.subsection)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                    />
+                </div>
+                {addableSections.length > 0 && (
+                    <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) setExtraSections((p) => [...new Set([...p, e.target.value])]) }}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm text-muted-foreground outline-none focus:border-ring"
+                    >
+                        <option value="">+ Add section</option>
+                        {addableSections.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                )}
+                <Button size="sm" variant={showWeights ? "secondary" : "ghost"} className="h-9 gap-1.5 text-xs shrink-0"
                     onClick={() => setShowWeights((v) => !v)}>
                     <Scale className="size-3" /> {showWeights ? "Hide weights" : "Weights (steel)"}
                 </Button>
             </div>
 
-            {SECTIONS.map((section) => {
+            {activeSections.length === 0 && (
+                <div className="py-10 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
+                    Start typing an item above to build this BOM — the section &amp; subsection appear automatically.
+                </div>
+            )}
+
+            {activeSections.map((section) => {
                 const secLines = lines.filter((l) => l.section === section)
                 const secCost = secLines.reduce((s, l) => s + lineCost(l), 0)
                 const secSell = secLines.reduce((s, l) => s + lineSell(l), 0)
@@ -268,7 +308,9 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                 {rows.map((l, i) => (
                                                     <tr key={l.id} className="border-b border-border/40 last:border-0 group">
                                                         <td className="px-3 py-1">
-                                                            <TextCell value={l.description} placeholder="Description" onCommit={(v) => patchLine(l.id, { description: v })} />
+                                                            <MaterialCombobox key={l.description} value={l.description} placeholder="Description / type to search…"
+                                                                onSelect={(m) => fillLineFromMaterial(l, m)}
+                                                                onTextCommit={(v) => patchLine(l.id, { description: v })} />
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             <SupplierCell value={l.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => commitSupplier(l, v)} />
