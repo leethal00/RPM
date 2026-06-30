@@ -320,6 +320,21 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                 ))}
                                             </Fragment>
                                         ))}
+                                        <tr className="border-t-2 border-border/70">
+                                            <td className="px-3 py-1.5 font-medium text-muted-foreground">Subtotal</td>
+                                            <td></td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{secLines.reduce((s, l) => s + Number(l.qty), 0) || ""}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{nz(secCost)}</td>
+                                            <td></td>
+                                            <td></td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{nz(secSell)}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{secSell > 0 ? pct(1 - secCost / secSell) : ""}</td>
+                                            {showWeights && <>
+                                                <td></td><td></td><td></td>
+                                                <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{(() => { const w = secLines.reduce((s, l) => s + lineWeight(l), 0); return w > 0 ? w.toFixed(1) : "" })()}</td>
+                                            </>}
+                                            <td></td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
