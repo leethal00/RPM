@@ -44,11 +44,13 @@ export default function CataloguePage() {
         [materials]
     )
 
+    const tokens = search.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const filtered = materials.filter((m) => {
         if (supplier !== "all" && (m.supplier ?? "") !== supplier) return false
-        if (search.trim()) {
-            const q = search.toLowerCase()
-            return m.description.toLowerCase().includes(q) || (m.code ?? "").toLowerCase().includes(q)
+        if (tokens.length) {
+            // Order-independent: every typed word must appear in the description or code.
+            const hay = `${m.description} ${m.code ?? ""}`.toLowerCase()
+            return tokens.every((t) => hay.includes(t))
         }
         return true
     })

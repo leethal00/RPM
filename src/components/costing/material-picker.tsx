@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Search, Loader2 } from "lucide-react"
+import { applyMaterialSearch } from "@/lib/costing/material-search"
 import type { Material } from "@/types/database"
+
+const RESULT_LIMIT = 100
 
 interface MaterialPickerProps {
     open: boolean
@@ -27,6 +30,7 @@ export function MaterialPicker({ open, onOpenChange, onPick, section }: Material
     const supabase = useMemo(() => createClient(), [])
     const [q, setQ] = useState("")
     const [results, setResults] = useState<Material[]>([])
+    const [capped, setCapped] = useState(false)
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -40,12 +44,14 @@ export function MaterialPicker({ open, onOpenChange, onPick, section }: Material
                 .eq("active", true)
                 .order("section")
                 .order("description")
-                .limit(50)
-            if (q.trim()) query = query.or(`description.ilike.%${q}%,code.ilike.%${q}%`)
+                .limit(RESULT_LIMIT)
+            if (q.trim()) query = applyMaterialSearch(query, q)
             else if (section) query = query.eq("section", section)
             const { data } = await query
             if (active) {
-                setResults((data as Material[]) || [])
+                const rows = (data as Material[]) || []
+                setResults(rows)
+                setCapped(rows.length === RESULT_LIMIT)
                 setLoading(false)
             }
         }, 180)
@@ -101,6 +107,11 @@ export function MaterialPicker({ open, onOpenChange, onPick, section }: Material
                                 </li>
                             ))}
                         </ul>
+                    )}
+                    {!loading && capped && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground border-t border-border/60 bg-muted/30 sticky bottom-0">
+                            Showing first {RESULT_LIMIT} — type a size or code to narrow.
+                        </div>
                     )}
                 </div>
             </DialogContent>
