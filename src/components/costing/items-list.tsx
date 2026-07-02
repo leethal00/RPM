@@ -102,6 +102,15 @@ export function ItemsList({ job }: { job: CostingJob }) {
         reload()
     }
 
+    async function saveAsProduct(it: CostingItem) {
+        const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
+        if (!tpl?.id) return toast.error("Product library not found")
+        const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: tpl.id })
+        if (error) return toast.error(error.message)
+        toast.success(`Saved "${it.name || "item"}" to Products`)
+        setProducts(null) // invalidate cached product list so the picker re-fetches
+    }
+
     async function patchItem(id: string, patch: Partial<CostingItem>) {
         setItems((p) => p.map((i) => (i.id === id ? { ...i, ...patch } : i)))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", id)
@@ -193,6 +202,12 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                                     <button onClick={() => router.push(`/quoting/${job.id}/item/${it.id}`)}
                                                         className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline px-1" title="Open BOM">
                                                         BOM <ChevronRight className="size-3.5" />
+                                                    </button>
+                                                )}
+                                                {build && (
+                                                    <button onClick={() => saveAsProduct(it)}
+                                                        className="text-muted-foreground hover:text-primary p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Save as reusable product">
+                                                        <Package2 className="size-3.5" />
                                                     </button>
                                                 )}
                                                 <button onClick={() => setDeleteTarget(it)}
