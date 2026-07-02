@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Layers } from "lucide-react"
+import { toast } from "sonner"
+import { ArrowLeft, Layers, Package2 } from "lucide-react"
 import { PageShell } from "@/components/page-shell"
 import { CostSheet } from "@/components/costing/cost-sheet"
 import { NumCell } from "@/components/costing/cells"
@@ -26,7 +27,7 @@ export default function ItemCostSheetPage() {
         let active = true
         ;(async () => {
             const [{ data: j }, { data: i }] = await Promise.all([
-                supabase.from("costing_jobs").select("id, title").eq("id", jobId).single(),
+                supabase.from("costing_jobs").select("id, title, is_template").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
             ])
             if (!active) return
@@ -37,19 +38,36 @@ export default function ItemCostSheetPage() {
         return () => { active = false }
     }, [supabase, jobId, itemId])
 
+    const isTemplate = !!job?.is_template
+
     async function patchItem(patch: Partial<CostingItem>) {
         setItem((prev) => (prev ? { ...prev, ...patch } : prev))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", itemId)
         if (error) console.error(error)
     }
 
+    async function saveAsProduct() {
+        const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
+        if (!tpl?.id) return toast.error("Product library not found")
+        const { error } = await supabase.rpc("clone_costing_item", { src_item: itemId, target_job: tpl.id })
+        if (error) return toast.error(error.message)
+        toast.success("Saved to Products")
+    }
+
     return (
         <DashboardLayout>
             <PageShell>
-                <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground"
-                    onClick={() => router.push(`/quoting/${jobId}`)}>
-                    <ArrowLeft className="size-3.5" /> {job?.title || "Job"}
-                </Button>
+                <div className="flex items-center justify-between">
+                    <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground"
+                        onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
+                        <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
+                    </Button>
+                    {!isTemplate && !loading && item && item.mode === "build" && (
+                        <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={saveAsProduct}>
+                            <Package2 className="size-3.5" /> Save as product
+                        </Button>
+                    )}
+                </div>
 
                 {loading || !item ? (
                     <div className="h-24 rounded-lg bg-muted/40 animate-pulse" />

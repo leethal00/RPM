@@ -26,6 +26,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { CostingJobForm } from "@/components/costing-job-form"
+import { XeroConnect } from "@/components/costing/xero-connect"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
 import { PageShell } from "@/components/page-shell"
@@ -64,6 +65,7 @@ export default function QuotingPage() {
             let query = supabase
                 .from("costing_jobs")
                 .select(`*, clients ( name ), stores ( name )`, { count: "exact" })
+                .eq("is_template", false)
 
             if (statusFilter !== "all") query = query.eq("status", statusFilter)
             if (clientId) query = query.eq("client_id", clientId)
@@ -103,6 +105,7 @@ export default function QuotingPage() {
                     description="Signage job costing — build a BOM, produce a job card, and track estimated vs. actual."
                     actions={
                         <div className="flex items-center gap-2">
+                            <XeroConnect />
                             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
                                 <SelectTrigger className="h-9 min-w-[140px] text-sm font-normal">
                                     <SelectValue placeholder="Status" />

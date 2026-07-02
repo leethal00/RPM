@@ -201,6 +201,7 @@ export interface CostingJob {
   xero_invoice_number: string | null
   folder_ref: string | null
   notes: string | null
+  is_template: boolean
   created_by: string | null
   created_at: string
   updated_at: string

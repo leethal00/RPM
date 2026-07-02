@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, ChevronRight } from "lucide-react"
+import { Plus, Trash2, ChevronRight, Package2 } from "lucide-react"
 import { toast } from "sonner"
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -27,6 +27,17 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [loading, setLoading] = useState(true)
     const [adjusted, setAdjusted] = useState(job.adjusted_total != null ? String(job.adjusted_total) : "")
     const [deleteTarget, setDeleteTarget] = useState<CostingItem | null>(null)
+    const [products, setProducts] = useState<CostingItem[] | null>(null)
+    const [productOpen, setProductOpen] = useState(false)
+
+    async function reload() {
+        const [{ data: its }, { data: ls }] = await Promise.all([
+            supabase.from("costing_items").select("*").eq("job_id", job.id).order("sort"),
+            supabase.from("costing_lines").select("id, item_id, qty, unit_cost, markup, unit_sell_override").eq("job_id", job.id),
+        ])
+        setItems((its as CostingItem[]) || [])
+        setLines((ls as CostingLine[]) || [])
+    }
 
     useEffect(() => {
         let active = true
@@ -72,6 +83,25 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (mode === "build") router.push(`/quoting/${job.id}/item/${item.id}`)
     }
 
+    async function openProducts() {
+        setProductOpen(true)
+        if (products === null) {
+            const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
+            const { data } = tpl?.id
+                ? await supabase.from("costing_items").select("*").eq("job_id", tpl.id).order("name")
+                : { data: [] }
+            setProducts((data as CostingItem[]) || [])
+        }
+    }
+
+    async function addProduct(p: CostingItem) {
+        setProductOpen(false)
+        const { error } = await supabase.rpc("clone_costing_item", { src_item: p.id, target_job: job.id })
+        if (error) return toast.error(error.message)
+        toast.success(`Added "${p.name || "product"}"`)
+        reload()
+    }
+
     async function patchItem(id: string, patch: Partial<CostingItem>) {
         setItems((p) => p.map((i) => (i.id === id ? { ...i, ...patch } : i)))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", id)
@@ -103,6 +133,9 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     Items in this job — signs with their own BOM (build), or simple cost lines (travel, freight…).
                 </p>
                 <div className="flex items-center gap-2">
+                    <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}>
+                        <Package2 className="size-3.5" /> Add product
+                    </Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}>
                         <Plus className="size-3.5" /> Build item
                     </Button>
@@ -203,6 +236,37 @@ export function ItemsList({ job }: { job: CostingJob }) {
                         <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
                         <Button variant="destructive" onClick={confirmDelete}>Delete item</Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={productOpen} onOpenChange={setProductOpen}>
+                <DialogContent className="sm:max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>Add a product</DialogTitle>
+                        <DialogDescription>Drops a saved product (with its full BOM) into this job as a new item you can then tweak.</DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[360px] overflow-y-auto -mx-1">
+                        {products === null ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+                        ) : products.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">
+                                No products yet. Build them under <strong>Quoting &amp; Costing → Products</strong>, or use “Save as product” on a build item.
+                            </div>
+                        ) : (
+                            <ul className="divide-y divide-border/60">
+                                {products.map((p) => (
+                                    <li key={p.id}>
+                                        <button type="button" onClick={() => addProduct(p)}
+                                            className="w-full text-left px-3 py-2.5 hover:bg-muted/50 rounded-md flex items-center gap-2">
+                                            <Package2 className="size-4 text-muted-foreground shrink-0" />
+                                            <span className="flex-1 truncate">{p.name || <span className="italic text-muted-foreground">Untitled product</span>}</span>
+                                            <span className="text-xs text-muted-foreground">{p.mode === "build" ? "Build" : "Simple"}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

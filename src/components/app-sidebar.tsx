@@ -18,6 +18,7 @@ import {
     Lightbulb,
     HelpCircle,
     Calculator,
+    Package2,
 } from "lucide-react"
 
 import {
@@ -104,6 +105,11 @@ const quotingItems = [
         title: "Jobs & Quotes",
         url: "/quoting",
         icon: Calculator,
+    },
+    {
+        title: "Products",
+        url: "/quoting/products",
+        icon: Package2,
     },
     {
         title: "Catalogue",
@@ -234,7 +240,7 @@ export function AppSidebar() {
                         <SidebarMenu>
                             {quotingItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={item.url === "/quoting" ? (pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/catalogue"))) : pathname.startsWith(item.url)}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={item.url === "/quoting" ? (pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/catalogue") && !pathname.startsWith("/quoting/products"))) : pathname.startsWith(item.url)}>
                                         <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
