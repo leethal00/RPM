@@ -140,8 +140,16 @@ export default function CataloguePage() {
                                         </td>
                                         <td className="px-2 py-1"><NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} /></td>
                                         <td className="px-2 py-1"><NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} /></td>
-                                        <td className="px-2 py-1"><NumCell value={m.watts} placeholder="—" onCommit={(v) => patch(m.id, { watts: v })} /></td>
-                                        <td className="px-2 py-1"><NumCell value={m.mtr_weight} placeholder="—" onCommit={(v) => patch(m.id, { mtr_weight: v })} /></td>
+                                        <td className="px-2 py-1">
+                                            {m.section === "Wiring - LED"
+                                                ? <NumCell value={m.watts} placeholder="—" onCommit={(v) => patch(m.id, { watts: v })} />
+                                                : <span className="text-muted-foreground/40 pl-1.5">—</span>}
+                                        </td>
+                                        <td className="px-2 py-1">
+                                            {m.section === "Steel"
+                                                ? <NumCell value={m.mtr_weight} placeholder="—" onCommit={(v) => patch(m.id, { mtr_weight: v })} />
+                                                : <span className="text-muted-foreground/40 pl-1.5">—</span>}
+                                        </td>
                                         <td className="px-2 py-1 text-xs text-muted-foreground tabular-nums">{m.date_last_checked ?? m.check_note ?? "—"}</td>
                                         <td className="px-1 py-1 text-right">
                                             <button onClick={() => setDeleteTarget(m)} className="text-muted-foreground hover:text-destructive p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete material">
