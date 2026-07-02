@@ -12,7 +12,7 @@ import type { CostingItem, CostingLine, CostingSection, Material } from "@/types
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
 
-const SECTIONS = ["Materials", "Wiring - LED", "Labour", "Pack/Despatch/Freight"] as const
+const SECTIONS = ["Materials", "Steel", "Wiring - LED", "Labour", "Pack/Despatch/Freight"] as const
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -83,10 +83,13 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
             description: m?.description ?? "", supplier: m?.supplier ?? null,
             qty: m ? 1 : 0, unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
+            // Steel carries a per-unit weight (kg/m or kg/sheet) — seed the galvanising weight calc.
+            wt_factor: m?.mtr_weight ?? null,
         }
         const { data, error } = await supabase.from("costing_lines").insert(payload).select("*").single()
         if (error) return toast.error(error.message)
         setLines((prev) => [...prev, data as CostingLine])
+        if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
     }
 
     // Create a custom subsection (e.g. "Galvanising") by seeding a blank line in it.

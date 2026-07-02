@@ -122,6 +122,7 @@ export default function CataloguePage() {
                                     <th className="font-medium px-2 py-2 w-24 text-right">Unit cost</th>
                                     <th className="font-medium px-2 py-2 w-20 text-right" title="Markup on cost (0.5 = 50%)">Markup</th>
                                     <th className="font-medium px-2 py-2 w-20 text-right" title="LED module watts, or transformer capacity">Watts</th>
+                                    <th className="font-medium px-2 py-2 w-20 text-right" title="Steel: kg per metre (per sheet for plate) — feeds galvanising weight">kg/unit</th>
                                     <th className="font-medium px-2 py-2 w-28">Last checked</th>
                                     <th className="w-8"></th>
                                 </tr>
@@ -138,6 +139,7 @@ export default function CataloguePage() {
                                         <td className="px-2 py-1"><NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} /></td>
                                         <td className="px-2 py-1"><NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} /></td>
                                         <td className="px-2 py-1"><NumCell value={m.watts} placeholder="—" onCommit={(v) => patch(m.id, { watts: v })} /></td>
+                                        <td className="px-2 py-1"><NumCell value={m.mtr_weight} placeholder="—" onCommit={(v) => patch(m.id, { mtr_weight: v })} /></td>
                                         <td className="px-2 py-1 text-xs text-muted-foreground tabular-nums">{m.date_last_checked ?? m.check_note ?? "—"}</td>
                                         <td className="px-1 py-1 text-right">
                                             <button onClick={() => setDeleteTarget(m)} className="text-muted-foreground hover:text-destructive p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete material">
@@ -147,7 +149,7 @@ export default function CataloguePage() {
                                     </tr>
                                 ))}
                                 {filtered.length === 0 && (
-                                    <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No materials match.</td></tr>
+                                    <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No materials match.</td></tr>
                                 )}
                             </tbody>
                         </table>

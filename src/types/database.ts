@@ -166,6 +166,7 @@ export interface Material {
   check_note: string | null
   is_labour: boolean
   watts: number | null   // LED module consumption / transformer capacity
+  mtr_weight: number | null // steel: kg per metre (per sheet for plate) -> seeds galvanising weight
   active: boolean
   created_at: string
   updated_at: string
