@@ -38,7 +38,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
     })
 
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
-    const [stores, setStores] = useState<Pick<Store, "id" | "name">[]>([])
+    const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
     const [fetching, setFetching] = useState(true)
     const [addingClient, setAddingClient] = useState(false)
     const [newClientName, setNewClientName] = useState("")
@@ -59,7 +59,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         const name = newStoreName.trim()
         if (!name) return
         if (formData.client_id === "none") return toast.error("Pick a client first, then add its site")
-        const { data, error } = await supabase.from("stores").insert({ name, client_id: formData.client_id }).select("id, name").single()
+        const { data, error } = await supabase.from("stores").insert({ name, client_id: formData.client_id }).select("id, name, client_id").single()
         if (error) return toast.error(error.message)
         setStores((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
         setFormData((f) => ({ ...f, store_id: data.id }))
@@ -71,7 +71,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
             setFetching(true)
             const [{ data: c }, { data: s }] = await Promise.all([
                 supabase.from("clients").select("id, name").order("name"),
-                supabase.from("stores").select("id, name").order("name"),
+                supabase.from("stores").select("id, name, client_id").order("name"),
             ])
             setClients(c || [])
             setStores(s || [])
@@ -79,6 +79,10 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         }
         fetchRefs()
     }, [supabase])
+
+    // Sites belong to a client — only offer the selected client's sites.
+    const hasClient = formData.client_id !== "none"
+    const clientStores = hasClient ? stores.filter((s) => s.client_id === formData.client_id) : []
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -187,7 +191,14 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                         ) : (
                             <Select
                                 value={formData.client_id}
-                                onValueChange={(v) => v === "__new__" ? setAddingClient(true) : setFormData({ ...formData, client_id: v })}
+                                onValueChange={(v) => {
+                                    if (v === "__new__") { setAddingClient(true); return }
+                                    // Clear the site if it doesn't belong to the newly-selected client.
+                                    setFormData((f) => {
+                                        const keep = stores.some((s) => s.id === f.store_id && s.client_id === v)
+                                        return { ...f, client_id: v, store_id: keep ? f.store_id : "none" }
+                                    })
+                                }}
                                 disabled={fetching}
                             >
                                 <SelectTrigger id="client_id">
@@ -220,17 +231,21 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                             <Select
                                 value={formData.store_id}
                                 onValueChange={(v) => v === "__new__" ? setAddingStore(true) : setFormData({ ...formData, store_id: v })}
-                                disabled={fetching}
+                                disabled={fetching || !hasClient}
                             >
                                 <SelectTrigger id="store_id">
-                                    <SelectValue placeholder={fetching ? "Loading…" : "Select site"} />
+                                    <SelectValue placeholder={fetching ? "Loading…" : !hasClient ? "Pick a client first" : "Select site"} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">No site</SelectItem>
                                     <SelectItem value="__new__" className="text-primary">+ New site…</SelectItem>
-                                    {stores.map((s) => (
-                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                    ))}
+                                    {clientStores.length === 0 ? (
+                                        <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
+                                    ) : (
+                                        clientStores.map((s) => (
+                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
                         )}
