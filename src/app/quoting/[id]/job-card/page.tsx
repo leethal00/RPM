@@ -110,12 +110,19 @@ export default function JobCardPage() {
                             <SectionTitle>
                                 {showItemHeaders ? `${item.name || "Item"}${Number(item.qty) > 1 ? ` × ${Number(item.qty)}` : ""} — build spec` : "Build spec"}
                             </SectionTitle>
-                            <table className="w-full border border-neutral-300 border-collapse">
+                            {(item.size || item.details || item.delivery) && (
+                                <div className="mb-1 border border-neutral-300 bg-neutral-50 px-2 py-1 text-[10.5px] text-neutral-700 space-y-0.5">
+                                    {item.size && <div><span className="text-neutral-500">Size: </span>{item.size}</div>}
+                                    {item.details && <div><span className="text-neutral-500">Details: </span>{item.details}</div>}
+                                    {item.delivery && <div><span className="text-neutral-500">Delivery: </span>{item.delivery}</div>}
+                                </div>
+                            )}
+                            <table className="w-full border border-neutral-300 border-collapse table-fixed">
                                 <thead>
                                     <tr className="bg-neutral-100 text-left">
                                         <th className="border border-neutral-300 px-2 py-1 font-semibold">Item</th>
-                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-16 text-right">Est. qty</th>
-                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-24">Done ✓ / notes</th>
+                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-14 text-right">Est. qty</th>
+                                        <th className="border border-neutral-300 px-2 py-1 font-semibold w-[52mm]">Done ✓ / notes</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -137,12 +144,12 @@ export default function JobCardPage() {
                 {simpleItems.length > 0 && (
                     <>
                         <SectionTitle>Other items</SectionTitle>
-                        <table className="w-full border border-neutral-300 border-collapse">
+                        <table className="w-full border border-neutral-300 border-collapse table-fixed">
                             <thead>
                                 <tr className="bg-neutral-100 text-left">
                                     <th className="border border-neutral-300 px-2 py-1 font-semibold">Item</th>
-                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-16 text-right">Qty</th>
-                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-24">Done ✓ / notes</th>
+                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-14 text-right">Qty</th>
+                                    <th className="border border-neutral-300 px-2 py-1 font-semibold w-[52mm]">Done ✓ / notes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -217,7 +224,7 @@ function FragmentRows({ title, rows }: { title: string; rows: CostingLine[] }) {
             <tr><td colSpan={3} className="bg-neutral-50 px-2 py-0.5 font-semibold text-neutral-600">{title}</td></tr>
             {rows.map((l) => (
                 <tr key={l.id}>
-                    <td className="border border-neutral-300 px-2 py-1">
+                    <td className="border border-neutral-300 px-2 py-1 break-words">
                         {l.description}
                         {l.internal_note && <span className="text-neutral-500 italic"> — {l.internal_note}</span>}
                     </td>
