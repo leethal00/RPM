@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
-import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Plus, LayoutGrid, List as ListIcon, BarChart3, Calendar, Search, X } from "lucide-react"
 import { ProjectCard } from "@/components/project-card"
 import type { Project, Job, Store } from "@/types/database"
 
@@ -37,11 +38,19 @@ export default function ProjectsPage() {
     const supabase = useMemo(() => createClient(), [])
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const { clientId } = useCustomerFilter()
 
-    const projectsKey = `projects-${page}-${statusFilter}-${clientId ?? 'all'}`
+    // Debounce the search box so we don't hit the DB on every keystroke.
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 250)
+        return () => clearTimeout(t)
+    }, [search])
+
+    const projectsKey = `projects-${page}-${statusFilter}-${clientId ?? 'all'}-${debouncedSearch}`
 
     const { data: projectsResult, isLoading: loading, mutate: mutateProjects } = useSupabaseQuery<{ items: ProjectRow[], count: number }>(
         projectsKey,
@@ -65,6 +74,12 @@ export default function ProjectsPage() {
 
             if (clientId) {
                 query = query.eq('stores.client_id', clientId)
+            }
+
+            // Order-independent search across project name + description.
+            const tokens = debouncedSearch.split(/\s+/).map((t) => t.replace(/[,()*%]/g, "")).filter(Boolean).slice(0, 6)
+            for (const tok of tokens) {
+                query = query.or(`name.ilike.%${tok}%,description.ilike.%${tok}%`)
             }
 
             query = query.order('created_at', { ascending: false })
@@ -102,18 +117,6 @@ export default function ProjectsPage() {
                     description="Major site improvements and multi-job strategic initiatives."
                     actions={
                         <div className="flex items-center gap-2">
-                            <Select value={statusFilter} onValueChange={handleStatusChange}>
-                                <SelectTrigger className="h-9 min-w-[140px] text-sm font-normal">
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All statuses</SelectItem>
-                                    <SelectItem value="planning">Planning</SelectItem>
-                                    <SelectItem value="in_progress">In progress</SelectItem>
-                                    <SelectItem value="completed">Completed</SelectItem>
-                                </SelectContent>
-                            </Select>
-
                             <div className="flex items-center border border-border/60 rounded-md p-0.5">
                                 <Button
                                     variant={viewMode === 'grid' ? "secondary" : "ghost"}
@@ -160,6 +163,40 @@ export default function ProjectsPage() {
                     }
                 />
 
+                {/* Filter bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search projects by name or description…"
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                            className="pl-8 pr-8 h-9"
+                        />
+                        {search && (
+                            <button onClick={() => { setSearch(""); setPage(1) }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" title="Clear search">
+                                <X className="size-4" />
+                            </button>
+                        )}
+                    </div>
+                    <Select value={statusFilter} onValueChange={handleStatusChange}>
+                        <SelectTrigger className="h-9 min-w-[150px] text-sm font-normal">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            <SelectItem value="planning">Planning</SelectItem>
+                            <SelectItem value="in_progress">In progress</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground tabular-nums sm:ml-auto">
+                        {totalCount} {totalCount === 1 ? "project" : "projects"}
+                        {(debouncedSearch || statusFilter !== "all") ? " match" : ""}
+                    </span>
+                </div>
+
                 {loading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[1, 2, 3].map((i) => (
@@ -188,6 +225,20 @@ export default function ProjectsPage() {
                             pageSize={PAGE_SIZE}
                         />
                     </>
+                ) : (debouncedSearch || statusFilter !== "all") ? (
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
+                        <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Search className="size-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-base font-medium text-foreground">No matching projects</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                            Nothing matches your search and filters. Try a different term or clear them.
+                        </p>
+                        <Button variant="outline" size="sm" className="mt-4"
+                            onClick={() => { setSearch(""); setStatusFilter("all"); setPage(1) }}>
+                            Clear filters
+                        </Button>
+                    </div>
                 ) : (
                     <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
                         <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
