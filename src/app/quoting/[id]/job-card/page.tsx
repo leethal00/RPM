@@ -105,7 +105,6 @@ export default function JobCardPage() {
                 {buildItems.map((item) => {
                     const itemLines = lines.filter((l) => l.item_id === item.id)
                     const itemBuild = itemLines.filter((l) => l.section !== "Labour")
-                    const itemLabour = itemLines.filter((l) => l.section === "Labour")
                     return (
                         <div key={item.id}>
                             <SectionTitle>
@@ -130,24 +129,6 @@ export default function JobCardPage() {
                                     )}
                                 </tbody>
                             </table>
-                            {itemLabour.length > 0 && (
-                                <table className="w-full border border-neutral-300 border-collapse mt-1">
-                                    <thead>
-                                        <tr className="bg-neutral-100 text-left">
-                                            <th className="border border-neutral-300 px-2 py-1 font-semibold">Labour task</th>
-                                            <th className="border border-neutral-300 px-2 py-1 font-semibold w-20 text-right">Est. hrs</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {itemLabour.map((l) => (
-                                            <tr key={l.id}>
-                                                <td className="border border-neutral-300 px-2 py-1">{l.description}{l.internal_note && <span className="text-neutral-500 italic"> — {l.internal_note}</span>}</td>
-                                                <td className="border border-neutral-300 px-2 py-1 text-right tabular-nums">{Number(l.qty)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
                         </div>
                     )
                 })}
