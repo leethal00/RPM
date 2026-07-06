@@ -1,13 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Calculator, Trash2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Plus, Calculator, Trash2, Search, X } from "lucide-react"
 import { toast } from "sonner"
 import {
     Dialog,
@@ -52,12 +53,20 @@ export default function QuotingPage() {
     const router = useRouter()
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<CostingJobRow | null>(null)
     const [deleting, setDeleting] = useState(false)
     const { clientId } = useCustomerFilter()
 
-    const key = `costing-jobs-${page}-${statusFilter}-${clientId ?? "all"}`
+    // Debounce the search box so we don't hit the DB on every keystroke.
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 250)
+        return () => clearTimeout(t)
+    }, [search])
+
+    const key = `costing-jobs-${page}-${statusFilter}-${clientId ?? "all"}-${debouncedSearch}`
 
     const { data: result, isLoading, mutate } = useSupabaseQuery<{ items: CostingJobRow[]; count: number }>(
         key,
@@ -69,6 +78,12 @@ export default function QuotingPage() {
 
             if (statusFilter !== "all") query = query.eq("status", statusFilter)
             if (clientId) query = query.eq("client_id", clientId)
+
+            // Order-independent search across title, reference and job/invoice number.
+            const tokens = debouncedSearch.split(/\s+/).map((t) => t.replace(/[,()*%]/g, "")).filter(Boolean).slice(0, 6)
+            for (const tok of tokens) {
+                query = query.or(`title.ilike.%${tok}%,reference.ilike.%${tok}%,job_number.ilike.%${tok}%,xero_invoice_number.ilike.%${tok}%`)
+            }
 
             query = query.order("created_at", { ascending: false })
             const from = (page - 1) * PAGE_SIZE
@@ -106,18 +121,6 @@ export default function QuotingPage() {
                     actions={
                         <div className="flex items-center gap-2">
                             <XeroConnect />
-                            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
-                                <SelectTrigger className="h-9 min-w-[140px] text-sm font-normal">
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All statuses</SelectItem>
-                                    {Object.entries(STATUS_META).map(([k, v]) => (
-                                        <SelectItem key={k} value={k}>{v.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
                             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                                 <DialogTrigger asChild>
                                     <Button size="sm" className="gap-1.5 h-9">
@@ -145,6 +148,40 @@ export default function QuotingPage() {
                         </div>
                     }
                 />
+
+                {/* Filter bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search job title, reference or job / invoice #…"
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                            className="pl-8 pr-8 h-9"
+                        />
+                        {search && (
+                            <button onClick={() => { setSearch(""); setPage(1) }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" title="Clear search">
+                                <X className="size-4" />
+                            </button>
+                        )}
+                    </div>
+                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
+                        <SelectTrigger className="h-9 min-w-[150px] text-sm font-normal">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            {Object.entries(STATUS_META).map(([k, v]) => (
+                                <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground tabular-nums sm:ml-auto">
+                        {totalCount} {totalCount === 1 ? "job" : "jobs"}
+                        {(debouncedSearch || statusFilter !== "all") ? " match" : ""}
+                    </span>
+                </div>
 
                 {isLoading ? (
                     <div className="flex flex-col gap-2">
@@ -212,6 +249,20 @@ export default function QuotingPage() {
                             pageSize={PAGE_SIZE}
                         />
                     </>
+                ) : (debouncedSearch || statusFilter !== "all") ? (
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
+                        <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Search className="size-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-base font-medium text-foreground">No matching jobs</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                            Nothing matches your search and filters. Try a different term or clear them.
+                        </p>
+                        <Button variant="outline" size="sm" className="mt-4"
+                            onClick={() => { setSearch(""); setStatusFilter("all"); setPage(1) }}>
+                            Clear filters
+                        </Button>
+                    </div>
                 ) : (
                     <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
                         <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
