@@ -25,7 +25,8 @@ export function NumCell({ value, onCommit, step, placeholder, align = "right" }:
                 if (n != null && isNaN(n)) { e.target.value = committed; return }
                 if (n !== value) onCommit(n)
             }}
-            className={`${cls} tabular-nums ${align === "right" ? "text-right" : ""}`}
+            // Hide the number spinner — in Chrome it overlaps right-aligned text and clips the last digit.
+            className={`${cls} tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${align === "right" ? "text-right" : ""}`}
         />
     )
 }
