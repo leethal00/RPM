@@ -5,8 +5,12 @@ import { useParams, useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { ArrowLeft, Layers, Package2 } from "lucide-react"
+import { ArrowLeft, Layers, Package2, Copy, Check } from "lucide-react"
+import {
+    Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { PageShell } from "@/components/page-shell"
 import { CostSheet } from "@/components/costing/cost-sheet"
 import { NumCell } from "@/components/costing/cells"
@@ -22,6 +26,11 @@ export default function ItemCostSheetPage() {
     const [job, setJob] = useState<CostingJob | null>(null)
     const [item, setItem] = useState<CostingItem | null>(null)
     const [loading, setLoading] = useState(true)
+
+    const [copyOpen, setCopyOpen] = useState(false)
+    const [jobs, setJobs] = useState<{ id: string; title: string }[] | null>(null)
+    const [jobSearch, setJobSearch] = useState("")
+    const [copying, setCopying] = useState(false)
 
     useEffect(() => {
         let active = true
@@ -53,6 +62,27 @@ export default function ItemCostSheetPage() {
         if (error) return toast.error(error.message)
         toast.success("Saved to Products")
     }
+
+    async function openCopy() {
+        setCopyOpen(true)
+        if (jobs === null) {
+            const { data } = await supabase.from("costing_jobs")
+                .select("id, title").eq("is_template", false).neq("id", jobId).order("created_at", { ascending: false })
+            setJobs((data as { id: string; title: string }[]) || [])
+        }
+    }
+
+    async function copyToJob(target: { id: string; title: string }) {
+        setCopying(true)
+        const { data: newId, error } = await supabase.rpc("clone_costing_item", { src_item: itemId, target_job: target.id })
+        setCopying(false)
+        if (error) return toast.error(error.message)
+        setCopyOpen(false)
+        toast.success(`Copied to "${target.title}"`)
+        router.push(`/quoting/${target.id}/item/${newId}`) // open the new copy to tweak
+    }
+
+    const filteredJobs = (jobs ?? []).filter((j) => j.title.toLowerCase().includes(jobSearch.trim().toLowerCase()))
 
     return (
         <DashboardLayout>
@@ -132,8 +162,65 @@ export default function ItemCostSheetPage() {
                         </div>
 
                         <CostSheet jobId={jobId} item={item} />
+
+                        {/* Finish bar — everything auto-saves; this is a clear "done" + copy/reuse */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 mt-2 border-t border-border/60">
+                            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Check className="size-3.5 text-emerald-500" /> Changes save automatically as you edit.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                {!isTemplate && item.mode === "build" && (
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={saveAsProduct}>
+                                        <Package2 className="size-3.5" /> Save as product
+                                    </Button>
+                                )}
+                                {!isTemplate && (
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={openCopy}>
+                                        <Copy className="size-3.5" /> Copy to job…
+                                    </Button>
+                                )}
+                                <Button size="sm" className="gap-1.5"
+                                    onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
+                                    <Check className="size-3.5" /> {isTemplate ? "Done — back to Products" : "Done — back to job"}
+                                </Button>
+                            </div>
+                        </div>
                     </>
                 )}
+
+                <Dialog open={copyOpen} onOpenChange={setCopyOpen}>
+                    <DialogContent className="sm:max-w-[520px]">
+                        <DialogHeader>
+                            <DialogTitle>Copy this BOM to another job</DialogTitle>
+                            <DialogDescription>
+                                Drops a full copy of <strong>{item?.name || "this item"}</strong> (with its whole BOM) into the job you
+                                pick, then opens it there so you can tweak it for that project.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Input placeholder="Search jobs…" value={jobSearch} onChange={(e) => setJobSearch(e.target.value)} />
+                        <div className="max-h-[360px] overflow-y-auto -mx-1 mt-1">
+                            {jobs === null ? (
+                                <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+                            ) : filteredJobs.length === 0 ? (
+                                <div className="py-8 text-center text-sm text-muted-foreground">
+                                    {jobs.length === 0 ? "No other jobs yet." : "No jobs match."}
+                                </div>
+                            ) : (
+                                <ul className="divide-y divide-border/60">
+                                    {filteredJobs.map((j) => (
+                                        <li key={j.id}>
+                                            <button type="button" disabled={copying} onClick={() => copyToJob(j)}
+                                                className="w-full text-left px-3 py-2.5 hover:bg-muted/50 rounded-md flex items-center gap-2 disabled:opacity-50">
+                                                <Copy className="size-4 text-muted-foreground shrink-0" />
+                                                <span className="flex-1 truncate">{j.title}</span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </PageShell>
         </DashboardLayout>
     )
