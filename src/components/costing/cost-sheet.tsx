@@ -1,9 +1,9 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale } from "lucide-react"
+import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
 import { MaterialCombobox } from "./material-combobox"
@@ -46,6 +46,12 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const [showWeights, setShowWeights] = useState(false)
     const [extraSections, setExtraSections] = useState<string[]>([])
 
+    // Staged add: pick a material, set its qty, then commit — no scrolling to find it.
+    const [staged, setStaged] = useState<Material | null>(null)
+    const [stagedQty, setStagedQty] = useState("1")
+    const [keepAdding, setKeepAdding] = useState(false)
+    const qtyRef = useRef<HTMLInputElement | null>(null)
+
     useEffect(() => {
         let active = true
         ;(async () => {
@@ -75,14 +81,14 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     // ── mutations ───────────────────────────────────────────────
     // subOverride: force the line into a specific subsection (used by group buttons
     // and "+ Subsection"); undefined keeps the catalogue item's own subsection.
-    async function addLine(section: string, m?: Material, subOverride?: string | null) {
+    async function addLine(section: string, m?: Material, subOverride?: string | null, qty?: number) {
         const sec = m?.section || section
         const subsection = subOverride !== undefined ? subOverride : (m?.subsection ?? null)
         const maxSort = Math.max(0, ...lines.filter((l) => l.section === sec).map((l) => l.sort))
         const payload = {
             job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
             description: m?.description ?? "", supplier: m?.supplier ?? null,
-            qty: m ? 1 : 0, unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
+            qty: qty != null ? qty : (m ? 1 : 0), unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
             // Steel carries a per-unit weight (kg/m or kg/sheet) — seed the galvanising weight calc.
             wt_factor: m?.mtr_weight ?? null,
         }
@@ -90,6 +96,27 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         if (error) return toast.error(error.message)
         setLines((prev) => [...prev, data as CostingLine])
         if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
+    }
+
+    // Stage a picked material so its qty can be typed before the line is added.
+    function stageMaterial(m: Material) {
+        setStaged(m)
+        setStagedQty("1")
+        setKeepAdding(true)
+        setTimeout(() => qtyRef.current?.select(), 0) // focus + select so typing replaces "1"
+    }
+
+    async function commitStaged() {
+        if (!staged) return
+        const q = Number(stagedQty)
+        await addLine(staged.section, staged, staged.subsection, isNaN(q) ? 0 : q)
+        setStaged(null)
+        setStagedQty("1")
+    }
+
+    function cancelStaged() {
+        setStaged(null)
+        setStagedQty("1")
     }
 
     // Create a custom subsection (e.g. "Galvanising") by seeding a blank line in it.
@@ -203,12 +230,36 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             {/* Add-item type-ahead — builds sections/subsections from what you pick */}
             <div className="flex items-center gap-2">
                 <div className="flex-1 max-w-2xl relative">
-                    <MaterialCombobox
-                        clearOnSelect
-                        placeholder="Add an item — type to search the catalogue (e.g. SHS, crimp, ACM)…"
-                        onSelect={(m) => addLine(m.section, m, m.subsection)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                    />
+                    {staged ? (
+                        <div className="flex items-center gap-2 rounded-md border border-ring bg-background pl-2 pr-1.5 py-1">
+                            <span className="min-w-0 flex-1 truncate text-sm" title={staged.description}>{staged.description}</span>
+                            <label className="text-xs text-muted-foreground shrink-0">Qty</label>
+                            <input
+                                ref={qtyRef}
+                                type="number" step="any" value={stagedQty} autoFocus
+                                onChange={(e) => setStagedQty(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); commitStaged() }
+                                    else if (e.key === "Escape") { e.preventDefault(); cancelStaged() }
+                                }}
+                                className="w-20 rounded border border-input bg-background px-2 py-1 text-sm tabular-nums text-right outline-none focus:border-ring shrink-0"
+                            />
+                            <Button size="sm" className="h-7 gap-1 shrink-0" onClick={commitStaged}>
+                                <Check className="size-3.5" /> Add
+                            </Button>
+                            <button onClick={cancelStaged} className="text-muted-foreground hover:text-foreground shrink-0 p-1" title="Cancel (Esc)">
+                                <X className="size-3.5" />
+                            </button>
+                        </div>
+                    ) : (
+                        <MaterialCombobox
+                            clearOnSelect
+                            autoFocus={keepAdding}
+                            placeholder="Add an item — type to search, then set its qty…"
+                            onSelect={stageMaterial}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                        />
+                    )}
                 </div>
                 {addableSections.length > 0 && (
                     <select
