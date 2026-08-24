@@ -32,7 +32,9 @@ export function RegionManager() {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchRegions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleAdd = async (e: React.FormEvent) => {
@@ -95,7 +97,7 @@ export function RegionManager() {
                 </Button>
             </form>
 
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">

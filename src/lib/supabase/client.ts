@@ -7,7 +7,7 @@ export function createClient() {
     if (!url || !key) {
         if (typeof window === 'undefined') {
             // During SSR/Build, we can skip if env vars are missing
-            return null as any
+            return null as unknown as ReturnType<typeof createBrowserClient>
         }
         throw new Error('Supabase credentials missing. Check your .env client-side.')
     }

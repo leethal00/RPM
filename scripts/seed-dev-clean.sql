@@ -52,7 +52,7 @@ WITH client_ids AS (
 )
 INSERT INTO stores (
   client_id, name, region, address, lat, lng, status,
-  brand_st_pierres, brand_bento_bowl, brand_k10,
+  brand_st_pierres, bento_bowl, brand_k10,
   site_category, has_drive_thru, maintenance_score,
   manager_name, manager_phone
 )

@@ -1,20 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
-import { ImageIcon, Plus, Trash2, Loader2, Camera } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, Lock, LockOpen } from "lucide-react"
 import { toast } from "sonner"
-
-interface AssetPhoto {
-    id: string
-    url: string
-    caption: string
-    created_at: string
-}
+import type { AssetPhoto } from "@/types/database"
+import { ensureRenderable, isHeic } from "@/lib/image-prep"
 
 interface AssetPhotoGalleryProps {
     assetId: string
@@ -24,6 +19,8 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     const [photos, setPhotos] = useState<AssetPhoto[]>([])
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    const [uploadInternalOnly, setUploadInternalOnly] = useState(false)
     const supabase = createClient()
 
     const fetchPhotos = async () => {
@@ -44,71 +41,102 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (assetId) fetchPhotos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [assetId])
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
+    const uploadFiles = async (files: File[]) => {
+        const images = files.filter(f => f.type.startsWith("image/") || isHeic(f))
+        if (images.length === 0) {
+            toast.error("Please drop image files only")
+            return
+        }
         setUploading(true)
+        const heicCount = images.filter(isHeic).length
+        let convertToastId: string | number | undefined
+        if (heicCount > 0) {
+            convertToastId = toast.loading(`Converting ${heicCount} HEIC photo${heicCount === 1 ? '' : 's'}…`)
+        }
+        let succeeded = 0
+        let failed = 0
         try {
-            // 1. Upload to storage
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${assetId}/${Math.random()}.${fileExt}`
-            const filePath = `photos/${fileName}`
+            for (const raw of images) {
+                try {
+                    const file = await ensureRenderable(raw)
+                    const fileExt = file.name.split('.').pop()
+                    const fileName = `${assetId}/${Math.random()}.${fileExt}`
+                    const filePath = `photos/${fileName}`
 
-            const { error: uploadError } = await supabase.storage
-                .from('asset-photos')
-                .upload(filePath, file)
+                    const { error: uploadError } = await supabase.storage
+                        .from('asset-photos')
+                        .upload(filePath, file)
+                    if (uploadError) throw uploadError
 
-            if (uploadError) throw uploadError
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('asset-photos')
+                        .getPublicUrl(filePath)
 
-            // 2. Get public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('asset-photos')
-                .getPublicUrl(filePath)
+                    const { error: dbError } = await supabase
+                        .from('asset_photos')
+                        .insert({
+                            asset_id: assetId,
+                            url: publicUrl,
+                            caption: file.name,
+                            internal_only: uploadInternalOnly,
+                        })
+                    if (dbError) throw dbError
 
-            // 3. Save to database
-            const { error: dbError } = await supabase
-                .from('asset_photos')
-                .insert({
-                    asset_id: assetId,
-                    url: publicUrl,
-                    caption: file.name
-                })
+                    succeeded++
+                } catch (err: unknown) {
+                    failed++
+                    console.error(`Upload failed for ${raw.name}:`, err)
+                }
+            }
+            if (convertToastId !== undefined) toast.dismiss(convertToastId)
 
-            if (dbError) throw dbError
-
-            toast.success("Asset photo uploaded successfully")
-            fetchPhotos()
-        } catch (error: unknown) {
-            toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
-            console.error(error)
+            if (succeeded > 0) {
+                toast.success(`${succeeded} photo${succeeded === 1 ? '' : 's'} uploaded${failed > 0 ? `, ${failed} failed` : ''}`)
+                fetchPhotos()
+            } else {
+                toast.error(`All ${failed} upload${failed === 1 ? '' : 's'} failed`)
+            }
         } finally {
             setUploading(false)
         }
     }
 
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? [])
+        if (files.length > 0) uploadFiles(files)
+        e.target.value = ""
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+        if (!isDragging) setIsDragging(true)
+    }
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault()
+        if (e.currentTarget === e.target) setIsDragging(false)
+    }
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const files = Array.from(e.dataTransfer.files ?? [])
+        if (files.length > 0) uploadFiles(files)
+    }
+
     const handleDelete = async (photo: AssetPhoto) => {
         if (!confirm("Are you sure you want to delete this asset photo?")) return
-
         try {
-            // 1. Extract path from URL
             const pathMatch = photo.url.match(/asset-photos\/(.+)$/)
             if (pathMatch) {
                 const filePath = pathMatch[1]
                 await supabase.storage.from('asset-photos').remove([decodeURIComponent(filePath)])
             }
-
-            // 2. Delete from database
-            const { error } = await supabase
-                .from('asset_photos')
-                .delete()
-                .eq('id', photo.id)
-
+            const { error } = await supabase.from('asset_photos').delete().eq('id', photo.id)
             if (error) throw error
-
             setPhotos(photos.filter(p => p.id !== photo.id))
             toast.success("Asset photo deleted")
         } catch (error: unknown) {
@@ -116,67 +144,128 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
         }
     }
 
+    const toggleInternalOnly = async (photo: AssetPhoto) => {
+        const next = !photo.internal_only
+        const { error } = await supabase
+            .from('asset_photos')
+            .update({ internal_only: next })
+            .eq('id', photo.id)
+        if (error) {
+            toast.error(`Update failed: ${error.message}`)
+            return
+        }
+        setPhotos(photos.map(p => p.id === photo.id ? { ...p, internal_only: next } : p))
+        toast.success(next ? "Marked as service-team only" : "Made visible to clients")
+    }
+
     if (loading) {
         return <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
-                        <Camera className="size-4 text-primary" />
-                        Asset Photos
-                    </h3>
-                </div>
-                <div>
+        <div className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+                <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
+                    <Camera className="size-3.5" />
+                    Asset photos
+                </h3>
+                <div className="flex flex-col items-end gap-1.5">
                     <Label htmlFor="asset-photo-upload" className="cursor-pointer">
-                        <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-md hover:bg-primary/20 transition-colors text-xs font-bold uppercase">
+                        <div className="inline-flex items-center gap-1.5 border border-border/80 bg-card text-foreground px-2.5 py-1 rounded-md hover:bg-accent/40 transition-colors text-xs">
                             {uploading ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
                             Upload
                         </div>
                         <Input
                             id="asset-photo-upload"
                             type="file"
-                            accept="image/*"
+                            accept="image/*,.heic,.heif"
+                            multiple
                             className="hidden"
-                            onChange={handleUpload}
+                            onChange={handleFileInputChange}
                             disabled={uploading}
                         />
                     </Label>
+                    <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={uploadInternalOnly}
+                            onChange={(e) => setUploadInternalOnly(e.target.checked)}
+                            className="size-3 accent-amber-500"
+                        />
+                        <Lock className="size-2.5" />
+                        <span>Service-team only</span>
+                    </label>
                 </div>
             </div>
 
-            {photos.length === 0 ? (
-                <Card className="border-dashed bg-muted/30">
-                    <CardContent className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                        <ImageIcon className="size-8 mb-2 opacity-20" />
-                        <p className="text-xs">No photos attached to this asset yet.</p>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                    {photos.map((photo) => (
-                        <div key={photo.id} className="group relative aspect-square rounded-lg overflow-hidden border bg-muted shadow-sm hover:shadow-md transition-all">
-                            <img
-                                src={photo.url}
-                                alt={photo.caption}
-                                className="object-cover w-full h-full"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="size-7 rounded-full"
-                                    onClick={() => handleDelete(photo)}
-                                >
-                                    <Trash2 className="size-3.5" />
-                                </Button>
-                            </div>
+            <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative rounded-md border ${isDragging ? 'border-primary border-2 bg-primary/5' : 'border-dashed border-border/60'} transition-colors`}
+            >
+                {isDragging && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none bg-primary/5 rounded-md">
+                        <div className="flex flex-col items-center gap-1.5 text-primary">
+                            <UploadCloud className="size-6" />
+                            <p className="text-xs font-medium">Drop to upload</p>
                         </div>
-                    ))}
-                </div>
-            )}
+                    </div>
+                )}
+                {photos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                        <ImageIcon className="size-6 mb-2 opacity-30" />
+                        <p className="text-xs">No photos attached to this asset yet.</p>
+                        <p className="text-[11px] text-muted-foreground/80">Drop an image here, or click Upload above.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 p-2">
+                        {photos.map((photo) => (
+                            <div key={photo.id} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
+                                <Image
+                                    src={photo.url}
+                                    alt={photo.caption ?? "Asset photo"}
+                                    fill
+                                    className="object-cover"
+                                    sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 20vw"
+                                    loading="lazy"
+                                />
+                                {photo.internal_only && (
+                                    <div className="absolute top-1 left-1 inline-flex items-center gap-0.5 bg-amber-100/95 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-[9px] font-medium px-1 py-0.5 rounded">
+                                        <Lock className="size-2" />
+                                        Internal
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                    <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-7 rounded-full"
+                                        title={photo.internal_only ? "Make visible to clients" : "Mark as service-team only"}
+                                        onClick={() => toggleInternalOnly(photo)}
+                                    >
+                                        {photo.internal_only ? <LockOpen className="size-3.5" /> : <Lock className="size-3.5" />}
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="icon"
+                                        className="size-7 rounded-full"
+                                        title="Delete photo"
+                                        onClick={() => handleDelete(photo)}
+                                    >
+                                        <Trash2 className="size-3.5" />
+                                    </Button>
+                                </div>
+                                {photo.caption && (
+                                    <div className="absolute bottom-0 left-0 right-0 p-1 bg-gradient-to-t from-black/70 to-transparent">
+                                        <p className="text-[9px] text-white truncate font-medium" title={photo.caption}>{photo.caption}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

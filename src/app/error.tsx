@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle } from "lucide-react"
 
-export default function GlobalError({
+export default function Error({
   error,
   reset,
 }: {
@@ -12,7 +12,7 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("Unhandled error:", error)
+    console.error(error)
   }, [error])
 
   return (

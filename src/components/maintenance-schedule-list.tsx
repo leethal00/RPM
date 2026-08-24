@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Clock, Plus, Trash2, AlertCircle } from "lucide-react"
@@ -35,10 +35,6 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
         frequency_days: "180",
     })
 
-    useEffect(() => {
-        fetchSchedules()
-    }, [assetId])
-
     async function fetchSchedules() {
         const { data } = await supabase
             .from('maintenance_schedules')
@@ -49,6 +45,12 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
         setSchedules(data || [])
         setLoading(false)
     }
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        fetchSchedules()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [assetId])
 
     async function addSchedule() {
         setSaving(true)
@@ -178,8 +180,8 @@ export function MaintenanceScheduleList({ assetId }: MaintenanceScheduleListProp
                     </Card>
                 ))}
                 {schedules.length === 0 && (
-                    <div className="text-center py-10 border-2 border-dashed rounded-xl border-muted">
-                        <p className="text-muted-foreground text-sm italic">No recurring maintenance scheduled for this asset.</p>
+                    <div className="text-center py-8 border border-dashed rounded-md border-border/60">
+                        <p className="text-muted-foreground text-sm">No recurring maintenance scheduled for this asset.</p>
                     </div>
                 )}
             </div>

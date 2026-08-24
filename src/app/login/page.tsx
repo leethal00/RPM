@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-
+import Link from 'next/link'
 import { Building2, Lock, Mail, Loader2, ArrowRight } from 'lucide-react'
+import { loginSchema, getValidationErrors } from '@/lib/validations'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -22,6 +23,14 @@ export default function LoginPage() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const result = loginSchema.safeParse({ email, password })
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
+            return
+        }
+
         setLoading(true)
 
         const { error } = await supabase.auth.signInWithPassword({
@@ -79,7 +88,7 @@ export default function LoginPage() {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-gray-400">Password</Label>
-                                <a href="#" className="text-xs text-primary hover:underline">Forgot password?</a>
+                                <Link href="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
                             </div>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />

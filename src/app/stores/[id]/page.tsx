@@ -1,16 +1,21 @@
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { useState, useMemo, use } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import dynamic from "next/dynamic"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AssetForm } from "@/components/asset-form"
 import { ProjectCard } from "@/components/project-card"
-import { SiteForm } from "@/components/site-form"
 import { SitePhotoGallery } from "@/components/site-photo-gallery"
+
+// Forms only load when the user actually opens their dialog. Saves ~80KB
+// on the initial page bundle (Supabase client + brand picker + geocode UI).
+const AssetForm = dynamic(() => import("@/components/asset-form").then(m => m.AssetForm), { ssr: false })
+const SiteForm = dynamic(() => import("@/components/site-form").then(m => m.SiteForm), { ssr: false })
 import {
     Dialog,
     DialogContent,
@@ -21,76 +26,62 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
-import type { Store, Asset, Job, Project } from "@/types/database"
+import type { Store, Asset, AssetType, Job, Project, AssetPhoto } from "@/types/database"
+
+type AssetRow = Asset & {
+    asset_types: Pick<AssetType, 'label'> | null
+    jobs: Pick<Job, 'status'>[]
+    asset_photos: Pick<AssetPhoto, 'id'>[]
+}
+type ProjectRow = Project & { jobs: Pick<Job, 'id' | 'status' | 'budget_impact'>[] }
 
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
-    const [store, setStore] = useState<Store | null>(null)
-    const [assets, setAssets] = useState<Asset[]>([])
-    const [jobs, setJobs] = useState<Job[]>([])
-    const [projects, setProjects] = useState<Project[]>([])
-    const [loading, setLoading] = useState(true)
+    const supabase = useMemo(() => createClient(), [])
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
-    const supabase = createClient()
 
-    const fetchData = async () => {
-        // Fetch Store
-        const { data: storeData } = await supabase
+    const { data: storeData, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery(
+        `store-${id}`,
+        () => supabase
             .from('stores')
-            .select('*')
+            .select('*, store_brands(brand_id, client_brands(*))')
             .eq('id', id)
             .single()
+    )
 
-        // Fetch Assets
-        const { data: assetData } = await supabase
-            .from('assets')
-            .select(`
-                *,
-                asset_types (
-                    label
-                ),
-                jobs (
-                    status
-                ),
-                asset_photos (
-                    id
-                )
-            `)
-            .eq('store_id', id)
+    const { data: assets, mutate: mutateAssets } = useSupabaseQuery<AssetRow[]>(
+        `store-${id}-assets`,
+        () => supabase.from('assets').select(`
+            *,
+            asset_types ( label ),
+            jobs ( status ),
+            asset_photos ( id )
+        `).eq('store_id', id)
+    )
 
-        // Fetch Jobs
-        const { data: jobData } = await supabase
-            .from('jobs')
-            .select('*')
-            .eq('store_id', id)
-            .order('created_at', { ascending: false })
+    const { data: jobs, mutate: mutateJobs } = useSupabaseQuery<Job[]>(
+        `store-${id}-jobs`,
+        () => supabase.from('jobs').select('*').eq('store_id', id).order('created_at', { ascending: false })
+    )
 
-        // Fetch Projects linked to this store
-        const { data: projectData } = await supabase
-            .from('projects')
-            .select(`
-                *,
-                jobs (
-                    id,
-                    status,
-                    budget_impact
-                )
-            `)
-            .eq('store_id', id)
-            .neq('status', 'archived')
-            .order('created_at', { ascending: false })
+    const { data: projects, mutate: mutateProjects } = useSupabaseQuery<ProjectRow[]>(
+        `store-${id}-projects`,
+        () => supabase.from('projects').select(`
+            *,
+            jobs ( id, status, budget_impact )
+        `).eq('store_id', id).neq('status', 'archived').order('created_at', { ascending: false })
+    )
 
-        setStore(storeData)
-        setAssets(assetData || [])
-        setJobs(jobData || [])
-        setProjects(projectData || [])
-        setLoading(false)
+    const store = (storeData as Store | null) ?? null
+    const loading = storeLoading
+
+    const fetchData = () => {
+        mutateStore()
+        mutateAssets()
+        mutateJobs()
+        mutateProjects()
     }
-
-    useEffect(() => {
-        fetchData()
-    }, [id, supabase])
 
     if (loading) {
         return (
@@ -129,43 +120,40 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                     </Button>
                 </div>
 
-                <StoreHeader store={store} />
+                <StoreHeader store={store} assets={assets ?? null} jobs={jobs ?? null} />
 
                 <Tabs defaultValue="assets" className="w-full">
-                    <div className="flex items-center justify-between border-b pb-0">
-                        <TabsList className="bg-transparent h-12 w-auto justify-start gap-4 rounded-none border-b border-transparent p-0">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-0">
+                        <TabsList className="bg-transparent h-11 w-auto justify-start gap-1 rounded-none border-b border-transparent p-0">
                             <TabsTrigger
                                 value="assets"
-                                className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                className="relative h-11 rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-2 text-sm font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:hidden"
                             >
                                 Assets
                             </TabsTrigger>
                             <TabsTrigger
                                 value="jobs"
-                                className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                className="relative h-11 rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-2 text-sm font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:hidden"
                             >
                                 History
                             </TabsTrigger>
                             <TabsTrigger
                                 value="projects"
-                                className="relative h-12 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-semibold text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
+                                className="relative h-11 rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-2 text-sm font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:hidden gap-1.5"
                             >
-                                {projects.length > 0 && (
-                                    <span className="absolute top-2 right-1 flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                                    </span>
-                                )}
                                 Strategy
+                                {(projects || []).length > 0 && (
+                                    <span className="size-1.5 rounded-full bg-primary" />
+                                )}
                             </TabsTrigger>
                         </TabsList>
 
                         <div className="flex items-center gap-2 pb-2">
                             <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
                                 <DialogTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-8 gap-1">
+                                    <Button variant="outline" size="sm" className="gap-1.5">
                                         <PackagePlus className="size-3.5" />
-                                        Add Asset
+                                        Add asset
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="sm:max-w-[500px]">
@@ -185,9 +173,9 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
 
                             <Dialog open={editSiteDialogOpen} onOpenChange={setEditSiteDialogOpen}>
                                 <DialogTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-8 gap-1">
+                                    <Button variant="outline" size="sm" className="gap-1.5">
                                         <Plus className="size-3.5" />
-                                        Edit Site
+                                        Edit site
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="sm:max-w-[600px]">
@@ -206,35 +194,35 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 </DialogContent>
                             </Dialog>
 
-                            <Button size="sm" className="h-8 gap-1" asChild>
+                            <Button size="sm" className="gap-1.5" asChild>
                                 <Link href={`/stores/${id}/jobs/new`}>
                                     <Plus className="size-3.5" />
-                                    New Job
+                                    New job
                                 </Link>
                             </Button>
                         </div>
                     </div>
 
                     <TabsContent value="assets" className="pt-6">
-                        <AssetTable assets={assets} storeId={id} />
+                        <AssetTable assets={assets || []} storeId={id} />
                     </TabsContent>
 
                     <TabsContent value="jobs" className="pt-6">
-                        <JobTimeline jobs={jobs} />
+                        <JobTimeline jobs={jobs || []} />
                     </TabsContent>
 
                     <TabsContent value="projects" className="pt-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {projects.map((project) => (
+                            {(projects || []).map((project) => (
                                 <ProjectCard
                                     key={project.id}
                                     project={project}
                                     viewMode="grid"
                                 />
                             ))}
-                            {projects.length === 0 && (
-                                <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
-                                    <p className="text-muted-foreground italic">No strategic HQ projects linked to this site.</p>
+                            {(projects || []).length === 0 && (
+                                <div className="col-span-full py-12 text-center border border-dashed rounded-md border-border/60">
+                                    <p className="text-sm text-muted-foreground">No strategic HQ projects linked to this site.</p>
                                 </div>
                             )}
                         </div>

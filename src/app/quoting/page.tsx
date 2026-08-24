@@ -1,0 +1,301 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import DashboardLayout from "@/components/dashboard-layout"
+import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Plus, Calculator, Trash2, Search, X } from "lucide-react"
+import { toast } from "sonner"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { CostingJobForm } from "@/components/costing-job-form"
+import { XeroConnect } from "@/components/costing/xero-connect"
+import { TablePagination } from "@/components/table-pagination"
+import { useCustomerFilter } from "@/lib/customer-filter"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
+import type { CostingJob, CostingStatus } from "@/types/database"
+
+const PAGE_SIZE = 20
+
+const STATUS_META: Record<CostingStatus, { label: string; className: string }> = {
+    quote: { label: "Quote", className: "bg-slate-500/15 text-slate-600 dark:text-slate-300" },
+    quoted: { label: "Quoted", className: "bg-blue-500/15 text-blue-600 dark:text-blue-300" },
+    approved: { label: "Approved", className: "bg-violet-500/15 text-violet-600 dark:text-violet-300" },
+    in_progress: { label: "In progress", className: "bg-amber-500/15 text-amber-600 dark:text-amber-300" },
+    complete: { label: "Complete", className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" },
+    invoiced: { label: "Invoiced", className: "bg-green-600/15 text-green-700 dark:text-green-300" },
+    cancelled: { label: "Cancelled", className: "bg-red-500/15 text-red-600 dark:text-red-300" },
+}
+
+type CostingJobRow = CostingJob & { clients?: { name: string } | null; stores?: { name: string } | null }
+
+export default function QuotingPage() {
+    const supabase = useMemo(() => createClient(), [])
+    const router = useRouter()
+    const [page, setPage] = useState(1)
+    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<CostingJobRow | null>(null)
+    const [deleting, setDeleting] = useState(false)
+    const { clientId } = useCustomerFilter()
+
+    // Debounce the search box so we don't hit the DB on every keystroke.
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 250)
+        return () => clearTimeout(t)
+    }, [search])
+
+    const key = `costing-jobs-${page}-${statusFilter}-${clientId ?? "all"}-${debouncedSearch}`
+
+    const { data: result, isLoading, mutate } = useSupabaseQuery<{ items: CostingJobRow[]; count: number }>(
+        key,
+        async () => {
+            let query = supabase
+                .from("costing_jobs")
+                .select(`*, clients ( name ), stores ( name )`, { count: "exact" })
+                .eq("is_template", false)
+
+            if (statusFilter !== "all") query = query.eq("status", statusFilter)
+            if (clientId) query = query.eq("client_id", clientId)
+
+            // Order-independent search across title, reference and job/invoice number.
+            const tokens = debouncedSearch.split(/\s+/).map((t) => t.replace(/[,()*%]/g, "")).filter(Boolean).slice(0, 6)
+            for (const tok of tokens) {
+                query = query.or(`title.ilike.%${tok}%,reference.ilike.%${tok}%,job_number.ilike.%${tok}%,xero_invoice_number.ilike.%${tok}%`)
+            }
+
+            query = query.order("created_at", { ascending: false })
+            const from = (page - 1) * PAGE_SIZE
+            query = query.range(from, from + PAGE_SIZE - 1)
+
+            const { data, error, count } = await query
+            if (error) throw error
+            return { data: { items: (data as CostingJobRow[]) || [], count: count ?? 0 }, error: null }
+        }
+    )
+
+    const jobs = result?.items || []
+    const totalCount = result?.count ?? 0
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
+
+    async function confirmDelete() {
+        if (!deleteTarget) return
+        setDeleting(true)
+        const { error } = await supabase.from("costing_jobs").delete().eq("id", deleteTarget.id)
+        setDeleting(false)
+        if (error) return toast.error(error.message)
+        toast.success("Job deleted")
+        setDeleteTarget(null)
+        mutate()
+    }
+
+    return (
+        <DashboardLayout>
+            <PageShell>
+                <PageHeader
+                    icon={Calculator}
+                    kicker="Quoting & Costing"
+                    title="Jobs & Quotes"
+                    description="Signage job costing — build a BOM, produce a job card, and track estimated vs. actual."
+                    actions={
+                        <div className="flex items-center gap-2">
+                            <XeroConnect />
+                            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button size="sm" className="gap-1.5 h-9">
+                                        <Plus className="size-3.5" />
+                                        New job
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[600px]">
+                                    <DialogHeader>
+                                        <DialogTitle>New costing job</DialogTitle>
+                                        <DialogDescription>
+                                            Start a quote. Client and site are optional for ad-hoc / wholesale work.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <CostingJobForm
+                                        onSuccess={(jobId) => {
+                                            setIsDialogOpen(false)
+                                            mutate()
+                                            if (jobId) router.push(`/quoting/${jobId}`)
+                                        }}
+                                        onCancel={() => setIsDialogOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                    }
+                />
+
+                {/* Filter bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search job title, reference or job / invoice #…"
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                            className="pl-8 pr-8 h-9"
+                        />
+                        {search && (
+                            <button onClick={() => { setSearch(""); setPage(1) }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" title="Clear search">
+                                <X className="size-4" />
+                            </button>
+                        )}
+                    </div>
+                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
+                        <SelectTrigger className="h-9 min-w-[150px] text-sm font-normal">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All statuses</SelectItem>
+                            {Object.entries(STATUS_META).map(([k, v]) => (
+                                <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground tabular-nums sm:ml-auto">
+                        {totalCount} {totalCount === 1 ? "job" : "jobs"}
+                        {(debouncedSearch || statusFilter !== "all") ? " match" : ""}
+                    </span>
+                </div>
+
+                {isLoading ? (
+                    <div className="flex flex-col gap-2">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />
+                        ))}
+                    </div>
+                ) : jobs.length > 0 ? (
+                    <>
+                        <div className="border border-border/60 rounded-lg overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted/40 text-muted-foreground">
+                                    <tr className="text-left">
+                                        <th className="font-medium px-4 py-2.5">Job</th>
+                                        <th className="font-medium px-4 py-2.5">Client / Site</th>
+                                        <th className="font-medium px-4 py-2.5 w-28">Number</th>
+                                        <th className="font-medium px-4 py-2.5 w-32">Status</th>
+                                        <th className="w-12"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {jobs.map((job) => (
+                                        <tr
+                                            key={job.id}
+                                            onClick={() => router.push(`/quoting/${job.id}`)}
+                                            className="border-t border-border/60 cursor-pointer hover:bg-muted/30 transition-colors"
+                                        >
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-foreground">{job.title}</div>
+                                                {job.reference && (
+                                                    <div className="text-xs text-muted-foreground">{job.reference}</div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-muted-foreground">
+                                                {job.clients?.name || <span className="italic">Ad-hoc</span>}
+                                                {job.stores?.name ? ` · ${job.stores.name}` : ""}
+                                            </td>
+                                            <td className="px-4 py-3 text-muted-foreground tabular-nums">
+                                                {job.job_number || job.xero_invoice_number || "—"}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <Badge variant="secondary" className={STATUS_META[job.status].className}>
+                                                    {STATUS_META[job.status].label}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-2 py-3 text-right">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
+                                                    className="text-muted-foreground hover:text-destructive p-1.5 rounded transition-colors"
+                                                    title="Delete job"
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <TablePagination
+                            page={page}
+                            pageCount={pageCount}
+                            onPageChange={setPage}
+                            totalItems={totalCount}
+                            pageSize={PAGE_SIZE}
+                        />
+                    </>
+                ) : (debouncedSearch || statusFilter !== "all") ? (
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
+                        <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Search className="size-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-base font-medium text-foreground">No matching jobs</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                            Nothing matches your search and filters. Try a different term or clear them.
+                        </p>
+                        <Button variant="outline" size="sm" className="mt-4"
+                            onClick={() => { setSearch(""); setStatusFilter("all"); setPage(1) }}>
+                            Clear filters
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg">
+                        <div className="size-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Calculator className="size-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-base font-medium text-foreground">No costing jobs yet</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                            Create a job to start a quote and build its cost sheet.
+                        </p>
+                        <Button variant="outline" size="sm" className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                            Create first job
+                        </Button>
+                    </div>
+                )}
+
+                <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
+                    <DialogContent className="sm:max-w-[440px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete this job?</DialogTitle>
+                            <DialogDescription>
+                                <strong>{deleteTarget?.title}</strong> and its cost sheet, actuals and quote items
+                                will be permanently deleted. This can&apos;t be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+                            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+                                {deleting ? "Deleting…" : "Delete job"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </PageShell>
+        </DashboardLayout>
+    )
+}

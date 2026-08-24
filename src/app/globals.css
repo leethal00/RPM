@@ -47,70 +47,93 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-:root {
-  --radius: 0.5rem;
-  --background: oklch(0.99 0.01 200);
-  /* Off-white #F9FAFB equivalent */
-  --foreground: oklch(0.2 0.02 240);
-  /* Dark text #1F2937 */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 240);
-  --primary: oklch(0.35 0.08 160);
-  /* Forest Green #2D6A4F */
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.9 0.02 240);
-  --secondary-foreground: oklch(0.2 0.05 240);
-  /* Dark Navy #1A1A2E approx */
-  --muted: oklch(0.95 0.01 240);
-  --muted-foreground: oklch(0.5 0.02 240);
-  --accent: oklch(0.45 0.1 160);
-  /* Lighter Forest Green #40916C */
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.6 0.18 25);
-  --border: oklch(0.92 0.01 240);
-  --input: oklch(0.92 0.01 240);
-  --ring: oklch(0.35 0.08 160);
+/* Design tokens — dark-Attio direction.
+   Backgrounds are near-neutral warm dark, borders are hairline,
+   primary green is desaturated forest, type hierarchy is built from
+   foreground / muted-foreground rather than colour. */
 
-  --sidebar: oklch(0.2 0.05 240);
-  /* Dark Navy #1A1A2E */
-  --sidebar-foreground: oklch(0.95 0.01 240);
-  --sidebar-primary: oklch(0.35 0.08 160);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.45 0.1 160);
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.3 0.05 240);
-  --sidebar-ring: oklch(0.35 0.08 160);
+:root {
+  --radius: 0.625rem;
+
+  /* Page background is a clear warm-grey tint so white surfaces (cards,
+     tables, dialogs) visibly sit on top of it. */
+  --background: oklch(0.968 0.004 95);
+  --foreground: oklch(0.18 0.005 240);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.005 240);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.005 240);
+
+  --primary: oklch(0.42 0.08 158);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.95 0.003 240);
+  --secondary-foreground: oklch(0.22 0.005 240);
+
+  --muted: oklch(0.952 0.004 95);
+  --muted-foreground: oklch(0.5 0.005 240);
+
+  --accent: oklch(0.94 0.006 158);
+  --accent-foreground: oklch(0.22 0.005 240);
+
+  --destructive: oklch(0.6 0.18 22);
+  --border: oklch(0.9 0.005 240);
+  --input: oklch(0.9 0.005 240);
+  --ring: oklch(0.42 0.08 158);
+
+  --sidebar: oklch(0.975 0.002 240);
+  --sidebar-foreground: oklch(0.22 0.005 240);
+  --sidebar-primary: oklch(0.42 0.08 158);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.004 240);
+  --sidebar-accent-foreground: oklch(0.22 0.005 240);
+  --sidebar-border: oklch(0.9 0.005 240);
+  --sidebar-ring: oklch(0.42 0.08 158);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 12px -4px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
 }
 
 .dark {
-  --background: oklch(0.2 0.05 240);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.22 0.05 240);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.22 0.05 240);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.45 0.1 160);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.3 0.05 240);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.3 0.05 240);
-  --muted-foreground: oklch(0.7 0.02 240);
-  --accent: oklch(0.35 0.08 160);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.6 0.18 25);
-  --border: oklch(0.4 0.05 240);
-  --input: oklch(0.4 0.05 240);
-  --ring: oklch(0.45 0.1 160);
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --background: oklch(0.155 0.003 250);
+  --foreground: oklch(0.96 0.003 240);
+
+  --card: oklch(0.185 0.003 250);
+  --card-foreground: oklch(0.96 0.003 240);
+
+  --popover: oklch(0.205 0.003 250);
+  --popover-foreground: oklch(0.96 0.003 240);
+
+  --primary: oklch(0.62 0.10 158);
+  --primary-foreground: oklch(0.12 0.003 250);
+
+  --secondary: oklch(0.23 0.003 250);
+  --secondary-foreground: oklch(0.94 0.003 240);
+
+  --muted: oklch(0.22 0.003 250);
+  --muted-foreground: oklch(0.62 0.005 240);
+
+  --accent: oklch(0.245 0.005 158);
+  --accent-foreground: oklch(0.94 0.003 240);
+
+  --destructive: oklch(0.64 0.18 22);
+  --border: oklch(0.27 0.004 250);
+  --input: oklch(0.27 0.004 250);
+  --ring: oklch(0.62 0.10 158);
+
+  --sidebar: oklch(0.125 0.003 250);
+  --sidebar-foreground: oklch(0.9 0.003 240);
+  --sidebar-primary: oklch(0.62 0.10 158);
+  --sidebar-primary-foreground: oklch(0.12 0.003 250);
+  --sidebar-accent: oklch(0.21 0.003 250);
+  --sidebar-accent-foreground: oklch(0.94 0.003 240);
+  --sidebar-border: oklch(0.22 0.003 250);
+  --sidebar-ring: oklch(0.62 0.10 158);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
 }
 
 @layer base {
@@ -121,4 +144,24 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Leaflet attribution — required by OSM/CARTO TOS, styled down to stay out of the way */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.6) !important;
+  padding: 0 5px !important;
+  line-height: 14px !important;
+  transition: opacity 0.15s ease;
+}
+.leaflet-control-attribution:hover {
+  opacity: 1;
+}
+.leaflet-control-attribution a {
+  color: inherit !important;
+  text-decoration: none;
+}
+.leaflet-control-attribution a:hover {
+  text-decoration: underline;
 }

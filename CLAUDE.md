@@ -9,20 +9,21 @@
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Architecture & Tech Stack](#architecture--tech-stack)
-3. [Database Schema](#database-schema)
-4. [File Structure](#file-structure)
-5. [Authentication & Authorization](#authentication--authorization)
-6. [Multi-tenancy & Data Isolation](#multi-tenancy--data-isolation)
-7. [Component Patterns](#component-patterns)
-8. [Data Fetching Patterns](#data-fetching-patterns)
-9. [Form Patterns](#form-patterns)
-10. [Styling Conventions](#styling-conventions)
-11. [Map Integration](#map-integration)
-12. [File Upload & Storage](#file-upload--storage)
-13. [Common Implementation Tasks](#common-implementation-tasks)
-14. [Common Pitfalls](#common-pitfalls)
-15. [Testing & Deployment](#testing--deployment)
+2. [Environments & Deployments](#environments--deployments)
+3. [Architecture & Tech Stack](#architecture--tech-stack)
+4. [Database Schema](#database-schema)
+5. [File Structure](#file-structure)
+6. [Authentication & Authorization](#authentication--authorization)
+7. [Multi-tenancy & Data Isolation](#multi-tenancy--data-isolation)
+8. [Component Patterns](#component-patterns)
+9. [Data Fetching Patterns](#data-fetching-patterns)
+10. [Form Patterns](#form-patterns)
+11. [Styling Conventions](#styling-conventions)
+12. [Map Integration](#map-integration)
+13. [File Upload & Storage](#file-upload--storage)
+14. [Common Implementation Tasks](#common-implementation-tasks)
+15. [Common Pitfalls](#common-pitfalls)
+16. [Testing & Deployment](#testing--deployment)
 
 ---
 
@@ -46,6 +47,52 @@ RPM is a **signage asset management platform** for Rodier Preventive Maintenance
 3. **technician**: Field technicians assigned to specific stores
 4. **client_hq**: Client headquarters staff viewing their locations
 5. **client_store**: Store managers viewing only their assigned store
+
+---
+
+## Environments & Deployments
+
+### Production
+- **App**: https://rpm-sandy.vercel.app (Vercel project `rpm`, branch `main`)
+- **Supabase**: project `rpm` (ref `ywjwqxrrnmqlhvqdfvua`, region `ap-south-1` / Mumbai)
+- **Auto-deploys** on push to `main` after CI is green.
+
+### Development / Preview
+- **App**: https://rpm-git-dev-leethal00s-projects.vercel.app (Vercel preview alias for the `dev` branch)
+- **Supabase**: project `rpm-dev` (ref `jtotzntmndxanhjijqcz`, region `ap-southeast-2` / Sydney)
+- **Auto-deploys** on push to `dev` (and any other preview branch you create — though you'd need to add env vars for that branch explicitly).
+- Dev data is a clone of prod's data (taken 2026-05-20). Photo blobs in the storage buckets are also cloned.
+
+### Local development
+Runs against the **same cloud-dev Supabase** as the Vercel dev preview (no separate local DB):
+```bash
+vercel env pull .env.development.local --environment=development
+npm run dev
+```
+The `.env.development.local` file is gitignored. Re-pull whenever Vercel env vars change.
+
+### Decommissioned: DiskStation Supabase
+A self-hosted Supabase stack on a Synology NAS (`http://10.0.0.150:8000`, exposed via Tailscale Funnel at `dshomesvr.tailebe7b5.ts.net`) previously backed dev. As of 2026-05-20, Vercel dev points at cloud-dev Supabase instead. Containers may still run on the NAS as a hobby fallback; Funnel exposure has been removed.
+
+### Migration Policy
+
+**No schema changes via the Supabase dashboard or any other ad-hoc channel.**
+
+Every schema change MUST:
+1. Live in `supabase/migrations/<utc_timestamp>_<short_name>.sql`
+2. Be committed to git on the `dev` branch first
+3. Be applied to cloud-dev with `psql "$SUPABASE_DB_URL" -f <file>` (or via `supabase db push`)
+4. Be applied to prod as part of the same PR that promotes the feature to `main`
+
+**Why**: prod and the previous dev DB accumulated hand-ALTERs over time that bypassed the repo's migration files. This created drift between the documented schema and the actual schema in each environment, and a confusing state during the 2026-05-20 dev → cloud-dev migration. See [SCHEMA_DRIFT.md](./SCHEMA_DRIFT.md) for the surviving inventory of those drifts. Don't add to it.
+
+If you need to test a schema change locally before committing, do it in a transaction and roll back:
+```sql
+BEGIN;
+ALTER TABLE ...;
+-- test queries
+ROLLBACK;
+```
 
 ---
 

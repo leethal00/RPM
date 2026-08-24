@@ -68,7 +68,9 @@ export default function AssetDetailPage({
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [assetId, supabase])
 
     const handleDelete = async () => {
@@ -195,10 +197,14 @@ export default function AssetDetailPage({
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Service Interval</p>
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">PM Interval</p>
                                             <div className="flex items-center gap-2">
                                                 <Activity className="size-4 text-primary" />
-                                                <p className="text-sm font-bold">18 Months (Standard)</p>
+                                                <p className="text-sm font-bold">
+                                                    {asset.pm_interval_months != null
+                                                        ? `${asset.pm_interval_months} Months`
+                                                        : "Not set"}
+                                                </p>
                                             </div>
                                         </div>
                                         <div className="space-y-1">
@@ -247,12 +253,12 @@ export default function AssetDetailPage({
                                                     <div className={`size-8 rounded-full ${dotColor} animate-pulse`} />
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className={`text-lg font-black uppercase tracking-tight ${dotColor.replace('bg-', 'text-')}`}>
+                                                    <p className={`text-lg font-semibold capitalize ${dotColor.replace('bg-', 'text-')}`}>
                                                         {statusLabel}
                                                     </p>
                                                     <div className="flex flex-col gap-1 mt-1">
                                                         <p className="text-[10px] uppercase font-bold text-muted-foreground">Next Service Target</p>
-                                                        <p className="text-sm font-black text-primary">
+                                                        <p className="text-sm font-medium text-primary">
                                                             {(() => {
                                                                 if (!asset.next_service_date) return "TBD";
                                                                 const d = new Date(asset.next_service_date);

@@ -3,7 +3,6 @@
 import * as React from "react"
 import {
     Map,
-    LayoutDashboard,
     ClipboardList,
     BarChart3,
     Settings,
@@ -15,6 +14,11 @@ import {
     MapPin,
     Layers,
     Users,
+    UserCog,
+    Lightbulb,
+    HelpCircle,
+    Calculator,
+    Package2,
 } from "lucide-react"
 
 import {
@@ -96,6 +100,24 @@ const projectItems = [
     },
 ]
 
+const quotingItems = [
+    {
+        title: "Jobs & Quotes",
+        url: "/quoting",
+        icon: Calculator,
+    },
+    {
+        title: "Products",
+        url: "/quoting/products",
+        icon: Package2,
+    },
+    {
+        title: "Catalogue",
+        url: "/quoting/catalogue",
+        icon: Layers,
+    },
+]
+
 export function AppSidebar() {
     const supabase = createClient()
     const router = useRouter()
@@ -129,7 +151,7 @@ export function AppSidebar() {
         router.refresh()
     }
 
-    const userName = profile?.full_name || user?.email?.split('@')[0] || "User"
+    const userName = profile?.name || user?.email?.split('@')[0] || "User"
     const userEmail = user?.email || "user@example.com"
     const userInitials = userName.substring(0, 2).toUpperCase()
 
@@ -151,12 +173,12 @@ export function AppSidebar() {
                     <div className="px-2 pt-2 mb-2">
                         <SidebarMenuButton
                             asChild
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-bold shadow-sm"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"
                         >
-                            <a href="/jobs/new" className="flex items-center gap-2">
+                            <Link href="/jobs/new" className="flex items-center gap-2">
                                 <PlusCircle className="size-4" />
                                 <span>Report Fault</span>
-                            </a>
+                            </Link>
                         </SidebarMenuButton>
                     </div>
                     <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
@@ -213,6 +235,24 @@ export function AppSidebar() {
                 </SidebarGroup>
 
                 <SidebarGroup>
+                    <SidebarGroupLabel>Quoting &amp; Costing</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {quotingItems.map((item) => (
+                                <SidebarMenuItem key={item.title}>
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={item.url === "/quoting" ? (pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/catalogue") && !pathname.startsWith("/quoting/products"))) : pathname.startsWith(item.url)}>
+                                        <Link href={item.url}>
+                                            <item.icon className="size-4" />
+                                            <span>{item.title}</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
                     <SidebarGroupLabel>Administration</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
@@ -224,6 +264,14 @@ export function AppSidebar() {
                                     </div>
                                 </SidebarMenuButton>
                                 <SidebarMenuSub>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/users'}>
+                                            <Link href="/settings/users" className="flex items-center gap-2">
+                                                <UserCog className="size-3.5" />
+                                                <span>Users</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
                                     <SidebarMenuSubItem>
                                         <SidebarMenuSubButton asChild isActive={pathname === '/settings/customers'}>
                                             <Link href="/settings/customers" className="flex items-center gap-2">
@@ -248,7 +296,47 @@ export function AppSidebar() {
                                             </Link>
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/roles'}>
+                                            <Link href="/settings/roles" className="flex items-center gap-2">
+                                                <UserCog className="size-3.5" />
+                                                <span>Role permissions</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
                                 </SidebarMenuSub>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupLabel>Support</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="Help & Support" isActive={pathname === '/help'}>
+                                    <Link href="/help">
+                                        <HelpCircle className="size-4" />
+                                        <span>Help & Support</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="Suggest a feature" isActive={pathname === '/feature-request'}>
+                                    <Link href="/feature-request">
+                                        <Lightbulb className="size-4" />
+                                        <span>Suggest a feature</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild tooltip="Feature pipeline" isActive={pathname === '/feature-requests'}>
+                                    <Link href="/feature-requests">
+                                        <ClipboardList className="size-4" />
+                                        <span>Feature pipeline</span>
+                                    </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>

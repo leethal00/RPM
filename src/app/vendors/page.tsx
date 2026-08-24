@@ -1,31 +1,25 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
-import type { Vendor, Job } from "@/types/database"
-
-interface VendorWithMetrics extends Vendor {
-    metrics: {
-        openJobs: number
-        avgResolutionHours: number
-    }
-}
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import {
     Search,
-    Users,
-    Mail,
-    Phone,
     Plus,
     Edit2,
     HardHat,
     Briefcase,
-    Loader2,
-    Clock,
-    BarChart3
 } from "lucide-react"
+import type { Vendor, Job } from "@/types/database"
+import { useCustomerFilter } from "@/lib/customer-filter"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
+
+type VendorMetrics = { openJobs: number; avgResolutionHours: number }
+type VendorWithMetrics = Vendor & { metrics: VendorMetrics }
+type JobMetricRow = Pick<Job, 'vendor_id' | 'status' | 'created_at' | 'resolved_at'>
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -49,69 +43,65 @@ const PAGE_SIZE = 20
 
 export default function VendorsPage() {
     const supabase = useMemo(() => createClient(), [])
-    const [vendors, setVendors] = useState<VendorWithMetrics[]>([])
-    const [totalCount, setTotalCount] = useState(0)
-    const [currentPage, setCurrentPage] = useState(1)
+    const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
+    const { clientId } = useCustomerFilter()
 
-    const fetchVendors = useCallback(async () => {
-        setLoading(true)
+    const vendorsKey = `vendors-${page}-${search}-${clientId ?? 'all'}`
 
-        try {
-            const from = (currentPage - 1) * PAGE_SIZE
-            const to = from + PAGE_SIZE - 1
-
-            // 1. Fetch Vendors with server-side search and pagination
+    const { data: vendorsResult, isLoading: loading, mutate: mutateVendors } = useSupabaseQuery<{ items: VendorWithMetrics[], count: number }>(
+        vendorsKey,
+        async () => {
             let query = supabase
                 .from('vendors')
-                .select('*', { count: 'exact' })
+                .select('*', { count: "exact" })
 
             if (search.trim()) {
-                query = query.or(`name.ilike.%${search.trim()}%,trade.ilike.%${search.trim()}%`)
+                const term = `%${search.trim()}%`
+                query = query.or(`name.ilike.${term},trade.ilike.${term}`)
             }
 
-            query = query.order('name').range(from, to)
+            if (clientId) {
+                query = query.eq('client_id', clientId)
+            }
+
+            query = query.order('name')
+
+            const from = (page - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
 
             const { data: vendorData, error: vendorError, count } = await query
 
-            if (vendorError) {
-                console.error('Error fetching vendors:', vendorError)
-                setLoading(false)
-                return
-            }
+            if (vendorError) throw vendorError
 
-            setTotalCount(count || 0)
+            // Fetch Jobs to calculate metrics for current page vendors
+            const vendorList = (vendorData || []) as Vendor[]
+            const vendorIds = vendorList.map((v) => v.id)
+            let jobData: JobMetricRow[] = []
 
-            // 2. Fetch Jobs to calculate metrics for visible vendors only
-            const vendorIds = (vendorData || []).map((v: Vendor) => v.id)
-
-            let jobData: Job[] = []
             if (vendorIds.length > 0) {
-                const { data, error: jobError } = await supabase
+                const { data: jobs, error: jobError } = await supabase
                     .from('jobs')
                     .select('vendor_id, status, created_at, resolved_at')
                     .in('vendor_id', vendorIds)
 
-                if (jobError) {
-                    console.error('Error fetching jobs for metrics:', jobError)
-                } else {
-                    jobData = data || []
+                if (!jobError) {
+                    jobData = (jobs || []) as JobMetricRow[]
                 }
             }
 
-            // 3. Process metrics
-            const enrichedVendors = (vendorData || []).map((vendor: Vendor) => {
-                const vendorJobs = jobData.filter((j: Job) => j.vendor_id === vendor.id)
-                const openJobs = vendorJobs.filter((j: Job) => j.status !== 'resolved' && j.status !== 'closed').length
+            const enrichedVendors: VendorWithMetrics[] = vendorList.map((vendor) => {
+                const vendorJobs = jobData.filter((j) => j.vendor_id === vendor.id)
+                const openJobs = vendorJobs.filter((j) => j.status !== 'resolved' && j.status !== 'closed').length
 
-                const resolvedJobs = vendorJobs.filter((j: Job) => j.status === 'resolved' && j.resolved_at && j.created_at)
+                const resolvedJobs = vendorJobs.filter((j) => j.status === 'resolved' && j.resolved_at && j.created_at)
                 let avgResolutionHours = 0
 
                 if (resolvedJobs.length > 0) {
-                    const totalHours = resolvedJobs.reduce((acc: number, j: Job) => {
+                    const totalHours = resolvedJobs.reduce((acc, j) => {
                         const start = new Date(j.created_at).getTime()
                         const end = new Date(j.resolved_at!).getTime()
                         return acc + (end - start) / (1000 * 60 * 60)
@@ -121,179 +111,146 @@ export default function VendorsPage() {
 
                 return {
                     ...vendor,
-                    metrics: {
-                        openJobs,
-                        avgResolutionHours
-                    }
+                    metrics: { openJobs, avgResolutionHours }
                 }
             })
 
-            setVendors(enrichedVendors)
-        } catch (err) {
-            console.error('Unexpected error in fetchVendors:', err)
-        } finally {
-            setLoading(false)
+            return { data: { items: enrichedVendors, count: count ?? 0 }, error: null }
         }
-    }, [supabase, currentPage, search])
+    )
 
-    useEffect(() => {
-        fetchVendors()
-    }, [fetchVendors])
+    const vendors = vendorsResult?.items || []
+    const totalCount = vendorsResult?.count ?? 0
+
+    const fetchVendors = () => mutateVendors()
 
     const handleSearchChange = (value: string) => {
         setSearch(value)
-        setCurrentPage(1)
+        setPage(1)
     }
 
-    const tradeColors: Record<string, string> = {
-        HVAC: "bg-blue-100 text-blue-700 border-blue-200",
-        Plumbing: "bg-cyan-100 text-cyan-700 border-cyan-200",
-        Electrical: "bg-amber-100 text-amber-700 border-amber-200",
-        Cleaning: "bg-purple-100 text-purple-700 border-purple-200",
-        Refrigeration: "bg-indigo-100 text-indigo-700 border-indigo-200",
-        Signage: "bg-rose-100 text-rose-700 border-rose-200",
-        "General Maintenance": "bg-slate-100 text-slate-700 border-slate-200",
-        "CCTV & Security": "bg-emerald-100 text-emerald-700 border-emerald-200",
-        "Fire Safety": "bg-red-100 text-red-700 border-red-200"
-    }
+    const pageCount = Math.ceil(totalCount / PAGE_SIZE)
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-8 py-6 max-w-7xl mx-auto font-primary">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 text-primary mb-1">
-                            <Briefcase className="size-5" />
-                            <span className="text-xs font-bold uppercase tracking-widest text-primary">Supply Chain</span>
-                        </div>
-                        <h1 className="text-3xl font-bold tracking-tight">Vendor Directory</h1>
-                        <p className="text-muted-foreground mt-1 text-sm italic">
-                            Manage specialized contractors and specialized trade partners.
-                        </p>
-                    </div>
-
-                    <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-                        setIsAddDialogOpen(open)
-                        if (!open) setEditingVendor(null)
-                    }}>
-                        <DialogTrigger asChild>
-                            <Button className="gap-2 shadow-sm">
-                                <Plus className="size-4" />
-                                Register Vendor
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[600px]">
-                            <DialogHeader>
-                                <DialogTitle>{editingVendor ? "Edit Vendor Details" : "Register New Vendor"}</DialogTitle>
-                            </DialogHeader>
-                            <VendorForm
-                                vendor={editingVendor}
-                                onSuccess={() => {
-                                    setIsAddDialogOpen(false)
-                                    setEditingVendor(null)
-                                    fetchVendors()
-                                }}
-                                onCancel={() => {
-                                    setIsAddDialogOpen(false)
-                                    setEditingVendor(null)
-                                }}
-                            />
-                        </DialogContent>
-                    </Dialog>
-                </div>
+            <PageShell>
+                <PageHeader
+                    icon={Briefcase}
+                    title="Vendor Directory"
+                    description="Manage contractors and trade partners."
+                    actions={
+                        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+                            setIsAddDialogOpen(open)
+                            if (!open) setEditingVendor(null)
+                        }}>
+                            <DialogTrigger asChild>
+                                <Button size="sm" className="gap-1.5 h-9">
+                                    <Plus className="size-3.5" />
+                                    Register vendor
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[600px]">
+                                <DialogHeader>
+                                    <DialogTitle>{editingVendor ? "Edit Vendor Details" : "Register New Vendor"}</DialogTitle>
+                                </DialogHeader>
+                                <VendorForm
+                                    vendor={editingVendor}
+                                    onSuccess={() => {
+                                        setIsAddDialogOpen(false)
+                                        setEditingVendor(null)
+                                        fetchVendors()
+                                    }}
+                                    onCancel={() => {
+                                        setIsAddDialogOpen(false)
+                                        setEditingVendor(null)
+                                    }}
+                                />
+                            </DialogContent>
+                        </Dialog>
+                    }
+                />
 
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
-                        placeholder="Search vendors by name or trade..."
-                        className="pl-10 h-12 bg-muted/30 border-none shadow-inner"
+                        placeholder="Search vendors by name or trade…"
+                        className="pl-10 h-10 bg-card"
                         value={search}
                         onChange={(e) => handleSearchChange(e.target.value)}
                     />
                 </div>
 
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                     <Table>
                         <TableHeader>
-                            <TableRow className="bg-muted/30 hover:bg-muted/30">
-                                <TableHead className="font-bold">Vendor / Contractor</TableHead>
-                                <TableHead className="font-bold">Primary Trade</TableHead>
-                                <TableHead className="font-bold hidden md:table-cell">Performance</TableHead>
-                                <TableHead className="font-bold hidden lg:table-cell">Workload</TableHead>
-                                <TableHead className="font-bold">Status</TableHead>
-                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                            <TableRow className="border-b border-border/60 hover:bg-transparent">
+                                <TableHead className="h-10 text-xs font-medium text-muted-foreground">Vendor</TableHead>
+                                <TableHead className="h-10 text-xs font-medium text-muted-foreground">Trade</TableHead>
+                                <TableHead className="h-10 text-xs font-medium text-muted-foreground hidden md:table-cell">Avg resolution</TableHead>
+                                <TableHead className="h-10 text-xs font-medium text-muted-foreground hidden lg:table-cell">Active jobs</TableHead>
+                                <TableHead className="h-10 text-xs font-medium text-muted-foreground">Status</TableHead>
+                                <TableHead className="h-10 w-[60px] text-right"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={6} className="h-16 animate-pulse bg-muted/10" />
+                                        <TableCell colSpan={6} className="h-12 animate-pulse bg-muted/20" />
                                     </TableRow>
                                 ))
                             ) : vendors.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-48 text-center">
+                                    <TableCell colSpan={6} className="h-32 text-center">
                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                            <HardHat className="size-10 opacity-20" />
-                                            <p className="italic">No vendors found matching your search.</p>
+                                            <HardHat className="size-8 opacity-20" />
+                                            <p className="text-sm">No vendors found matching your search.</p>
                                         </div>
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 vendors.map((vendor) => (
-                                    <TableRow key={vendor.id} className="group hover:bg-muted/5 transition-colors">
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <div className="font-bold text-sm tracking-tight">{vendor.name}</div>
-                                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-tighter mt-0.5">
-                                                    {vendor.email && <span>{vendor.email}</span>}
-                                                    {vendor.email && vendor.phone && <span>&bull;</span>}
-                                                    {vendor.phone && <span>{vendor.phone}</span>}
-                                                </div>
+                                    <TableRow
+                                        key={vendor.id}
+                                        onClick={() => { setEditingVendor(vendor); setIsAddDialogOpen(true) }}
+                                        className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors cursor-pointer"
+                                    >
+                                        <TableCell className="py-3">
+                                            <div className="flex flex-col gap-0.5">
+                                                <div className="font-medium text-foreground group-hover:text-primary transition-colors">{vendor.name}</div>
+                                                {(vendor.email || vendor.phone) && (
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        {vendor.email && <span className="truncate">{vendor.email}</span>}
+                                                        {vendor.email && vendor.phone && <span className="text-muted-foreground/40">·</span>}
+                                                        {vendor.phone && <span>{vendor.phone}</span>}
+                                                    </div>
+                                                )}
                                             </div>
                                         </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={`text-[10px] font-black tracking-widest uppercase ${tradeColors[vendor.trade] || ""}`}>
-                                                {vendor.trade}
-                                            </Badge>
+                                        <TableCell className="py-3 text-sm text-muted-foreground">
+                                            {vendor.trade}
                                         </TableCell>
-                                        <TableCell className="hidden md:table-cell">
-                                            <div className="flex items-center gap-2">
-                                                <Clock className="size-3.5 text-muted-foreground" />
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold leading-none">
-                                                        {vendor.metrics?.avgResolutionHours > 0 ? `${vendor.metrics.avgResolutionHours}h` : "---"}
-                                                    </span>
-                                                    <span className="text-[9px] uppercase font-medium text-muted-foreground tracking-tighter">Avg Response</span>
-                                                </div>
+                                        <TableCell className="hidden md:table-cell py-3 text-sm tabular-nums">
+                                            {vendor.metrics?.avgResolutionHours > 0
+                                                ? <span className="text-foreground">{vendor.metrics.avgResolutionHours}h</span>
+                                                : <span className="text-muted-foreground/60">—</span>}
+                                        </TableCell>
+                                        <TableCell className="hidden lg:table-cell py-3 text-sm tabular-nums">
+                                            <span className="text-foreground">{vendor.metrics?.openJobs || 0}</span>
+                                        </TableCell>
+                                        <TableCell className="py-3">
+                                            <div className="flex items-center gap-1.5 text-sm">
+                                                <div className={`size-1.5 rounded-full ${vendor.status === 'active' ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                                                <span className="capitalize text-muted-foreground">{vendor.status}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="hidden lg:table-cell">
-                                            <div className="flex items-center gap-2">
-                                                <BarChart3 className="size-3.5 text-muted-foreground" />
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold leading-none">
-                                                        {vendor.metrics?.openJobs || 0}
-                                                    </span>
-                                                    <span className="text-[9px] uppercase font-medium text-muted-foreground tracking-tighter">Active Jobs</span>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`size-1.5 rounded-full ${vendor.status === 'active' ? 'bg-green-500' : 'bg-slate-300'}`} />
-                                                <span className="text-[10px] font-bold uppercase tracking-wider">
-                                                    {vendor.status}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right py-3">
                                             <Button
                                                 size="icon"
                                                 variant="ghost"
-                                                className="size-8 text-muted-foreground hover:text-primary"
-                                                onClick={() => {
+                                                className="size-8 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
                                                     setEditingVendor(vendor)
                                                     setIsAddDialogOpen(true)
                                                 }}
@@ -306,15 +263,15 @@ export default function VendorsPage() {
                             )}
                         </TableBody>
                     </Table>
+                    <TablePagination
+                        page={page}
+                        pageCount={pageCount}
+                        onPageChange={setPage}
+                        totalItems={totalCount}
+                        pageSize={PAGE_SIZE}
+                    />
                 </div>
-
-                <TablePagination
-                    currentPage={currentPage}
-                    totalCount={totalCount}
-                    pageSize={PAGE_SIZE}
-                    onPageChange={setCurrentPage}
-                />
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

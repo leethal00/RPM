@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -15,8 +16,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, Camera, X, Image as ImageIcon } from "lucide-react"
+import { Loader2, Camera, X } from "lucide-react"
 import type { Asset, Project, Vendor } from "@/types/database"
+import { jobSchema, getValidationErrors } from "@/lib/validations"
 
 interface JobFormProps {
     storeId: string
@@ -115,6 +117,14 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
         e.preventDefault()
         setLoading(true)
 
+        const result = jobSchema.safeParse(formData)
+        if (!result.success) {
+            const errors = getValidationErrors(result)
+            errors.forEach((msg) => toast.error(msg))
+            setLoading(false)
+            return
+        }
+
         try {
             const { data: userData } = await supabase.auth.getUser()
             const userId = userData.user?.id || null
@@ -144,7 +154,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
             }
 
             // 2. Insert Job
-            const insertData: any = {
+            const insertData: Record<string, unknown> = {
                 store_id: storeId,
                 asset_id: formData.asset_id === 'none' ? null : (formData.asset_id || null),
                 project_id: formData.project_id === 'none' ? null : (formData.project_id || null),
@@ -186,10 +196,10 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto p-6 bg-card rounded-xl border shadow-sm">
-            <div className="space-y-2">
-                <h2 className="text-xl font-bold tracking-tight">Report a New Job</h2>
-                <p className="text-sm text-muted-foreground italic">Fill in the details below to log a fault or maintenance request.</p>
+        <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto p-6 bg-card rounded-lg border border-border/60">
+            <div className="space-y-1">
+                <h2 className="text-xl font-semibold tracking-tight">Report a new job</h2>
+                <p className="text-sm text-muted-foreground">Log a fault or maintenance request.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -311,7 +321,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                 <div className="flex flex-wrap gap-4 mt-2">
                     {previews.map((url, index) => (
                         <div key={url} className="relative group w-24 h-24 border rounded-lg overflow-hidden bg-muted">
-                            <img src={url} alt="Preview" className="w-full h-full object-cover" />
+                            <Image src={url} alt="Preview" fill sizes="96px" className="object-cover" unoptimized />
                             <button
                                 type="button"
                                 onClick={() => removeFile(index)}
@@ -331,7 +341,7 @@ export function JobForm({ storeId, onSuccess }: JobFormProps) {
                                 className="absolute inset-0 opacity-0 cursor-pointer z-10"
                                 id="photo-upload"
                             />
-                            <div className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-muted rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all">
+                            <div className="flex flex-col items-center justify-center w-24 h-24 border border-dashed border-border rounded-md hover:border-foreground/30 hover:bg-accent/30 transition-colors">
                                 <Camera className="size-6 text-muted-foreground mb-1" />
                                 <span className="text-[10px] font-medium text-muted-foreground">Add Photo</span>
                             </div>

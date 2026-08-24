@@ -46,7 +46,9 @@ export function AssetTypeManager() {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchAssetTypes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -142,7 +144,7 @@ export function AssetTypeManager() {
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4 py-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="label" className="text-xs font-bold uppercase text-muted-foreground">Asset Type Name *</Label>
+                                <Label htmlFor="label" className="text-xs font-medium text-muted-foreground">Asset type name *</Label>
                                 <Input id="label" placeholder="e.g. Signage" value={formData.label} onChange={(e) => setFormData({ ...formData, label: e.target.value })} required />
                             </div>
                             <div className="flex justify-end gap-3 pt-4">
@@ -170,12 +172,12 @@ export function AssetTypeManager() {
                 />
             </div>
 
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="text-[10px] font-black uppercase">Asset Type</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase w-[100px] text-right">Actions</TableHead>
+                        <TableRow className="border-b border-border/60 hover:bg-transparent">
+                            <TableHead className="h-10 text-xs font-medium text-muted-foreground">Asset type</TableHead>
+                            <TableHead className="h-10 text-xs font-medium text-muted-foreground w-[80px] text-right"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -193,15 +195,19 @@ export function AssetTypeManager() {
                             </TableRow>
                         ) : (
                             filteredTypes.map((type) => (
-                                <TableRow key={type.id} className="group transition-colors">
-                                    <TableCell className="font-bold">{type.label}</TableCell>
+                                <TableRow
+                                    key={type.id}
+                                    onClick={() => handleEdit(type)}
+                                    className="group transition-colors cursor-pointer hover:bg-accent/30"
+                                >
+                                    <TableCell className="font-medium group-hover:text-primary transition-colors">{type.label}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-primary"
-                                                onClick={() => handleEdit(type)}
+                                                onClick={(e) => { e.stopPropagation(); handleEdit(type) }}
                                             >
                                                 <Pencil className="size-4" />
                                             </Button>
@@ -209,7 +215,7 @@ export function AssetTypeManager() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-muted-foreground hover:text-destructive"
-                                                onClick={() => handleDelete(type.id)}
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(type.id) }}
                                             >
                                                 <Trash2 className="size-4" />
                                             </Button>

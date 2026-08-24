@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Loader2, Plus, Trash2, Users } from "lucide-react"
+import { Loader2, Plus, Trash2, Users, Palette } from "lucide-react"
 import type { Client } from "@/types/database"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { BrandManager } from "@/components/brand-manager"
 
 export function CustomerManager() {
     const supabase = createClient()
@@ -15,6 +17,7 @@ export function CustomerManager() {
     const [loading, setLoading] = useState(true)
     const [newCustomer, setNewCustomer] = useState("")
     const [adding, setAdding] = useState(false)
+    const [brandManagerFor, setBrandManagerFor] = useState<Client | null>(null)
 
     const fetchCustomers = async () => {
         setLoading(true)
@@ -32,7 +35,9 @@ export function CustomerManager() {
     }
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchCustomers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleAdd = async (e: React.FormEvent) => {
@@ -98,12 +103,12 @@ export function CustomerManager() {
                 </Button>
             </form>
 
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
                             <TableHead>Customer Name</TableHead>
-                            <TableHead className="w-[100px] text-right">Actions</TableHead>
+                            <TableHead className="w-[260px] text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -121,17 +126,32 @@ export function CustomerManager() {
                             </TableRow>
                         ) : (
                             customers.map((customer) => (
-                                <TableRow key={customer.id} className="group transition-colors">
-                                    <TableCell className="font-medium">{customer.name}</TableCell>
+                                <TableRow
+                                    key={customer.id}
+                                    onClick={() => setBrandManagerFor(customer)}
+                                    className="group transition-colors cursor-pointer hover:bg-accent/30"
+                                >
+                                    <TableCell className="font-medium group-hover:text-primary transition-colors">{customer.name}</TableCell>
                                     <TableCell className="text-right">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-8 text-muted-foreground hover:text-destructive"
-                                            onClick={() => handleDelete(customer.id)}
-                                        >
-                                            <Trash2 className="size-4" />
-                                        </Button>
+                                        <div className="flex items-center justify-end gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 gap-1.5 text-xs"
+                                                onClick={(e) => { e.stopPropagation(); setBrandManagerFor(customer) }}
+                                            >
+                                                <Palette className="size-3.5" />
+                                                Manage Brands
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-muted-foreground hover:text-destructive"
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(customer.id) }}
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -139,6 +159,20 @@ export function CustomerManager() {
                     </TableBody>
                 </Table>
             </div>
+
+            <Dialog open={!!brandManagerFor} onOpenChange={(open) => !open && setBrandManagerFor(null)}>
+                <DialogContent className="sm:max-w-[640px] max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Brand Manager</DialogTitle>
+                        <DialogDescription>
+                            Define which brands or concepts {brandManagerFor?.name} operates. Each site can be tagged with any combination.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {brandManagerFor && (
+                        <BrandManager clientId={brandManagerFor.id} clientName={brandManagerFor.name} />
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

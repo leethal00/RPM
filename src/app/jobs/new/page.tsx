@@ -15,6 +15,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { MapPin } from "lucide-react"
+import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 
 export default function GlobalNewJobPage() {
     const [stores, setStores] = useState<Store[]>([])
@@ -28,7 +30,6 @@ export default function GlobalNewJobPage() {
                 .from('stores')
                 .select('id, name, region')
                 .order('name')
-
             setStores(data || [])
             setLoading(false)
         }
@@ -37,54 +38,48 @@ export default function GlobalNewJobPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-6 py-6 font-primary max-w-4xl mx-auto">
-                <div className="space-y-1">
-                    <h1 className="text-3xl font-bold tracking-tight">Report Fault</h1>
-                    <p className="text-muted-foreground italic">Follow the steps below to log a new maintenance request.</p>
-                </div>
+            <PageShell width="narrow">
+                <PageHeader
+                    title="Report a fault"
+                    description="Follow the steps below to log a new maintenance request."
+                />
 
-                <Card className="border-primary/20 bg-primary/5">
-                    <CardContent className="pt-6">
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="store-select" className="text-sm font-bold uppercase tracking-wider text-primary">
-                                    Step 1: Select the Site
-                                </Label>
-                                <div className="flex items-center gap-3">
-                                    <MapPin className="size-5 text-primary shrink-0" />
-                                    <Select
-                                        value={selectedStoreId}
-                                        onValueChange={setSelectedStoreId}
-                                        disabled={loading}
-                                    >
-                                        <SelectTrigger id="store-select" className="bg-background">
-                                            <SelectValue placeholder={loading ? "Loading sites..." : "Choose a St Pierre's site..."} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {stores.map((store) => (
-                                                <SelectItem key={store.id} value={store.id}>
-                                                    {store.name} ({store.region})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
+                <Card>
+                    <CardContent className="pt-6 space-y-2">
+                        <Label htmlFor="store-select" className="text-xs font-medium text-muted-foreground">
+                            Step 1 — select the site
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <MapPin className="size-4 text-muted-foreground shrink-0" />
+                            <Select
+                                value={selectedStoreId}
+                                onValueChange={setSelectedStoreId}
+                                disabled={loading}
+                            >
+                                <SelectTrigger id="store-select" className="flex-1">
+                                    <SelectValue placeholder={loading ? "Loading sites…" : "Choose a site…"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {stores.map((store) => (
+                                        <SelectItem key={store.id} value={store.id}>
+                                            {store.name} {store.region && <span className="text-muted-foreground">({store.region})</span>}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </CardContent>
                 </Card>
 
                 {selectedStoreId && (
-                    <div className="mt-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                        <div className="mb-6">
-                            <Label className="text-sm font-bold uppercase tracking-wider text-primary">
-                                Step 2: Describe the Issue
-                            </Label>
-                        </div>
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-3">
+                        <Label className="text-xs font-medium text-muted-foreground">
+                            Step 2 — describe the issue
+                        </Label>
                         <JobForm storeId={selectedStoreId} />
                     </div>
                 )}
-            </div>
+            </PageShell>
         </DashboardLayout>
     )
 }

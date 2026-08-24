@@ -1,0 +1,437 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { SWRConfig } from 'swr'
+
+// Wrap each render with a fresh SWR cache so cached data doesn't leak
+// between tests (otherwise an error case sees the previous test's
+// successful payload and the assertion fails).
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        {children}
+      </SWRConfig>
+    ),
+  })
+
+// Mock DashboardLayout to just render children
+vi.mock('@/lib/customer-filter', () => ({
+  useCustomerFilter: () => ({
+    clientId: null,
+    setClientId: vi.fn(),
+    customers: [],
+    isAdmin: false,
+    role: null,
+    initialised: true,
+  }),
+}))
+
+vi.mock('@/components/dashboard-layout', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div data-testid="layout">{children}</div>,
+}))
+
+// Mock recharts to avoid canvas/SVG issues in jsdom
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Pie: () => <div />,
+  Cell: () => <div />,
+  BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Bar: () => <div />,
+  AreaChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Area: () => <div />,
+  XAxis: () => <div />,
+  YAxis: () => <div />,
+  CartesianGrid: () => <div />,
+  Tooltip: () => <div />,
+  Legend: () => <div />,
+}))
+
+// Build mock Supabase query chain
+const mockSelectAssets = vi.fn()
+const mockSelectSchedules = vi.fn()
+const mockSelectJobs = vi.fn()
+
+function createChain(selectFn: ReturnType<typeof vi.fn>) {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {}
+  chain.select = selectFn
+  chain.gte = vi.fn(() => chain)
+  chain.lte = vi.fn(() => chain)
+  chain.order = vi.fn(() => chain)
+  // select should return the chain
+  selectFn.mockReturnValue(chain)
+  return chain
+}
+
+const assetsChain = createChain(mockSelectAssets)
+createChain(mockSelectSchedules)
+createChain(mockSelectJobs)
+
+const mockFrom = vi.fn((table: string) => {
+  if (table === 'assets') return { select: mockSelectAssets }
+  if (table === 'maintenance_schedules') return { select: mockSelectSchedules }
+  if (table === 'jobs') return { select: mockSelectJobs }
+  return { select: vi.fn(() => ({ gte: vi.fn(), lte: vi.fn(), order: vi.fn() })) }
+})
+
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ from: mockFrom }),
+}))
+
+// We need to import *after* mocks are set up
+import AnalyticsPage from '@/app/analysis/page'
+
+describe('AnalyticsPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    // Reset chains
+    createChain(mockSelectAssets)
+    createChain(mockSelectSchedules)
+    createChain(mockSelectJobs)
+  })
+
+  it('should show structured loading skeleton that matches page layout (regression: ISSUE-RPM-7)', () => {
+    // Make queries hang (never resolve) so loading state persists
+    mockSelectAssets.mockReturnValue({
+      ...assetsChain,
+      then: () => new Promise(() => {}),
+    })
+    assetsChain.select = vi.fn(() => new Promise(() => {}))
+
+    const { container } = render(<AnalyticsPage />)
+    expect(screen.getByTestId('layout')).toBeInTheDocument()
+
+    // The skeleton must use the animate-pulse class for shimmer effect
+    const skeletonRoot = container.querySelector('.animate-pulse')
+    expect(skeletonRoot).toBeInTheDocument()
+
+    // Regression: old skeleton had NO Card components — just flat div placeholders.
+    // The fix uses Card components to mirror the real page structure.
+    // Cards are rendered as divs with the shadcn card class pattern.
+    // We check for at least 9 cards: 4 summary + 2 chart row 1 + 2 chart row 2 + 1 maintenance
+    const cards = skeletonRoot!.querySelectorAll('[class*="border-muted"]')
+    expect(cards.length).toBeGreaterThanOrEqual(9)
+
+    // Regression: old skeleton had no circular chart placeholders.
+    // The fix includes rounded-full elements for pie chart placeholders.
+    const circularPlaceholders = skeletonRoot!.querySelectorAll('.rounded-full')
+    expect(circularPlaceholders.length).toBeGreaterThanOrEqual(2)
+
+    // Regression: old skeleton had no bar chart placeholders.
+    // The fix includes variable-height bar elements for bar chart skeletons.
+    const barPlaceholders = skeletonRoot!.querySelectorAll('.rounded-t')
+    expect(barPlaceholders.length).toBeGreaterThanOrEqual(6)
+
+    // Regression: old skeleton had no maintenance table rows.
+    // The fix includes 4 maintenance row placeholders with badge-like pills.
+    const maintenanceRows = skeletonRoot!.querySelectorAll('.flex.items-center.justify-between')
+    expect(maintenanceRows.length).toBeGreaterThanOrEqual(4)
+
+    // Verify the skeleton uses the same max-width container as the real page
+    expect(skeletonRoot).toHaveClass('max-w-7xl')
+  })
+
+  it('should show error state when asset fetch fails', async () => {
+    mockSelectAssets.mockReturnValue({
+      data: null,
+      error: { message: 'Permission denied' },
+    })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({
+            data: [],
+            error: null,
+          })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({
+        data: [],
+        error: null,
+      })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to Load Analytics')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText(/Permission denied/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it('should show error state when assets data is null without error', async () => {
+    mockSelectAssets.mockReturnValue({
+      data: null,
+      error: null,
+    })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({
+            data: [],
+            error: null,
+          })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({
+        data: [],
+        error: null,
+      })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('No asset data returned')).toBeInTheDocument()
+    })
+  })
+
+  it('should render analytics data on successful fetch', async () => {
+    const mockAssets = [
+      {
+        id: 'a1',
+        name: 'Menu Board 1',
+        status: 'operational',
+        next_service_date: new Date(Date.now() + 90 * 86400000).toISOString(),
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at1',
+        store_id: 's1',
+        asset_types: { label: 'Digital Menu Board' },
+        stores: { name: 'Store A', region: 'Auckland' },
+        jobs: [],
+      },
+      {
+        id: 'a2',
+        name: 'Pylon Sign',
+        status: 'operational',
+        next_service_date: new Date(Date.now() + 10 * 86400000).toISOString(),
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at2',
+        store_id: 's1',
+        asset_types: { label: 'Pylon Sign' },
+        stores: { name: 'Store A', region: 'Auckland' },
+        jobs: [],
+      },
+      {
+        id: 'a3',
+        name: 'Fascia Sign',
+        status: 'faulty',
+        next_service_date: null,
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at3',
+        store_id: 's2',
+        asset_types: { label: 'Fascia Sign' },
+        stores: { name: 'Store B', region: 'Wellington' },
+        jobs: [{ status: 'open' }],
+      },
+    ]
+
+    mockSelectAssets.mockReturnValue({
+      data: mockAssets,
+      error: null,
+    })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({
+            data: [],
+            error: null,
+          })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({
+        data: [],
+        error: null,
+      })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Portfolio Analytics')).toBeInTheDocument()
+    })
+
+    // Summary cards
+    expect(screen.getByText('3')).toBeInTheDocument() // total assets
+    expect(screen.getByText('Total assets')).toBeInTheDocument()
+    expect(screen.getByText('Healthy')).toBeInTheDocument()
+    expect(screen.getByText('Due soon')).toBeInTheDocument()
+    expect(screen.getByText('Attention')).toBeInTheDocument()
+  })
+
+  it('should have a Try Again button in error state that retries', async () => {
+    const user = userEvent.setup()
+
+    // First call fails
+    mockSelectAssets.mockReturnValueOnce({
+      data: null,
+      error: { message: 'Network error' },
+    })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({ data: [], error: null })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({ data: [], error: null })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to Load Analytics')).toBeInTheDocument()
+    })
+
+    // Second call succeeds
+    mockSelectAssets.mockReturnValueOnce({
+      data: [],
+      error: null,
+    })
+
+    const retryButton = screen.getByRole('button', { name: /try again/i })
+    await user.click(retryButton)
+
+    // After retry with empty data, should show analytics (with 0 counts)
+    await waitFor(() => {
+      expect(screen.getByText('Portfolio Analytics')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('AnalyticsPage asset health classification', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    createChain(mockSelectAssets)
+    createChain(mockSelectSchedules)
+    createChain(mockSelectJobs)
+  })
+
+  it('should classify assets with active faults as faulted', async () => {
+    const mockAssets = [
+      {
+        id: 'a1',
+        name: 'Faulted Asset',
+        status: 'faulty',
+        next_service_date: null,
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at1',
+        store_id: 's1',
+        asset_types: { label: 'Sign' },
+        stores: { name: 'Store', region: 'Auckland' },
+        jobs: [{ status: 'open' }],
+      },
+    ]
+
+    mockSelectAssets.mockReturnValue({ data: mockAssets, error: null })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({ data: [], error: null })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({ data: [], error: null })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Portfolio Analytics')).toBeInTheDocument()
+    })
+
+    // 1 faulted, 0 overdue = 1 attention
+    expect(screen.getByText('0 overdue · 1 faulted')).toBeInTheDocument()
+  })
+
+  it('should classify assets with overdue service as overdue', async () => {
+    const mockAssets = [
+      {
+        id: 'a1',
+        name: 'Overdue Asset',
+        status: 'operational',
+        next_service_date: new Date(Date.now() - 10 * 86400000).toISOString(), // 10 days ago
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at1',
+        store_id: 's1',
+        asset_types: { label: 'Sign' },
+        stores: { name: 'Store', region: 'Auckland' },
+        jobs: [],
+      },
+    ]
+
+    mockSelectAssets.mockReturnValue({ data: mockAssets, error: null })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({ data: [], error: null })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({ data: [], error: null })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('1 overdue · 0 faulted')).toBeInTheDocument()
+    })
+  })
+
+  it('should classify assets with no next_service_date as healthy', async () => {
+    const mockAssets = [
+      {
+        id: 'a1',
+        name: 'Healthy Asset',
+        status: 'operational',
+        next_service_date: null,
+        last_service_date: null,
+        install_date: null,
+        asset_type_id: 'at1',
+        store_id: 's1',
+        asset_types: { label: 'Sign' },
+        stores: { name: 'Store', region: 'Auckland' },
+        jobs: [],
+      },
+    ]
+
+    mockSelectAssets.mockReturnValue({ data: mockAssets, error: null })
+    mockSelectSchedules.mockReturnValue({
+      gte: vi.fn(() => ({
+        lte: vi.fn(() => ({
+          order: vi.fn(() => ({ data: [], error: null })),
+        })),
+      })),
+    })
+    mockSelectJobs.mockReturnValue({
+      gte: vi.fn(() => ({ data: [], error: null })),
+    })
+
+    render(<AnalyticsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Portfolio Analytics')).toBeInTheDocument()
+    })
+
+    // 100% healthy
+    expect(screen.getByText('100% healthy')).toBeInTheDocument()
+  })
+})

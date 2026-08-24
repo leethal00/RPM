@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Store, Job, Asset, UserProfile, JobStatus, Severity } from '../database'
+import type { Store, Job, JobStatus, Severity } from '../database'
 
 describe('Database types', () => {
   it('JobStatus accepts valid values', () => {
@@ -21,13 +21,11 @@ describe('Database types', () => {
       address: '123 Main St',
       lat: -36.8485,
       lng: 174.7633,
+      location_approximate: false,
       manager_name: null,
       manager_phone: null,
       rodier_account_manager_id: null,
       status: 'active',
-      brand_st_pierres: true,
-      brand_bento_bowl: false,
-      brand_k10: false,
       site_type: null,
       site_category: 'Stand alone',
       maintenance_score: null,
