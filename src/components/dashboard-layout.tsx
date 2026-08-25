@@ -41,11 +41,16 @@ export default function DashboardLayout({
                             <SidebarTrigger className="-ml-1" />
                             <Separator orientation="vertical" className="mr-2 h-4" />
                             <div className="flex items-center gap-3 px-4">
+                                <img
+                                    src="/R.jpg"
+                                    alt="Rodier"
+                                    className="h-9 w-9 rounded-full object-cover"
+                                />
                                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                                    Rodier Property Maintenance
+                                Rodier Property Maintenance
                                 </h1>
                                 <CustomerFilterDropdown />
-                            </div>
+                        </div>
                         </div>
                         <div className="flex items-center gap-4">
                             <ThemeToggle />
