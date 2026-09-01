@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -22,11 +22,42 @@ export default function ResetPasswordPage() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
+    const [sessionReady, setSessionReady] = useState(false)
+    const [sessionError, setSessionError] = useState<string | null>(null)
+
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
+
+    useEffect(() => {
+        const exchangeRecoveryCode = async () => {
+            const code = searchParams.get('code')
+
+            if (!code) {
+                setSessionError('Reset link is missing its recovery code.')
+                return
+            }
+
+            const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+            if (error) {
+                setSessionError(error.message)
+                return
+            }
+
+            setSessionReady(true)
+        }
+
+        exchangeRecoveryCode()
+    }, [searchParams, supabase.auth])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        if (!sessionReady) {
+            toast.error('Reset session is not ready yet')
+            return
+        }
 
         const validationError = validatePassword(password)
         if (validationError) {
@@ -66,14 +97,21 @@ export default function ResetPasswordPage() {
                     <div className="space-y-1">
                         <CardTitle className="text-3xl font-bold tracking-tight">New Password</CardTitle>
                         <CardDescription className="text-gray-400">
-                            Enter your new password below
+                            {sessionError
+                                ? sessionError
+                                : sessionReady
+                                    ? 'Enter your new password below'
+                                    : 'Preparing secure password reset...'}
                         </CardDescription>
                     </div>
                 </CardHeader>
+
                 <form onSubmit={handleSubmit}>
                     <CardContent className="space-y-5 pt-8">
                         <div className="space-y-2">
-                            <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-gray-400">New Password</Label>
+                            <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                                New Password
+                            </Label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
                                 <Input
@@ -83,17 +121,28 @@ export default function ResetPasswordPage() {
                                     className="bg-white/5 border-white/10 pl-10 h-11 focus:border-primary/50 focus:ring-primary/20 transition-all"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                    disabled={!sessionReady || !!sessionError}
                                     required
                                 />
                             </div>
+
                             <ul className="text-xs text-gray-500 space-y-1 pl-1">
-                                <li className={password.length >= 8 ? 'text-green-400' : ''}>At least 8 characters</li>
-                                <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'text-green-400' : ''}>Mixed case (upper and lower)</li>
-                                <li className={/[0-9]/.test(password) ? 'text-green-400' : ''}>At least one number</li>
+                                <li className={password.length >= 8 ? 'text-green-400' : ''}>
+                                    At least 8 characters
+                                </li>
+                                <li className={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'text-green-400' : ''}>
+                                    Mixed case (upper and lower)
+                                </li>
+                                <li className={/[0-9]/.test(password) ? 'text-green-400' : ''}>
+                                    At least one number
+                                </li>
                             </ul>
                         </div>
+
                         <div className="space-y-2">
-                            <Label htmlFor="confirmPassword" className="text-xs font-bold uppercase tracking-wider text-gray-400">Confirm Password</Label>
+                            <Label htmlFor="confirmPassword" className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                                Confirm Password
+                            </Label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
                                 <Input
@@ -103,18 +152,20 @@ export default function ResetPasswordPage() {
                                     className="bg-white/5 border-white/10 pl-10 h-11 focus:border-primary/50 focus:ring-primary/20 transition-all"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
+                                    disabled={!sessionReady || !!sessionError}
                                     required
                                 />
                             </div>
                         </div>
                     </CardContent>
+
                     <CardFooter className="pb-8">
                         <Button
                             className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg shadow-lg shadow-primary/20 transition-all"
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || !sessionReady || !!sessionError}
                         >
-                            {loading ? (
+                            {loading || !sessionReady ? (
                                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                             ) : (
                                 'Update Password'
