@@ -132,16 +132,18 @@ export function AppSidebar() {
             setUser(user)
 
             if (user) {
-                // Fetch Profile
                 const { data: profileData } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('id', user.id)
+                    .from("users")
+                    .select("*")
+                    .eq("id", user.id)
                     .single()
+
                 setProfile(profileData)
             }
+
             setLoading(false)
         }
+
         fetchData()
     }, [supabase])
 
@@ -151,9 +153,15 @@ export function AppSidebar() {
         router.refresh()
     }
 
-    const userName = profile?.name || user?.email?.split('@')[0] || "User"
+    const userName = profile?.name || user?.email?.split("@")[0] || "User"
     const userEmail = user?.email || "user@example.com"
     const userInitials = userName.substring(0, 2).toUpperCase()
+
+    // Client users only see the site-management side of RPM.
+    // Rodier staff retain the full internal navigation.
+    const isClientUser =
+        profile?.role === "client_hq" ||
+        profile?.role === "client_store"
 
     return (
         <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -164,10 +172,13 @@ export function AppSidebar() {
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
                         <span className="font-semibold text-sidebar-foreground">RPM</span>
-                        <span className="text-xs text-sidebar-foreground/60">Rodier Property</span>
+                        <span className="text-xs text-sidebar-foreground/60">
+                            Rodier Property
+                        </span>
                     </div>
                 </div>
             </SidebarHeader>
+
             <SidebarContent>
                 <SidebarGroup>
                     <div className="px-2 pt-2 mb-2">
@@ -181,12 +192,18 @@ export function AppSidebar() {
                             </Link>
                         </SidebarMenuButton>
                     </div>
+
                     <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
+
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {navItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                    <SidebarMenuButton
+                                        asChild
+                                        tooltip={item.title}
+                                        isActive={pathname === item.url}
+                                    >
                                         <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
@@ -198,150 +215,234 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {supplyChainItems.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
-                                        <Link href={item.url}>
-                                            <item.icon className="size-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                {!isClientUser && (
+                    <>
+                        <SidebarGroup>
+                            <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {supplyChainItems.map((item) => (
+                                        <SidebarMenuItem key={item.title}>
+                                            <SidebarMenuButton
+                                                asChild
+                                                tooltip={item.title}
+                                                isActive={pathname === item.url}
+                                            >
+                                                <Link href={item.url}>
+                                                    <item.icon className="size-4" />
+                                                    <span>{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel>Strategic Portfolio</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {projectItems.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
-                                        <Link href={item.url}>
-                                            <item.icon className="size-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                        <SidebarGroup>
+                            <SidebarGroupLabel>Strategic Portfolio</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {projectItems.map((item) => (
+                                        <SidebarMenuItem key={item.title}>
+                                            <SidebarMenuButton
+                                                asChild
+                                                tooltip={item.title}
+                                                isActive={pathname === item.url}
+                                            >
+                                                <Link href={item.url}>
+                                                    <item.icon className="size-4" />
+                                                    <span>{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel>Quoting &amp; Costing</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {quotingItems.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild tooltip={item.title} isActive={item.url === "/quoting" ? (pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/catalogue") && !pathname.startsWith("/quoting/products"))) : pathname.startsWith(item.url)}>
-                                        <Link href={item.url}>
-                                            <item.icon className="size-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                        <SidebarGroup>
+                            <SidebarGroupLabel>
+                                Quoting &amp; Costing
+                            </SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {quotingItems.map((item) => (
+                                        <SidebarMenuItem key={item.title}>
+                                            <SidebarMenuButton
+                                                asChild
+                                                tooltip={item.title}
+                                                isActive={
+                                                    item.url === "/quoting"
+                                                        ? pathname === "/quoting" ||
+                                                          (
+                                                              pathname.startsWith("/quoting/") &&
+                                                              !pathname.startsWith("/quoting/catalogue") &&
+                                                              !pathname.startsWith("/quoting/products")
+                                                          )
+                                                        : pathname.startsWith(item.url)
+                                                }
+                                            >
+                                                <Link href={item.url}>
+                                                    <item.icon className="size-4" />
+                                                    <span>{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
 
-                <SidebarGroup>
-                    <SidebarGroupLabel>Administration</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname.startsWith('/settings')}>
-                                    <div className="flex items-center gap-2 cursor-pointer w-full">
-                                        <Settings className="size-4" />
-                                        <span>Portal Settings</span>
-                                    </div>
-                                </SidebarMenuButton>
-                                <SidebarMenuSub>
-                                    <SidebarMenuSubItem>
-                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/users'}>
-                                            <Link href="/settings/users" className="flex items-center gap-2">
-                                                <UserCog className="size-3.5" />
-                                                <span>Users</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                    <SidebarMenuSubItem>
-                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/customers'}>
-                                            <Link href="/settings/customers" className="flex items-center gap-2">
-                                                <Users className="size-3.5" />
-                                                <span>Customers</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                    <SidebarMenuSubItem>
-                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/regions'}>
-                                            <Link href="/settings/regions" className="flex items-center gap-2">
-                                                <MapPin className="size-3.5" />
-                                                <span>Regions</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                    <SidebarMenuSubItem>
-                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/asset-types'}>
-                                            <Link href="/settings/asset-types" className="flex items-center gap-2">
-                                                <Layers className="size-3.5" />
-                                                <span>Asset Classifications</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                    <SidebarMenuSubItem>
-                                        <SidebarMenuSubButton asChild isActive={pathname === '/settings/roles'}>
-                                            <Link href="/settings/roles" className="flex items-center gap-2">
-                                                <UserCog className="size-3.5" />
-                                                <span>Role permissions</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                </SidebarMenuSub>
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                        <SidebarGroup>
+                            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    <SidebarMenuItem>
+                                        <SidebarMenuButton
+                                            asChild
+                                            isActive={pathname.startsWith("/settings")}
+                                        >
+                                            <div className="flex items-center gap-2 cursor-pointer w-full">
+                                                <Settings className="size-4" />
+                                                <span>Portal Settings</span>
+                                            </div>
+                                        </SidebarMenuButton>
+
+                                        <SidebarMenuSub>
+                                            <SidebarMenuSubItem>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={pathname === "/settings/users"}
+                                                >
+                                                    <Link
+                                                        href="/settings/users"
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <UserCog className="size-3.5" />
+                                                        <span>Users</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+
+                                            <SidebarMenuSubItem>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={pathname === "/settings/customers"}
+                                                >
+                                                    <Link
+                                                        href="/settings/customers"
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <Users className="size-3.5" />
+                                                        <span>Customers</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+
+                                            <SidebarMenuSubItem>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={pathname === "/settings/regions"}
+                                                >
+                                                    <Link
+                                                        href="/settings/regions"
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <MapPin className="size-3.5" />
+                                                        <span>Regions</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+
+                                            <SidebarMenuSubItem>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={pathname === "/settings/asset-types"}
+                                                >
+                                                    <Link
+                                                        href="/settings/asset-types"
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <Layers className="size-3.5" />
+                                                        <span>Asset Classifications</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+
+                                            <SidebarMenuSubItem>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={pathname === "/settings/roles"}
+                                                >
+                                                    <Link
+                                                        href="/settings/roles"
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <UserCog className="size-3.5" />
+                                                        <span>Role permissions</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+                                        </SidebarMenuSub>
+                                    </SidebarMenuItem>
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                    </>
+                )}
 
                 <SidebarGroup>
                     <SidebarGroupLabel>Support</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="Help & Support" isActive={pathname === '/help'}>
+                                <SidebarMenuButton
+                                    asChild
+                                    tooltip="Help & Support"
+                                    isActive={pathname === "/help"}
+                                >
                                     <Link href="/help">
                                         <HelpCircle className="size-4" />
                                         <span>Help & Support</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="Suggest a feature" isActive={pathname === '/feature-request'}>
-                                    <Link href="/feature-request">
-                                        <Lightbulb className="size-4" />
-                                        <span>Suggest a feature</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="Feature pipeline" isActive={pathname === '/feature-requests'}>
-                                    <Link href="/feature-requests">
-                                        <ClipboardList className="size-4" />
-                                        <span>Feature pipeline</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
+
+                            {!isClientUser && (
+                                <>
+                                    <SidebarMenuItem>
+                                        <SidebarMenuButton
+                                            asChild
+                                            tooltip="Suggest a feature"
+                                            isActive={pathname === "/feature-request"}
+                                        >
+                                            <Link href="/feature-request">
+                                                <Lightbulb className="size-4" />
+                                                <span>Suggest a feature</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+
+                                    <SidebarMenuItem>
+                                        <SidebarMenuButton
+                                            asChild
+                                            tooltip="Feature pipeline"
+                                            isActive={pathname === "/feature-requests"}
+                                        >
+                                            <Link href="/feature-requests">
+                                                <ClipboardList className="size-4" />
+                                                <span>Feature pipeline</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                </>
+                            )}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
+
             <SidebarFooter className="border-t border-sidebar-border p-4">
                 <SidebarMenu>
                     <SidebarMenuItem>
@@ -352,15 +453,26 @@ export function AppSidebar() {
                                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <Avatar className="h-8 w-8 rounded-lg">
-                                        <AvatarImage src={profile?.avatar_url || ""} alt={userName} />
-                                        <AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback>
+                                        <AvatarImage
+                                            src={profile?.avatar_url || ""}
+                                            alt={userName}
+                                        />
+                                        <AvatarFallback className="rounded-lg">
+                                            {userInitials}
+                                        </AvatarFallback>
                                     </Avatar>
+
                                     <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                                        <span className="truncate font-semibold">{loading ? "Loading..." : userName}</span>
-                                        <span className="truncate text-xs text-sidebar-foreground/60">{loading ? "..." : userEmail}</span>
+                                        <span className="truncate font-semibold">
+                                            {loading ? "Loading..." : userName}
+                                        </span>
+                                        <span className="truncate text-xs text-sidebar-foreground/60">
+                                            {loading ? "..." : userEmail}
+                                        </span>
                                     </div>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
+
                             <DropdownMenuContent
                                 className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
                                 side="bottom"
@@ -370,15 +482,24 @@ export function AppSidebar() {
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                                         <Avatar className="h-8 w-8 rounded-lg">
-                                            <AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback>
+                                            <AvatarFallback className="rounded-lg">
+                                                {userInitials}
+                                            </AvatarFallback>
                                         </Avatar>
+
                                         <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">{userName}</span>
-                                            <span className="truncate text-xs">{userEmail}</span>
+                                            <span className="truncate font-semibold">
+                                                {userName}
+                                            </span>
+                                            <span className="truncate text-xs">
+                                                {userEmail}
+                                            </span>
                                         </div>
                                     </div>
                                 </DropdownMenuLabel>
+
                                 <DropdownMenuSeparator />
+
                                 {user && (
                                     <DropdownMenuItem asChild>
                                         <a href="/profile">
@@ -387,7 +508,9 @@ export function AppSidebar() {
                                         </a>
                                     </DropdownMenuItem>
                                 )}
+
                                 <DropdownMenuSeparator />
+
                                 <DropdownMenuItem onClick={handleSignOut}>
                                     Log out
                                 </DropdownMenuItem>
@@ -396,6 +519,6 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
-        </Sidebar >
+        </Sidebar>
     )
 }
