@@ -64,7 +64,7 @@ export default function LoginPage() {
                     <div className="space-y-1">
                         <CardTitle className="text-3xl font-bold tracking-tight">RPM Portal</CardTitle>
                         <CardDescription className="text-gray-400 italic">
-                            Rodier Property Maintenance
+                            Rodier Property Management
                         </CardDescription>
                     </div>
                 </CardHeader>
