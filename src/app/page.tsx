@@ -73,6 +73,7 @@ export default function MapPage() {
         <div className="w-96 h-full hidden lg:block border-l">
           <StoreList
             stores={filteredStores}
+            attentionSourceStores={stores}
             onStoreClick={(store) => setSelectedStore(store)}
             selectedStoreId={selectedStore?.id}
             searchTerm={searchTerm}
