@@ -51,7 +51,17 @@ export function StoreList({
                 red: 0,
                 orange: 1,
             }
+            const orewaDebug = (attentionSourceStores ?? stores).find(
+               (store) =>
+                    store.name.toLowerCase().includes("orewa")
+            )
 
+            const orewaTraffic = orewaDebug
+                ? computeTrafficLight({
+                      assets: orewaDebug.assets,
+                      jobs: orewaDebug.jobs,
+                  })
+                : "not found"
             return (
                 priority[
                     a.traffic as "red" | "orange"
@@ -68,7 +78,9 @@ export function StoreList({
                 variant="inline"
                 className="w-full bg-card"
             />
-
+            <div className="rounded border bg-yellow-50 px-2 py-1 text-xs text-black">
+                DEBUG — Attention: {attentionStores.length} | Orewa: {orewaTraffic}
+                </div>
             {attentionStores.length > 0 && (
                 <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                     <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
