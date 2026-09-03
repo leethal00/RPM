@@ -11,6 +11,7 @@ import { computeTrafficLight } from "@/lib/health-score"
 
 interface StoreListProps {
     stores: Store[]
+    attentionSourceStores?: Store[]
     onStoreClick: (store: Store) => void
     selectedStoreId?: string
     searchTerm: string
@@ -19,12 +20,13 @@ interface StoreListProps {
 
 export function StoreList({
     stores,
+    attentionSourceStores,
     onStoreClick,
     selectedStoreId,
     searchTerm,
     onSearchChange,
 }: StoreListProps) {
-    const attentionStores = stores
+    const attentionStores = (attentionSourceStores ?? stores)
         .map((store) => {
             const traffic =
                 store.status === "inactive"
