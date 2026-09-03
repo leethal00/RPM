@@ -1,182 +1,68 @@
 "use client"
 
-import * as React from "react"
-import { Building2, Check, ChevronsUpDown } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
-
-import { cn } from "@/lib/utils"
-import { createClient } from "@/lib/supabase/client"
+import { Building2, ChevronsUpDown } from "lucide-react"
 import { useCustomerFilter } from "@/lib/customer-filter"
-import type { UserRole } from "@/types/database"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
-const ADMIN_ROLES: UserRole[] = [
-    "super_admin",
-    "rodier_admin",
-]
+const ALL_VALUE = "__all__"
 
-export function CustomerFilterDropdown() {
+interface CustomerFilterDropdownProps {
+    variant?: "header" | "inline"
+    className?: string
+}
+
+export function CustomerFilterDropdown({
+    variant = "header",
+    className = "",
+}: CustomerFilterDropdownProps) {
     const {
+        isAdmin,
+        customers,
         clientId,
         setClientId,
-        customers,
         initialised,
     } = useCustomerFilter()
 
-    const supabase = React.useMemo(
-        () => createClient(),
-        []
-    )
+    if (!initialised || !isAdmin) return null
 
-    const [open, setOpen] = React.useState(false)
-    const [isAdmin, setIsAdmin] = React.useState(false)
-    const [roleChecked, setRoleChecked] = React.useState(false)
-
-    React.useEffect(() => {
-        let cancelled = false
-
-        async function checkRole() {
-            const {
-                data: { user },
-            } = await supabase.auth.getUser()
-
-            if (!user) {
-                if (!cancelled) {
-                    setIsAdmin(false)
-                    setRoleChecked(true)
-                }
-                return
-            }
-
-            const { data: profile } = await supabase
-                .from("users")
-                .select("role")
-                .eq("id", user.id)
-                .single()
-
-            if (cancelled) return
-
-            const role =
-                (profile?.role ?? null) as UserRole | null
-
-            setIsAdmin(
-                role !== null &&
-                    ADMIN_ROLES.includes(role)
-            )
-
-            setRoleChecked(true)
-        }
-
-        checkRole()
-
-        return () => {
-            cancelled = true
-        }
-    }, [supabase])
-
-    if (!initialised || !roleChecked || !isAdmin) {
-        return null
-    }
-
-    const selectedCustomer =
-        customers.find(
-            (customer) => customer.id === clientId
-        ) ?? null
-
-    const selectedLabel =
-        selectedCustomer?.name ?? "All Customers"
+    const triggerClass =
+        variant === "inline"
+            ? `h-9 gap-2 text-sm ${className}`
+            : `h-8 gap-2 text-sm min-w-[160px] ${className}`
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="min-w-[190px] justify-between"
-                >
-                    <div className="flex min-w-0 items-center gap-2">
-                        <Building2 className="size-4 shrink-0" />
-
-                        <span className="truncate">
-                            {selectedLabel}
-                        </span>
-                    </div>
-
-                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-
-            <PopoverContent
-                className="w-[260px] p-0"
-                align="end"
+        <Select
+            value={clientId ?? ALL_VALUE}
+            onValueChange={(v) =>
+                setClientId(v === ALL_VALUE ? null : v)
+            }
+        >
+            <SelectTrigger
+                className={triggerClass}
+                aria-label="Filter by customer"
             >
-                <Command>
-                    <CommandInput placeholder="Search customers..." />
+                <Building2 className="size-3.5 text-muted-foreground" />
+                <SelectValue placeholder="All customers" />
+                <ChevronsUpDown className="ml-auto size-3 opacity-50" />
+            </SelectTrigger>
 
-                    <CommandList>
-                        <CommandEmpty>
-                            No customer found.
-                        </CommandEmpty>
+            <SelectContent className="z-[1100]">
+                <SelectItem value={ALL_VALUE}>
+                    All customers
+                </SelectItem>
 
-                        <CommandGroup>
-                            <CommandItem
-                                value="All Customers"
-                                onSelect={() => {
-                                    setClientId(null)
-                                    setOpen(false)
-                                }}
-                            >
-                                <Check
-                                    className={cn(
-                                        "mr-2 size-4",
-                                        clientId === null
-                                            ? "opacity-100"
-                                            : "opacity-0"
-                                    )}
-                                />
-
-                                All Customers
-                            </CommandItem>
-
-                            {customers.map((customer) => (
-                                <CommandItem
-                                    key={customer.id}
-                                    value={customer.name}
-                                    onSelect={() => {
-                                        setClientId(customer.id)
-                                        setOpen(false)
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 size-4",
-                                            clientId === customer.id
-                                                ? "opacity-100"
-                                                : "opacity-0"
-                                        )}
-                                    />
-
-                                    {customer.name}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
+                {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
     )
 }
