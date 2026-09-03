@@ -165,8 +165,8 @@ export interface Material {
   date_last_checked: string | null
   check_note: string | null
   is_labour: boolean
-  watts: number | null   // LED module consumption / transformer capacity
-  mtr_weight: number | null // steel: kg per metre (per sheet for plate) -> seeds galvanising weight
+  watts: number | null
+  mtr_weight: number | null
   active: boolean
   created_at: string
   updated_at: string
@@ -228,12 +228,12 @@ export interface CostingLine {
   unit_sell_override: number | null
   internal_note: string | null
   weight_kg: number | null
-  wt_factor: number | null  // kg/m (linear) or kg/m² (plate)
-  wt_size: number | null     // length (m) or area (m²)
-  wt_qty: number | null      // number of pieces
-  watts: number | null       // LED module consumption / transformer capacity
-  line_cost: number // generated
-  line_sell: number // generated
+  wt_factor: number | null
+  wt_size: number | null
+  wt_qty: number | null
+  watts: number | null
+  line_cost: number
+  line_sell: number
   created_at: string
   updated_at: string
 }
@@ -250,8 +250,8 @@ export interface CostingItem {
   delivery: string | null
   mode: CostingItemMode
   qty: number
-  unit_cost: number   // simple items
-  unit_price: number  // simple items (sell)
+  unit_cost: number
+  unit_price: number
   sort: number
   created_at: string
   updated_at: string
@@ -316,15 +316,27 @@ export interface MaintenanceSchedule {
   created_at: string
 }
 
+export interface SitePhotoAlbum {
+  id: string
+  store_id: string
+  name: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface SitePhoto {
   id: string
   store_id: string
+  album_id: string | null
   url: string
   caption: string | null
   internal_only: boolean
   is_primary: boolean
   created_at: string
   updated_at: string
+  // Joined relations
+  album?: SitePhotoAlbum | null
 }
 
 export interface AssetPhoto {
