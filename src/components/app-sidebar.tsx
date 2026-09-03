@@ -37,7 +37,13 @@ import {
     SidebarMenuSubItem,
     SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+
+import {
+    Avatar,
+    AvatarFallback,
+    AvatarImage,
+} from "@/components/ui/avatar"
+
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -46,6 +52,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
@@ -79,10 +86,10 @@ const navItems = [
         icon: Briefcase,
     },
     {
-    title: "PM Scheduler",
-    url: "/maintenance/pm",
-    icon: Hammer,
-},
+        title: "PM Scheduler",
+        url: "/maintenance/pm",
+        icon: Hammer,
+    },
     {
         title: "Maintenance",
         url: "/maintenance",
@@ -128,13 +135,17 @@ export function AppSidebar() {
     const supabase = createClient()
     const router = useRouter()
     const pathname = usePathname()
+
     const [user, setUser] = React.useState<User | null>(null)
     const [profile, setProfile] = React.useState<UserProfile | null>(null)
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
         async function fetchData() {
-            const { data: { user } } = await supabase.auth.getUser()
+            const {
+                data: { user },
+            } = await supabase.auth.getUser()
+
             setUser(user)
 
             if (user) {
@@ -153,16 +164,29 @@ export function AppSidebar() {
         fetchData()
     }, [supabase])
 
+    const handleSignOut = async () => {
+        await supabase.auth.signOut()
+        router.push("/login")
+        router.refresh()
+    }
+
     const handleSwitchAccount = async () => {
         await supabase.auth.signOut()
         router.push("/login?switch=1")
-    router.refresh()
-}
+        router.refresh()
     }
 
-    const userName = profile?.name || user?.email?.split("@")[0] || "User"
-    const userEmail = user?.email || "user@example.com"
-    const userInitials = userName.substring(0, 2).toUpperCase()
+    const userName =
+        profile?.name ||
+        user?.email?.split("@")[0] ||
+        "User"
+
+    const userEmail =
+        user?.email ||
+        "user@example.com"
+
+    const userInitials =
+        userName.substring(0, 2).toUpperCase()
 
     // Client users only see the site-management side of RPM.
     // Rodier staff retain the full internal navigation.
@@ -171,14 +195,21 @@ export function AppSidebar() {
         profile?.role === "client_store"
 
     return (
-        <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+        <Sidebar
+            collapsible="icon"
+            className="border-r border-sidebar-border"
+        >
             <SidebarHeader className="border-b border-sidebar-border p-4">
                 <div className="flex items-center gap-2 px-2">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                         <Building2 className="size-4" />
                     </div>
+
                     <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-                        <span className="font-semibold text-sidebar-foreground">RPM</span>
+                        <span className="font-semibold text-sidebar-foreground">
+                            RPM
+                        </span>
+
                         <span className="text-xs text-sidebar-foreground/60">
                             Rodier Property
                         </span>
@@ -193,14 +224,19 @@ export function AppSidebar() {
                             asChild
                             className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"
                         >
-                            <Link href="/jobs/new" className="flex items-center gap-2">
+                            <Link
+                                href="/jobs/new"
+                                className="flex items-center gap-2"
+                            >
                                 <PlusCircle className="size-4" />
                                 <span>Report Fault</span>
                             </Link>
                         </SidebarMenuButton>
                     </div>
 
-                    <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
+                    <SidebarGroupLabel>
+                        Main Navigation
+                    </SidebarGroupLabel>
 
                     <SidebarGroupContent>
                         <SidebarMenu>
@@ -225,7 +261,10 @@ export function AppSidebar() {
                 {!isClientUser && (
                     <>
                         <SidebarGroup>
-                            <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
+                            <SidebarGroupLabel>
+                                Supply Chain
+                            </SidebarGroupLabel>
+
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {supplyChainItems.map((item) => (
@@ -233,11 +272,15 @@ export function AppSidebar() {
                                             <SidebarMenuButton
                                                 asChild
                                                 tooltip={item.title}
-                                                isActive={pathname === item.url}
+                                                isActive={
+                                                    pathname === item.url
+                                                }
                                             >
                                                 <Link href={item.url}>
                                                     <item.icon className="size-4" />
-                                                    <span>{item.title}</span>
+                                                    <span>
+                                                        {item.title}
+                                                    </span>
                                                 </Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
@@ -247,7 +290,10 @@ export function AppSidebar() {
                         </SidebarGroup>
 
                         <SidebarGroup>
-                            <SidebarGroupLabel>Strategic Portfolio</SidebarGroupLabel>
+                            <SidebarGroupLabel>
+                                Strategic Portfolio
+                            </SidebarGroupLabel>
+
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {projectItems.map((item) => (
@@ -255,11 +301,15 @@ export function AppSidebar() {
                                             <SidebarMenuButton
                                                 asChild
                                                 tooltip={item.title}
-                                                isActive={pathname === item.url}
+                                                isActive={
+                                                    pathname === item.url
+                                                }
                                             >
                                                 <Link href={item.url}>
                                                     <item.icon className="size-4" />
-                                                    <span>{item.title}</span>
+                                                    <span>
+                                                        {item.title}
+                                                    </span>
                                                 </Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
@@ -272,6 +322,7 @@ export function AppSidebar() {
                             <SidebarGroupLabel>
                                 Quoting &amp; Costing
                             </SidebarGroupLabel>
+
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {quotingItems.map((item) => (
@@ -281,18 +332,27 @@ export function AppSidebar() {
                                                 tooltip={item.title}
                                                 isActive={
                                                     item.url === "/quoting"
-                                                        ? pathname === "/quoting" ||
-                                                          (
-                                                              pathname.startsWith("/quoting/") &&
-                                                              !pathname.startsWith("/quoting/catalogue") &&
-                                                              !pathname.startsWith("/quoting/products")
+                                                        ? pathname ===
+                                                              "/quoting" ||
+                                                          (pathname.startsWith(
+                                                              "/quoting/"
+                                                          ) &&
+                                                              !pathname.startsWith(
+                                                                  "/quoting/catalogue"
+                                                              ) &&
+                                                              !pathname.startsWith(
+                                                                  "/quoting/products"
+                                                              ))
+                                                        : pathname.startsWith(
+                                                              item.url
                                                           )
-                                                        : pathname.startsWith(item.url)
                                                 }
                                             >
                                                 <Link href={item.url}>
                                                     <item.icon className="size-4" />
-                                                    <span>{item.title}</span>
+                                                    <span>
+                                                        {item.title}
+                                                    </span>
                                                 </Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
@@ -302,17 +362,24 @@ export function AppSidebar() {
                         </SidebarGroup>
 
                         <SidebarGroup>
-                            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+                            <SidebarGroupLabel>
+                                Administration
+                            </SidebarGroupLabel>
+
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     <SidebarMenuItem>
                                         <SidebarMenuButton
                                             asChild
-                                            isActive={pathname.startsWith("/settings")}
+                                            isActive={pathname.startsWith(
+                                                "/settings"
+                                            )}
                                         >
                                             <div className="flex items-center gap-2 cursor-pointer w-full">
                                                 <Settings className="size-4" />
-                                                <span>Portal Settings</span>
+                                                <span>
+                                                    Portal Settings
+                                                </span>
                                             </div>
                                         </SidebarMenuButton>
 
@@ -320,14 +387,19 @@ export function AppSidebar() {
                                             <SidebarMenuSubItem>
                                                 <SidebarMenuSubButton
                                                     asChild
-                                                    isActive={pathname === "/settings/users"}
+                                                    isActive={
+                                                        pathname ===
+                                                        "/settings/users"
+                                                    }
                                                 >
                                                     <Link
                                                         href="/settings/users"
                                                         className="flex items-center gap-2"
                                                     >
                                                         <UserCog className="size-3.5" />
-                                                        <span>Users</span>
+                                                        <span>
+                                                            Users
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -335,14 +407,19 @@ export function AppSidebar() {
                                             <SidebarMenuSubItem>
                                                 <SidebarMenuSubButton
                                                     asChild
-                                                    isActive={pathname === "/settings/customers"}
+                                                    isActive={
+                                                        pathname ===
+                                                        "/settings/customers"
+                                                    }
                                                 >
                                                     <Link
                                                         href="/settings/customers"
                                                         className="flex items-center gap-2"
                                                     >
                                                         <Users className="size-3.5" />
-                                                        <span>Customers</span>
+                                                        <span>
+                                                            Customers
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -350,14 +427,19 @@ export function AppSidebar() {
                                             <SidebarMenuSubItem>
                                                 <SidebarMenuSubButton
                                                     asChild
-                                                    isActive={pathname === "/settings/regions"}
+                                                    isActive={
+                                                        pathname ===
+                                                        "/settings/regions"
+                                                    }
                                                 >
                                                     <Link
                                                         href="/settings/regions"
                                                         className="flex items-center gap-2"
                                                     >
                                                         <MapPin className="size-3.5" />
-                                                        <span>Regions</span>
+                                                        <span>
+                                                            Regions
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -365,14 +447,19 @@ export function AppSidebar() {
                                             <SidebarMenuSubItem>
                                                 <SidebarMenuSubButton
                                                     asChild
-                                                    isActive={pathname === "/settings/asset-types"}
+                                                    isActive={
+                                                        pathname ===
+                                                        "/settings/asset-types"
+                                                    }
                                                 >
                                                     <Link
                                                         href="/settings/asset-types"
                                                         className="flex items-center gap-2"
                                                     >
                                                         <Layers className="size-3.5" />
-                                                        <span>Asset Classifications</span>
+                                                        <span>
+                                                            Asset Classifications
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -380,14 +467,19 @@ export function AppSidebar() {
                                             <SidebarMenuSubItem>
                                                 <SidebarMenuSubButton
                                                     asChild
-                                                    isActive={pathname === "/settings/roles"}
+                                                    isActive={
+                                                        pathname ===
+                                                        "/settings/roles"
+                                                    }
                                                 >
                                                     <Link
                                                         href="/settings/roles"
                                                         className="flex items-center gap-2"
                                                     >
                                                         <UserCog className="size-3.5" />
-                                                        <span>Role permissions</span>
+                                                        <span>
+                                                            Role permissions
+                                                        </span>
                                                     </Link>
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
@@ -400,7 +492,10 @@ export function AppSidebar() {
                 )}
 
                 <SidebarGroup>
-                    <SidebarGroupLabel>Support</SidebarGroupLabel>
+                    <SidebarGroupLabel>
+                        Support
+                    </SidebarGroupLabel>
+
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
@@ -411,7 +506,9 @@ export function AppSidebar() {
                                 >
                                     <Link href="/help">
                                         <HelpCircle className="size-4" />
-                                        <span>Help & Support</span>
+                                        <span>
+                                            Help & Support
+                                        </span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
@@ -422,11 +519,16 @@ export function AppSidebar() {
                                         <SidebarMenuButton
                                             asChild
                                             tooltip="Suggest a feature"
-                                            isActive={pathname === "/feature-request"}
+                                            isActive={
+                                                pathname ===
+                                                "/feature-request"
+                                            }
                                         >
                                             <Link href="/feature-request">
                                                 <Lightbulb className="size-4" />
-                                                <span>Suggest a feature</span>
+                                                <span>
+                                                    Suggest a feature
+                                                </span>
                                             </Link>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
@@ -435,11 +537,16 @@ export function AppSidebar() {
                                         <SidebarMenuButton
                                             asChild
                                             tooltip="Feature pipeline"
-                                            isActive={pathname === "/feature-requests"}
+                                            isActive={
+                                                pathname ===
+                                                "/feature-requests"
+                                            }
                                         >
                                             <Link href="/feature-requests">
                                                 <ClipboardList className="size-4" />
-                                                <span>Feature pipeline</span>
+                                                <span>
+                                                    Feature pipeline
+                                                </span>
                                             </Link>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
@@ -461,9 +568,13 @@ export function AppSidebar() {
                                 >
                                     <Avatar className="h-8 w-8 rounded-lg">
                                         <AvatarImage
-                                            src={profile?.avatar_url || ""}
+                                            src={
+                                                profile?.avatar_url ||
+                                                ""
+                                            }
                                             alt={userName}
                                         />
+
                                         <AvatarFallback className="rounded-lg">
                                             {userInitials}
                                         </AvatarFallback>
@@ -471,10 +582,15 @@ export function AppSidebar() {
 
                                     <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                                         <span className="truncate font-semibold">
-                                            {loading ? "Loading..." : userName}
+                                            {loading
+                                                ? "Loading..."
+                                                : userName}
                                         </span>
+
                                         <span className="truncate text-xs text-sidebar-foreground/60">
-                                            {loading ? "..." : userEmail}
+                                            {loading
+                                                ? "..."
+                                                : userEmail}
                                         </span>
                                     </div>
                                 </SidebarMenuButton>
@@ -498,6 +614,7 @@ export function AppSidebar() {
                                             <span className="truncate font-semibold">
                                                 {userName}
                                             </span>
+
                                             <span className="truncate text-xs">
                                                 {userEmail}
                                             </span>
@@ -516,14 +633,18 @@ export function AppSidebar() {
                                     </DropdownMenuItem>
                                 )}
 
-                                    <DropdownMenuItem onClick={handleSwitchAccount}>
-                                       <LogIn className="mr-2 size-4" />
-                                        Switch account
+                                <DropdownMenuItem
+                                    onClick={handleSwitchAccount}
+                                >
+                                    <LogIn className="mr-2 size-4" />
+                                    Switch account
                                 </DropdownMenuItem>
 
                                 <DropdownMenuSeparator />
 
-                                <DropdownMenuItem onClick={handleSignOut}>
+                                <DropdownMenuItem
+                                    onClick={handleSignOut}
+                                >
                                     Log out
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
