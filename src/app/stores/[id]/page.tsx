@@ -151,7 +151,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 value="construction"
                                 className="relative h-11 rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-2 text-sm font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:hidden"
                             >
-                                Construction Set
+                                Construction Drawings
                             </TabsTrigger>
                         </TabsList>
 
