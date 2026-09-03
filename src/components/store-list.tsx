@@ -27,50 +27,52 @@ export function StoreList({
     onSearchChange,
 }: StoreListProps) {
     const attentionStores = (attentionSourceStores ?? stores)
-        .map((store) => {
-            const traffic =
-                store.status === "inactive"
-                    ? "muted"
-                    : computeTrafficLight({
-                          assets: store.assets,
-                          jobs: store.jobs,
-                      })
-
-            return {
-                store,
-                traffic,
-            }
-        })
-        .filter(
-            (item) =>
-                item.traffic === "red" ||
-                item.traffic === "orange"
-        )
-        .sort((a, b) => {
-            const priority = {
-                red: 0,
-                orange: 1,
-            }
-            const orewaDebug = (attentionSourceStores ?? stores).find(
-               (store) =>
-                    store.name.toLowerCase().includes("orewa")
-            )
-
-            const orewaTraffic = orewaDebug
-                ? computeTrafficLight({
-                      assets: orewaDebug.assets,
-                      jobs: orewaDebug.jobs,
+    .map((store) => {
+        const traffic =
+            store.status === "inactive"
+                ? "muted"
+                : computeTrafficLight({
+                      assets: store.assets,
+                      jobs: store.jobs,
                   })
-                : "not found"
-            return (
-                priority[
-                    a.traffic as "red" | "orange"
-                ] -
-                priority[
-                    b.traffic as "red" | "orange"
-                ]
-            )
-        })
+
+        return {
+            store,
+            traffic,
+        }
+    })
+    .filter(
+        (item) =>
+            item.traffic === "red" ||
+            item.traffic === "orange"
+    )
+    .sort((a, b) => {
+        const priority = {
+            red: 0,
+            orange: 1,
+        }
+
+        return (
+            priority[
+                a.traffic as "red" | "orange"
+            ] -
+            priority[
+                b.traffic as "red" | "orange"
+            ]
+        )
+    })
+
+const orewaDebug = (attentionSourceStores ?? stores).find(
+    (store) =>
+        store.name.toLowerCase().includes("orewa")
+)
+
+const orewaTraffic = orewaDebug
+    ? computeTrafficLight({
+          assets: orewaDebug.assets,
+          jobs: orewaDebug.jobs,
+      })
+    : "not found"
 
     return (
         <div className="flex h-full flex-col gap-3 border-l border-border/60 bg-muted/50 dark:bg-muted/30 p-4">
