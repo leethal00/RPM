@@ -19,6 +19,7 @@ import {
     HelpCircle,
     Calculator,
     Package2,
+    LogIn,
 } from "lucide-react"
 
 import {
@@ -152,10 +153,11 @@ export function AppSidebar() {
         fetchData()
     }, [supabase])
 
-    const handleSignOut = async () => {
+    const handleSwitchAccount = async () => {
         await supabase.auth.signOut()
-        router.push("/login")
-        router.refresh()
+        router.push("/login?switch=1")
+    router.refresh()
+}
     }
 
     const userName = profile?.name || user?.email?.split("@")[0] || "User"
@@ -513,6 +515,11 @@ export function AppSidebar() {
                                         </a>
                                     </DropdownMenuItem>
                                 )}
+
+                                    <DropdownMenuItem onClick={handleSwitchAccount}>
+                                       <LogIn className="mr-2 size-4" />
+                                        Switch account
+                                </DropdownMenuItem>
 
                                 <DropdownMenuSeparator />
 
