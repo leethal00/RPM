@@ -56,6 +56,7 @@ export interface Store {
   clients?: Client
   site_photos?: SitePhoto[]
   store_brands?: { brand_id: string; client_brands?: ClientBrand }[]
+  site_construction_drawings?: SiteConstructionDrawing[]
 }
 
 export interface ClientBrand {
@@ -314,6 +315,18 @@ export interface MaintenanceSchedule {
   last_completed_at: string | null
   next_due_at: string
   created_at: string
+}
+
+export interface SiteConstructionDrawing {
+  id: string
+  store_id: string
+  drawing_number: string
+  drawing_title: string
+  file_url: string
+  file_name: string
+  uploaded_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface SitePhotoAlbum {
