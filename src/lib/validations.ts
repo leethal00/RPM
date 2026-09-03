@@ -26,7 +26,7 @@ export const assetSchema = z.object({
   asset_dimensions: z.string().optional(),
   last_service_date: z.string().optional().or(z.literal("")),
   next_service_date: z.string().optional().or(z.literal("")),
-  pm_interval_months: z.number().int().min(1, "PM interval must be at least 1 month").max(120, "PM interval must be 120 months or less"),
+  pm_interval_months: z.number().int().min(1, "PM interval must be at least 1 month").max(120, "PM interval must be 120 months or less").nullable(),
 })
 
 export const jobSchema = z.object({
