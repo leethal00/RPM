@@ -176,7 +176,7 @@ export default function ResetPasswordPage() {
             </Card>
 
             <div className="absolute bottom-6 text-gray-500 text-xs tracking-widest uppercase">
-                &copy; 2026 Rodier Property Maintenance
+                &copy; 2026 Rodier Property Management
             </div>
         </div>
     )
