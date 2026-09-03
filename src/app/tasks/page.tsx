@@ -12,7 +12,6 @@ import {
     ClipboardList,
     Search,
     PlusCircle,
-    AlertTriangle,
     Clock3,
     CheckCircle2,
     CircleDot,
@@ -38,75 +37,52 @@ interface DemoTask {
     location: string
     asset?: string
     dueDate?: string
-    owner: string
+    actionWith: string
 }
 
 const DEMO_TASKS: DemoTask[] = [
     {
         id: "1",
-        title: "Review drive-thru menu board upgrade options",
+        title: "Pylon head design & costing",
         description:
-            "Review current menu board formats and provide recommended upgrade options for future refurbishments.",
+            "Develop pylon head design and costing for New Zealand manufacture, including PS1 compliance requirements.",
         status: "in_progress",
         priority: "high",
-        location: "Multiple Sites",
-        owner: "Rodier",
-        dueDate: "12 Sep 2026",
-    },
-    {
-        id: "2",
-        title: "Develop new external signage specification",
-        description:
-            "Prepare a standard signage specification covering materials, illumination and maintenance requirements.",
-        status: "waiting_client",
-        priority: "normal",
-        location: "National",
-        owner: "McDonald's",
+        location: "Nationwide",
+        actionWith: "Rodier",
         dueDate: "18 Sep 2026",
     },
     {
-        id: "3",
-        title: "Auckland store pylon sign replacement proposal",
+        id: "2",
+        title: "Height restrictor hanging bar replacement programme",
         description:
-            "Prepare replacement concept and budget guidance for the existing pylon sign.",
-        status: "new",
-        priority: "high",
-        location: "Auckland Store",
-        asset: "Pylon Sign",
-        owner: "Rodier",
-    },
-    {
-        id: "4",
-        title: "Review LED illumination options for future signage",
-        description:
-            "Compare current LED modules with newer alternatives for efficiency, brightness and serviceability.",
+            "Develop a nationwide replacement programme for height restrictor hanging bars.",
         status: "in_progress",
-        priority: "normal",
-        location: "National",
-        owner: "Rodier",
+        priority: "high",
+        location: "Nationwide",
+        actionWith: "Rodier",
         dueDate: "25 Sep 2026",
     },
     {
-        id: "5",
-        title: "Confirm dimensions for replacement directional sign",
+        id: "3",
+        title: "Custom directional sign design & quote",
         description:
-            "Confirm final dimensions and mounting details before fabrication drawings are completed.",
-        status: "waiting_rodier",
+            "Prepare custom directional sign design and quotation for McDonald's Greenlane.",
+        status: "new",
         priority: "normal",
-        location: "Example Site",
+        location: "McDonald's Greenlane",
         asset: "Directional Sign",
-        owner: "Rodier",
-        dueDate: "8 Sep 2026",
+        actionWith: "Rodier",
     },
     {
-        id: "6",
-        title: "2027 signage refresh planning",
+        id: "4",
+        title: "Schedule repairs around drive-thru shutdown",
         description:
-            "Initial planning register for likely signage refresh work across the 2027 programme.",
-        status: "new",
-        priority: "low",
-        location: "National",
-        owner: "Rodier",
+            "Confirm repair dates to align with the scheduled drive-thru shutdown.",
+        status: "waiting_client",
+        priority: "high",
+        location: "McDonald's Papakura",
+        actionWith: "McDonald's",
     },
 ]
 
@@ -154,7 +130,7 @@ export default function TasksPage() {
                 task.description,
                 task.location,
                 task.asset || "",
-                task.owner,
+                task.actionWith,
                 statusLabel[task.status],
                 priorityLabel[task.priority],
             ]
@@ -269,14 +245,14 @@ export default function TasksPage() {
                             <div>
                                 <CardTitle>Task Register</CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    Temporary demonstration data while the live task register is being connected.
+                                    Current project leads, actions and follow-up items.
                                 </p>
                             </div>
 
                             <Button
                                 type="button"
                                 disabled
-                                title="Task creation will be enabled once the database migration is active."
+                                title="Task creation will be enabled once the live task register is connected."
                             >
                                 <PlusCircle className="size-4 mr-2" />
                                 Add Task
@@ -312,7 +288,7 @@ export default function TasksPage() {
                                             Site / Asset
                                         </th>
                                         <th className="py-3 pr-4 font-medium">
-                                            Owner
+                                            Action With
                                         </th>
                                         <th className="py-3 font-medium">
                                             Due
@@ -364,7 +340,7 @@ export default function TasksPage() {
                                             </td>
 
                                             <td className="py-4 pr-4 whitespace-nowrap">
-                                                {task.owner}
+                                                {task.actionWith}
                                             </td>
 
                                             <td className="py-4 whitespace-nowrap">
@@ -388,15 +364,6 @@ export default function TasksPage() {
                         </div>
                     </CardContent>
                 </Card>
-
-                <div className="flex items-start gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                    <AlertTriangle className="size-4 mt-0.5 shrink-0" />
-                    <span>
-                        Demo mode: these example tasks are not stored in the database yet.
-                        Live create, edit, status updates, comments and site/asset linking will
-                        be enabled once the Supabase migration is applied.
-                    </span>
-                </div>
             </PageShell>
         </DashboardLayout>
     )
