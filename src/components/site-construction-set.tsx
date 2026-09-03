@@ -276,7 +276,7 @@ export function SiteConstructionSet({
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <h3 className="text-lg font-semibold">
-                        Construction Set
+                        Construction Drawings
                     </h3>
 
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -305,7 +305,7 @@ export function SiteConstructionSet({
                     </p>
 
                     <p className="mx-auto mt-1 max-w-lg text-xs text-muted-foreground">
-                        The Construction Set interface is ready. Drawing uploads
+                        The Construction Drawings interface is ready. Drawing uploads
                         will become available once the Supabase construction
                         drawing migrations are applied.
                     </p>
@@ -327,7 +327,7 @@ export function SiteConstructionSet({
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Add the individual PDF sheets from the final construction set.
+                        Add the individual PDF sheets from the final construction drawings.
                     </p>
                 </div>
             )}
