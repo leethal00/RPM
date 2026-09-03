@@ -47,7 +47,7 @@ export default function DashboardLayout({
                                     className="h-9 w-9 rounded-full object-cover"
                                 />
                                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                                Rodier Property Maintenance
+                                Rodier Property Management
                                 </h1>
                                 <CustomerFilterDropdown />
                         </div>
