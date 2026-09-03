@@ -73,10 +73,15 @@ const navItems = [
         icon: ClipboardList,
     },
     {
-        title: "PM Scheduler",
-        url: "/maintenance/pm",
-        icon: Hammer,
+        title: "Projects & Tasks",
+        url: "/tasks",
+        icon: Briefcase,
     },
+    {
+    title: "PM Scheduler",
+    url: "/maintenance/pm",
+    icon: Hammer,
+},
     {
         title: "Maintenance",
         url: "/maintenance",
