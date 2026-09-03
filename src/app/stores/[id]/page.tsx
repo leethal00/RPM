@@ -11,6 +11,7 @@ import { JobTimeline } from "@/components/job-timeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectCard } from "@/components/project-card"
 import { SitePhotoGallery } from "@/components/site-photo-gallery"
+import { SiteConstructionSet } from "@/components/site-construction-set"
 
 // Forms only load when the user actually opens their dialog. Saves ~80KB
 // on the initial page bundle (Supabase client + brand picker + geocode UI).
@@ -146,6 +147,12 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                     <span className="size-1.5 rounded-full bg-primary" />
                                 )}
                             </TabsTrigger>
+                            <TabsTrigger
+                                value="construction"
+                                className="relative h-11 rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-2 text-sm font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:hidden"
+                            >
+                                Construction Set
+                            </TabsTrigger>
                         </TabsList>
 
                         <div className="flex items-center gap-2 pb-2">
@@ -226,6 +233,9 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                                 </div>
                             )}
                         </div>
+                    </TabsContent>
+                    <TabsContent value="construction" className="pt-6">
+                    <SiteConstructionSet storeId={id} />
                     </TabsContent>
                 </Tabs>
 
