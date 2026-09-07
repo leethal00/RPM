@@ -4,7 +4,7 @@ const TOKEN_URL = "https://identity.xero.com/connect/token"
 const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
 const CONNECTIONS_URL = "https://api.xero.com/connections"
 export const XERO_API = "https://api.xero.com/api.xro/2.0"
-export const XERO_SCOPES = "openid profile email accounting.transactions accounting.contacts offline_access"
+export const XERO_SCOPES = "openid profile email accounting.invoices accounting.contacts offline_access"
 
 type Tokens = { access_token: string; refresh_token: string; expires_in: number; scope: string }
 
