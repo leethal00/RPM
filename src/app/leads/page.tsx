@@ -59,18 +59,24 @@ export default function LeadsPage() {
     const supabase = useMemo(() => createClient(), [])
 
     const [open, setOpen] = useState(false)
-    const [customers, setCustomers] = useState<CustomerOption[]>([])
+    const [editingItem, setEditingItem] =
+        useState<WorkItem | null>(null)
+
+    const [customers, setCustomers] =
+        useState<CustomerOption[]>([])
     const [sites, setSites] = useState<SiteOption[]>([])
     const [users, setUsers] = useState<UserOption[]>([])
     const [items, setItems] = useState<WorkItem[]>([])
 
-    const [loadingOptions, setLoadingOptions] = useState(true)
+    const [loadingOptions, setLoadingOptions] =
+        useState(true)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState("")
 
     const [title, setTitle] = useState("")
     const [customerId, setCustomerId] = useState("")
-    const [newCustomerName, setNewCustomerName] = useState("")
+    const [newCustomerName, setNewCustomerName] =
+        useState("")
     const [siteId, setSiteId] = useState("")
     const [assignedTo, setAssignedTo] = useState("")
     const [dueDate, setDueDate] = useState("")
@@ -108,34 +114,43 @@ export default function LeadsPage() {
                 .select(
                     "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
                 )
-                .order("created_at", { ascending: false }),
+                .order("created_at", {
+                    ascending: false,
+                }),
         ])
 
         if (!customersResult.error) {
             setCustomers(
-                (customersResult.data ?? []) as CustomerOption[]
+                (customersResult.data ??
+                    []) as CustomerOption[]
             )
         }
 
         if (!sitesResult.error) {
-            setSites((sitesResult.data ?? []) as SiteOption[])
+            setSites(
+                (sitesResult.data ?? []) as SiteOption[]
+            )
         }
 
         if (!usersResult.error) {
             const internalUsers = (
-                (usersResult.data ?? []) as UserOption[]
+                (usersResult.data ??
+                    []) as UserOption[]
             ).filter(
                 (user) =>
-                    !["client_hq", "client_store"].includes(
-                        user.role ?? ""
-                    )
+                    ![
+                        "client_hq",
+                        "client_store",
+                    ].includes(user.role ?? "")
             )
 
             setUsers(internalUsers)
         }
 
         if (!itemsResult.error) {
-            setItems((itemsResult.data ?? []) as WorkItem[])
+            setItems(
+                (itemsResult.data ?? []) as WorkItem[]
+            )
         }
 
         setLoadingOptions(false)
@@ -148,7 +163,8 @@ export default function LeadsPage() {
     const filteredSites =
         customerId && customerId !== "__new__"
             ? sites.filter(
-                  (site) => site.client_id === customerId
+                  (site) =>
+                      site.client_id === customerId
               )
             : []
 
@@ -162,6 +178,7 @@ export default function LeadsPage() {
     }
 
     function resetForm() {
+        setEditingItem(null)
         setTitle("")
         setCustomerId("")
         setNewCustomerName("")
@@ -174,27 +191,52 @@ export default function LeadsPage() {
         setError("")
     }
 
+    function handleEdit(item: WorkItem) {
+        setEditingItem(item)
+        setTitle(item.title)
+        setCustomerId(item.client_id ?? "")
+        setNewCustomerName("")
+        setSiteId(item.store_id ?? "")
+        setAssignedTo(item.assigned_to ?? "")
+        setDueDate(item.due_date ?? "")
+        setPriority(item.priority)
+        setStatus(item.status)
+        setNotes(item.description ?? "")
+        setError("")
+        setOpen(true)
+    }
+
     function customerName(id: string | null) {
         if (!id) return "No customer"
 
         return (
-            customers.find((customer) => customer.id === id)?.name ??
-            "Customer"
+            customers.find(
+                (customer) => customer.id === id
+            )?.name ?? "Customer"
         )
     }
 
     function siteName(id: string | null) {
         if (!id) return null
 
-        return sites.find((site) => site.id === id)?.name ?? "Site"
+        return (
+            sites.find((site) => site.id === id)
+                ?.name ?? "Site"
+        )
     }
 
     function assignedName(id: string | null) {
         if (!id) return "Unassigned"
 
-        const user = users.find((person) => person.id === id)
+        const user = users.find(
+            (person) => person.id === id
+        )
 
-        return user?.name || user?.email || "Assigned"
+        return (
+            user?.name ||
+            user?.email ||
+            "Assigned"
+        )
     }
 
     function statusLabel(value: string) {
@@ -214,7 +256,8 @@ export default function LeadsPage() {
         setError("")
 
         const cleanTitle = title.trim()
-        const cleanCustomerName = newCustomerName.trim()
+        const cleanCustomerName =
+            newCustomerName.trim()
 
         if (!cleanTitle) {
             setError("Please enter a title.")
@@ -225,7 +268,9 @@ export default function LeadsPage() {
             customerId === "__new__" &&
             !cleanCustomerName
         ) {
-            setError("Please enter the new customer name.")
+            setError(
+                "Please enter the new customer name."
+            )
             return
         }
 
@@ -233,29 +278,36 @@ export default function LeadsPage() {
 
         try {
             let finalCustomerId =
-                customerId && customerId !== "__new__"
+                customerId &&
+                customerId !== "__new__"
                     ? customerId
                     : null
 
             if (customerId === "__new__") {
-                const existingCustomer = customers.find(
-                    (customer) =>
-                        customer.name.trim().toLowerCase() ===
-                        cleanCustomerName.toLowerCase()
-                )
+                const existingCustomer =
+                    customers.find(
+                        (customer) =>
+                            customer.name
+                                .trim()
+                                .toLowerCase() ===
+                            cleanCustomerName.toLowerCase()
+                    )
 
                 if (existingCustomer) {
-                    finalCustomerId = existingCustomer.id
+                    finalCustomerId =
+                        existingCustomer.id
                 } else {
-                    const { data: newCustomer, error: customerError } =
-                        await supabase
-                            .from("clients")
-                            .insert({
-                                name: cleanCustomerName,
-                                active: true,
-                            })
-                            .select("id, name")
-                            .single()
+                    const {
+                        data: newCustomer,
+                        error: customerError,
+                    } = await supabase
+                        .from("clients")
+                        .insert({
+                            name: cleanCustomerName,
+                            active: true,
+                        })
+                        .select("id, name")
+                        .single()
 
                     if (customerError) {
                         throw new Error(
@@ -263,11 +315,17 @@ export default function LeadsPage() {
                         )
                     }
 
-                    finalCustomerId = newCustomer.id
+                    finalCustomerId =
+                        newCustomer.id
 
                     setCustomers((current) =>
-                        [...current, newCustomer].sort((a, b) =>
-                            a.name.localeCompare(b.name)
+                        [
+                            ...current,
+                            newCustomer,
+                        ].sort((a, b) =>
+                            a.name.localeCompare(
+                                b.name
+                            )
                         )
                     )
                 }
@@ -284,26 +342,51 @@ export default function LeadsPage() {
                 )
             }
 
-            const { data: newItem, error: itemError } =
-                await supabase
-                    .from("internal_work_items")
-                    .insert({
-                        title: cleanTitle,
-                        description: notes.trim() || null,
-                        client_id: finalCustomerId,
-                        store_id: siteId || null,
-                        assigned_to: assignedTo || null,
-                        created_by: user.id,
-                        priority,
-                        status,
-                        due_date: dueDate || null,
-                        source: "manual",
-                        original_note: notes.trim() || null,
-                    })
-                    .select(
-                        "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
-                    )
-                    .single()
+            const itemValues = {
+                title: cleanTitle,
+                description:
+                    notes.trim() || null,
+                client_id: finalCustomerId,
+                store_id: siteId || null,
+                assigned_to:
+                    assignedTo || null,
+                priority,
+                status,
+                due_date: dueDate || null,
+                source: "manual",
+                original_note:
+                    notes.trim() || null,
+                updated_at:
+                    new Date().toISOString(),
+            }
+
+            const query = editingItem
+                ? supabase
+                      .from(
+                          "internal_work_items"
+                      )
+                      .update(itemValues)
+                      .eq(
+                          "id",
+                          editingItem.id
+                      )
+                : supabase
+                      .from(
+                          "internal_work_items"
+                      )
+                      .insert({
+                          ...itemValues,
+                          created_by: user.id,
+                      })
+
+            const {
+                data: savedItem,
+                error: itemError,
+            } = await query
+                .select(
+                    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
+                )
+                .single()
 
             if (itemError) {
                 throw new Error(
@@ -311,10 +394,21 @@ export default function LeadsPage() {
                 )
             }
 
-            setItems((current) => [
-                newItem as WorkItem,
-                ...current,
-            ])
+            if (editingItem) {
+                setItems((current) =>
+                    current.map((item) =>
+                        item.id ===
+                        editingItem.id
+                            ? (savedItem as WorkItem)
+                            : item
+                    )
+                )
+            } else {
+                setItems((current) => [
+                    savedItem as WorkItem,
+                    ...current,
+                ])
+            }
 
             resetForm()
             setOpen(false)
@@ -343,8 +437,9 @@ export default function LeadsPage() {
                         </h1>
 
                         <p className="mt-2 text-muted-foreground">
-                            Capture incoming work, follow-ups and tasks
-                            before they become quotes or jobs.
+                            Capture incoming work,
+                            follow-ups and tasks before
+                            they become quotes or jobs.
                         </p>
                     </div>
 
@@ -353,7 +448,10 @@ export default function LeadsPage() {
                         onOpenChange={(value) => {
                             setOpen(value)
 
-                            if (!value && !saving) {
+                            if (
+                                !value &&
+                                !saving
+                            ) {
                                 resetForm()
                             }
                         }}
@@ -368,13 +466,15 @@ export default function LeadsPage() {
                         <DialogContent className="sm:max-w-[620px]">
                             <DialogHeader>
                                 <DialogTitle>
-                                    Add lead or to-do
+                                    {editingItem
+                                        ? "Edit lead or to-do"
+                                        : "Add lead or to-do"}
                                 </DialogTitle>
 
                                 <DialogDescription>
-                                    Capture incoming work quickly.
-                                    Existing RPM customers, sites and
-                                    staff are available below.
+                                    {editingItem
+                                        ? "Update the existing lead or to-do item."
+                                        : "Capture incoming work quickly. Existing RPM customers, sites and staff are available below."}
                                 </DialogDescription>
                             </DialogHeader>
 
@@ -388,7 +488,10 @@ export default function LeadsPage() {
                                         id="lead-title"
                                         value={title}
                                         onChange={(e) =>
-                                            setTitle(e.target.value)
+                                            setTitle(
+                                                e.target
+                                                    .value
+                                            )
                                         }
                                         placeholder="e.g. Price replacement pylon face"
                                     />
@@ -396,14 +499,20 @@ export default function LeadsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label>Customer</Label>
+                                        <Label>
+                                            Customer
+                                        </Label>
 
                                         <Select
-                                            value={customerId}
+                                            value={
+                                                customerId
+                                            }
                                             onValueChange={
                                                 handleCustomerChange
                                             }
-                                            disabled={loadingOptions}
+                                            disabled={
+                                                loadingOptions
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue
@@ -417,11 +526,15 @@ export default function LeadsPage() {
 
                                             <SelectContent>
                                                 <SelectItem value="__new__">
-                                                    + Add new customer
+                                                    + Add
+                                                    new
+                                                    customer
                                                 </SelectItem>
 
                                                 {customers.map(
-                                                    (customer) => (
+                                                    (
+                                                        customer
+                                                    ) => (
                                                         <SelectItem
                                                             key={
                                                                 customer.id
@@ -439,12 +552,19 @@ export default function LeadsPage() {
                                             </SelectContent>
                                         </Select>
 
-                                        {customerId === "__new__" && (
+                                        {customerId ===
+                                            "__new__" && (
                                             <Input
-                                                value={newCustomerName}
-                                                onChange={(e) =>
+                                                value={
+                                                    newCustomerName
+                                                }
+                                                onChange={(
+                                                    e
+                                                ) =>
                                                     setNewCustomerName(
-                                                        e.target.value
+                                                        e
+                                                            .target
+                                                            .value
                                                     )
                                                 }
                                                 placeholder="New customer name"
@@ -454,11 +574,17 @@ export default function LeadsPage() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label>Site</Label>
+                                        <Label>
+                                            Site
+                                        </Label>
 
                                         <Select
-                                            value={siteId}
-                                            onValueChange={setSiteId}
+                                            value={
+                                                siteId
+                                            }
+                                            onValueChange={
+                                                setSiteId
+                                            }
                                             disabled={
                                                 loadingOptions ||
                                                 !customerId ||
@@ -481,7 +607,9 @@ export default function LeadsPage() {
 
                                             <SelectContent>
                                                 {filteredSites.map(
-                                                    (site) => (
+                                                    (
+                                                        site
+                                                    ) => (
                                                         <SelectItem
                                                             key={
                                                                 site.id
@@ -490,7 +618,9 @@ export default function LeadsPage() {
                                                                 site.id
                                                             }
                                                         >
-                                                            {site.name}
+                                                            {
+                                                                site.name
+                                                            }
                                                         </SelectItem>
                                                     )
                                                 )}
@@ -506,11 +636,15 @@ export default function LeadsPage() {
                                         </Label>
 
                                         <Select
-                                            value={assignedTo}
+                                            value={
+                                                assignedTo
+                                            }
                                             onValueChange={
                                                 setAssignedTo
                                             }
-                                            disabled={loadingOptions}
+                                            disabled={
+                                                loadingOptions
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue
@@ -523,16 +657,24 @@ export default function LeadsPage() {
                                             </SelectTrigger>
 
                                             <SelectContent>
-                                                {users.map((user) => (
-                                                    <SelectItem
-                                                        key={user.id}
-                                                        value={user.id}
-                                                    >
-                                                        {user.name ||
-                                                            user.email ||
-                                                            "Unnamed user"}
-                                                    </SelectItem>
-                                                ))}
+                                                {users.map(
+                                                    (
+                                                        user
+                                                    ) => (
+                                                        <SelectItem
+                                                            key={
+                                                                user.id
+                                                            }
+                                                            value={
+                                                                user.id
+                                                            }
+                                                        >
+                                                            {user.name ||
+                                                                user.email ||
+                                                                "Unnamed user"}
+                                                        </SelectItem>
+                                                    )
+                                                )}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -545,10 +687,16 @@ export default function LeadsPage() {
                                         <Input
                                             id="lead-due"
                                             type="date"
-                                            value={dueDate}
-                                            onChange={(e) =>
+                                            value={
+                                                dueDate
+                                            }
+                                            onChange={(
+                                                e
+                                            ) =>
                                                 setDueDate(
-                                                    e.target.value
+                                                    e
+                                                        .target
+                                                        .value
                                                 )
                                             }
                                         />
@@ -557,11 +705,17 @@ export default function LeadsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label>Priority</Label>
+                                        <Label>
+                                            Priority
+                                        </Label>
 
                                         <Select
-                                            value={priority}
-                                            onValueChange={setPriority}
+                                            value={
+                                                priority
+                                            }
+                                            onValueChange={
+                                                setPriority
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue />
@@ -585,11 +739,17 @@ export default function LeadsPage() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label>Status</Label>
+                                        <Label>
+                                            Status
+                                        </Label>
 
                                         <Select
-                                            value={status}
-                                            onValueChange={setStatus}
+                                            value={
+                                                status
+                                            }
+                                            onValueChange={
+                                                setStatus
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue />
@@ -603,7 +763,8 @@ export default function LeadsPage() {
                                                     To Do
                                                 </SelectItem>
                                                 <SelectItem value="in_progress">
-                                                    In Progress
+                                                    In
+                                                    Progress
                                                 </SelectItem>
                                                 <SelectItem value="waiting">
                                                     Waiting
@@ -626,7 +787,10 @@ export default function LeadsPage() {
                                         rows={5}
                                         value={notes}
                                         onChange={(e) =>
-                                            setNotes(e.target.value)
+                                            setNotes(
+                                                e.target
+                                                    .value
+                                            )
                                         }
                                         placeholder="Add details, contact names, follow-up notes or the original voice note transcript..."
                                         className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
@@ -643,18 +807,30 @@ export default function LeadsPage() {
                             <DialogFooter>
                                 <Button
                                     variant="outline"
-                                    disabled={saving}
-                                    onClick={() => setOpen(false)}
+                                    disabled={
+                                        saving
+                                    }
+                                    onClick={() =>
+                                        setOpen(
+                                            false
+                                        )
+                                    }
                                 >
                                     Cancel
                                 </Button>
 
                                 <Button
-                                    onClick={handleSave}
-                                    disabled={saving}
+                                    onClick={
+                                        handleSave
+                                    }
+                                    disabled={
+                                        saving
+                                    }
                                 >
                                     {saving
                                         ? "Saving..."
+                                        : editingItem
+                                        ? "Save changes"
                                         : "Save item"}
                                 </Button>
                             </DialogFooter>
@@ -671,83 +847,125 @@ export default function LeadsPage() {
                         </h2>
 
                         <p className="mt-2 text-sm text-muted-foreground">
-                            Your incoming leads and to-do items will
+                            Your incoming leads
+                            and to-do items will
                             appear here.
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-lg border bg-card">
-                        <div className="grid grid-cols-[minmax(220px,2fr)_minmax(150px,1fr)_120px_120px_140px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                            <div>Lead / To Do</div>
-                            <div>Customer / Site</div>
-                            <div>Assigned To</div>
-                            <div>Priority</div>
-                            <div>Status / Due</div>
-                        </div>
-
-                        {items.map((item) => (
-                            <div
-                                key={item.id}
-                                className="grid grid-cols-[minmax(220px,2fr)_minmax(150px,1fr)_120px_120px_140px] gap-4 border-b px-4 py-4 text-sm last:border-b-0"
-                            >
+                    <div className="overflow-x-auto rounded-lg border bg-card">
+                        <div className="min-w-[1050px]">
+                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px_80px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
                                 <div>
-                                    <div className="font-medium">
-                                        {item.title}
-                                    </div>
-
-                                    {item.description && (
-                                        <div className="mt-1 line-clamp-2 text-muted-foreground">
-                                            {item.description}
-                                        </div>
-                                    )}
+                                    Lead / To Do
                                 </div>
-
                                 <div>
-                                    <div>
-                                        {customerName(
-                                            item.client_id
-                                        )}
-                                    </div>
-
-                                    {siteName(item.store_id) && (
-                                        <div className="text-muted-foreground">
-                                            {siteName(
-                                                item.store_id
-                                            )}
-                                        </div>
-                                    )}
+                                    Customer / Site
                                 </div>
-
                                 <div>
-                                    {assignedName(
-                                        item.assigned_to
-                                    )}
+                                    Assigned To
                                 </div>
-
-                                <div className="capitalize">
-                                    {item.priority}
-                                </div>
-
                                 <div>
-                                    <div>
-                                        {statusLabel(
-                                            item.status
-                                        )}
-                                    </div>
-
-                                    {item.due_date && (
-                                        <div className="mt-1 text-muted-foreground">
-                                            Due{" "}
-                                            {new Date(
-                                                `${item.due_date}T00:00:00`
-                                            ).toLocaleDateString(
-                                                "en-NZ"
-                                            )}
-                                        </div>
-                                    )}
+                                    Priority
+                                </div>
+                                <div>
+                                    Status / Due
+                                </div>
+                                <div>
+                                    Actions
                                 </div>
                             </div>
-                        ))}
+
+                            {items.map(
+                                (item) => (
+                                    <div
+                                        key={
+                                            item.id
+                                        }
+                                        className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px_80px] gap-4 border-b px-4 py-4 text-sm last:border-b-0"
+                                    >
+                                        <div>
+                                            <div className="font-medium">
+                                                {
+                                                    item.title
+                                                }
+                                            </div>
+
+                                            {item.description && (
+                                                <div className="mt-1 line-clamp-2 text-muted-foreground">
+                                                    {
+                                                        item.description
+                                                    }
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <div>
+                                                {customerName(
+                                                    item.client_id
+                                                )}
+                                            </div>
+
+                                            {siteName(
+                                                item.store_id
+                                            ) && (
+                                                <div className="text-muted-foreground">
+                                                    {siteName(
+                                                        item.store_id
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            {assignedName(
+                                                item.assigned_to
+                                            )}
+                                        </div>
+
+                                        <div className="capitalize">
+                                            {
+                                                item.priority
+                                            }
+                                        </div>
+
+                                        <div>
+                                            <div>
+                                                {statusLabel(
+                                                    item.status
+                                                )}
+                                            </div>
+
+                                            {item.due_date && (
+                                                <div className="mt-1 text-muted-foreground">
+                                                    Due{" "}
+                                                    {new Date(
+                                                        `${item.due_date}T00:00:00`
+                                                    ).toLocaleDateString(
+                                                        "en-NZ"
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    handleEdit(
+                                                        item
+                                                    )
+                                                }
+                                            >
+                                                Edit
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
