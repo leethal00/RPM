@@ -854,8 +854,8 @@ export default function LeadsPage() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border bg-card">
-                        <div className="min-w-[1050px]">
-                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px_80px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
+                        <div className="min-w-[970px]">
+                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
                                 <div>
                                     Lead / To Do
                                 </div>
@@ -871,9 +871,6 @@ export default function LeadsPage() {
                                 <div>
                                     Status / Due
                                 </div>
-                                <div>
-                                    Actions
-                                </div>
                             </div>
 
                             {items.map(
@@ -882,7 +879,27 @@ export default function LeadsPage() {
                                         key={
                                             item.id
                                         }
-                                        className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px_80px] gap-4 border-b px-4 py-4 text-sm last:border-b-0"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() =>
+                                            handleEdit(
+                                                item
+                                            )
+                                        }
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.key ===
+                                                    "Enter" ||
+                                                event.key ===
+                                                    " "
+                                            ) {
+                                                event.preventDefault()
+                                                handleEdit(
+                                                    item
+                                                )
+                                            }
+                                        }}
+                                        className="grid cursor-pointer grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b px-4 py-4 text-sm transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0"
                                     >
                                         <div>
                                             <div className="font-medium">
@@ -947,20 +964,6 @@ export default function LeadsPage() {
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
-
-                                        <div>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleEdit(
-                                                        item
-                                                    )
-                                                }
-                                            >
-                                                Edit
-                                            </Button>
                                         </div>
                                     </div>
                                 )
