@@ -320,7 +320,7 @@ export function AppSidebar() {
 
                         <SidebarGroup>
                             <SidebarGroupLabel>
-                                Quoting &amp; Costing
+                                Job & Project Management
                             </SidebarGroupLabel>
 
                             <SidebarGroupContent>
