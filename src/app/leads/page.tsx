@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ClipboardList, Plus } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
 import {
     Dialog,
     DialogContent,
@@ -23,8 +24,105 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 
+type CustomerOption = {
+    id: string
+    name: string
+}
+
+type SiteOption = {
+    id: string
+    name: string
+    client_id: string | null
+}
+
+type UserOption = {
+    id: string
+    name: string | null
+    email: string | null
+    role: string | null
+}
+
 export default function LeadsPage() {
+    const supabase = useMemo(() => createClient(), [])
     const [open, setOpen] = useState(false)
+
+    const [customers, setCustomers] = useState<CustomerOption[]>([])
+    const [sites, setSites] = useState<SiteOption[]>([])
+    const [users, setUsers] = useState<UserOption[]>([])
+    const [loadingOptions, setLoadingOptions] = useState(true)
+
+    const [customerId, setCustomerId] = useState("")
+    const [siteId, setSiteId] = useState("")
+    const [assignedTo, setAssignedTo] = useState("")
+    const [newCustomerName, setNewCustomerName] = useState("")
+
+    useEffect(() => {
+        async function loadOptions() {
+            setLoadingOptions(true)
+
+            const [customersResult, sitesResult, usersResult] =
+                await Promise.all([
+                    supabase
+                        .from("clients")
+                        .select("id, name")
+                        .eq("active", true)
+                        .order("name"),
+
+                    supabase
+                        .from("stores")
+                        .select("id, name, client_id")
+                        .order("name"),
+
+                    supabase
+                        .from("users")
+                        .select("id, name, email, role")
+                        .order("name"),
+                ])
+
+            if (!customersResult.error) {
+                setCustomers(
+                    (customersResult.data ?? []) as CustomerOption[]
+                )
+            }
+
+            if (!sitesResult.error) {
+                setSites((sitesResult.data ?? []) as SiteOption[])
+            }
+
+            if (!usersResult.error) {
+                const internalUsers = (
+                    (usersResult.data ?? []) as UserOption[]
+                ).filter(
+                    (user) =>
+                        !["client_hq", "client_store"].includes(
+                            user.role ?? ""
+                        )
+                )
+
+                setUsers(internalUsers)
+            }
+
+            setLoadingOptions(false)
+        }
+
+        loadOptions()
+    }, [supabase])
+
+    const filteredSites =
+        customerId && customerId !== "__new__"
+            ? sites.filter(
+                  (site) => site.client_id === customerId
+              )
+            : []
+
+    function handleCustomerChange(value: string) {
+        setCustomerId(value)
+        setSiteId("")
+
+        if (value !== "__new__") {
+            setNewCustomerName("")
+        }
+    }
 
     return (
         <DashboardLayout>
@@ -40,8 +138,8 @@ export default function LeadsPage() {
                         </h1>
 
                         <p className="mt-2 text-muted-foreground">
-                            Capture incoming work, follow-ups and tasks before
-                            they become quotes or jobs.
+                            Capture incoming work, follow-ups and tasks
+                            before they become quotes or jobs.
                         </p>
                     </div>
 
@@ -55,10 +153,14 @@ export default function LeadsPage() {
 
                         <DialogContent className="sm:max-w-[620px]">
                             <DialogHeader>
-                                <DialogTitle>Add lead or to-do</DialogTitle>
+                                <DialogTitle>
+                                    Add lead or to-do
+                                </DialogTitle>
+
                                 <DialogDescription>
-                                    Capture the work now. We will connect this
-                                    form to RPM once the layout is confirmed.
+                                    Capture incoming work quickly.
+                                    Existing RPM customers, sites and
+                                    staff are available below.
                                 </DialogDescription>
                             </DialogHeader>
 
@@ -67,6 +169,7 @@ export default function LeadsPage() {
                                     <Label htmlFor="lead-title">
                                         Title
                                     </Label>
+
                                     <Input
                                         id="lead-title"
                                         placeholder="e.g. Price replacement pylon face"
@@ -75,41 +178,152 @@ export default function LeadsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label htmlFor="lead-customer">
-                                            Customer
-                                        </Label>
-                                        <Input
-                                            id="lead-customer"
-                                            placeholder="Select customer later"
-                                        />
+                                        <Label>Customer</Label>
+
+                                        <Select
+                                            value={customerId}
+                                            onValueChange={
+                                                handleCustomerChange
+                                            }
+                                            disabled={loadingOptions}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue
+                                                    placeholder={
+                                                        loadingOptions
+                                                            ? "Loading customers..."
+                                                            : "Select customer"
+                                                    }
+                                                />
+                                            </SelectTrigger>
+
+                                            <SelectContent>
+                                                <SelectItem value="__new__">
+                                                    + Add new customer
+                                                </SelectItem>
+
+                                                {customers.map(
+                                                    (customer) => (
+                                                        <SelectItem
+                                                            key={
+                                                                customer.id
+                                                            }
+                                                            value={
+                                                                customer.id
+                                                            }
+                                                        >
+                                                            {
+                                                                customer.name
+                                                            }
+                                                        </SelectItem>
+                                                    )
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+
+                                        {customerId === "__new__" && (
+                                            <Input
+                                                value={newCustomerName}
+                                                onChange={(e) =>
+                                                    setNewCustomerName(
+                                                        e.target.value
+                                                    )
+                                                }
+                                                placeholder="New customer name"
+                                                autoFocus
+                                            />
+                                        )}
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="lead-site">
-                                            Site
-                                        </Label>
-                                        <Input
-                                            id="lead-site"
-                                            placeholder="Optional site"
-                                        />
+                                        <Label>Site</Label>
+
+                                        <Select
+                                            value={siteId}
+                                            onValueChange={setSiteId}
+                                            disabled={
+                                                loadingOptions ||
+                                                !customerId ||
+                                                customerId ===
+                                                    "__new__"
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue
+                                                    placeholder={
+                                                        customerId ===
+                                                        "__new__"
+                                                            ? "Add site later"
+                                                            : customerId
+                                                            ? "Optional site"
+                                                            : "Select customer first"
+                                                    }
+                                                />
+                                            </SelectTrigger>
+
+                                            <SelectContent>
+                                                {filteredSites.map(
+                                                    (site) => (
+                                                        <SelectItem
+                                                            key={
+                                                                site.id
+                                                            }
+                                                            value={
+                                                                site.id
+                                                            }
+                                                        >
+                                                            {site.name}
+                                                        </SelectItem>
+                                                    )
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label htmlFor="lead-assigned">
+                                        <Label>
                                             Assigned to
                                         </Label>
-                                        <Input
-                                            id="lead-assigned"
-                                            placeholder="Select person later"
-                                        />
+
+                                        <Select
+                                            value={assignedTo}
+                                            onValueChange={
+                                                setAssignedTo
+                                            }
+                                            disabled={loadingOptions}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue
+                                                    placeholder={
+                                                        loadingOptions
+                                                            ? "Loading staff..."
+                                                            : "Optional assignee"
+                                                    }
+                                                />
+                                            </SelectTrigger>
+
+                                            <SelectContent>
+                                                {users.map((user) => (
+                                                    <SelectItem
+                                                        key={user.id}
+                                                        value={user.id}
+                                                    >
+                                                        {user.name ||
+                                                            user.email ||
+                                                            "Unnamed user"}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="lead-due">
                                             Due date
                                         </Label>
+
                                         <Input
                                             id="lead-due"
                                             type="date"
@@ -120,10 +334,12 @@ export default function LeadsPage() {
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
                                         <Label>Priority</Label>
+
                                         <Select defaultValue="normal">
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
+
                                             <SelectContent>
                                                 <SelectItem value="low">
                                                     Low
@@ -143,10 +359,12 @@ export default function LeadsPage() {
 
                                     <div className="grid gap-2">
                                         <Label>Status</Label>
+
                                         <Select defaultValue="new">
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
+
                                             <SelectContent>
                                                 <SelectItem value="new">
                                                     New
@@ -172,6 +390,7 @@ export default function LeadsPage() {
                                     <Label htmlFor="lead-notes">
                                         Notes
                                     </Label>
+
                                     <textarea
                                         id="lead-notes"
                                         rows={5}
@@ -188,6 +407,7 @@ export default function LeadsPage() {
                                 >
                                     Cancel
                                 </Button>
+
                                 <Button disabled>
                                     Save item
                                 </Button>
