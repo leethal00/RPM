@@ -114,6 +114,11 @@ const projectItems = [
 ]
 
 const quotingItems = [
+     {
+        title: "Leads & To Do",
+        url: "/leads",
+        icon: ClipboardList,
+    },
     {
         title: "Jobs & Quotes",
         url: "/quoting",
