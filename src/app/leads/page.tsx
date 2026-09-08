@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ClipboardList, Plus } from "lucide-react"
+import { ClipboardList, Plus, X } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,28 +55,27 @@ type WorkItem = {
     created_at: string
 }
 
+type SortMode = "newest" | "oldest" | "due" | "title"
+
 export default function LeadsPage() {
     const supabase = useMemo(() => createClient(), [])
 
     const [open, setOpen] = useState(false)
-    const [editingItem, setEditingItem] =
-        useState<WorkItem | null>(null)
+    const [editingItem, setEditingItem] = useState<WorkItem | null>(null)
 
-    const [customers, setCustomers] =
-        useState<CustomerOption[]>([])
+    const [customers, setCustomers] = useState<CustomerOption[]>([])
     const [sites, setSites] = useState<SiteOption[]>([])
     const [users, setUsers] = useState<UserOption[]>([])
     const [items, setItems] = useState<WorkItem[]>([])
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
-    const [loadingOptions, setLoadingOptions] =
-        useState(true)
+    const [loadingOptions, setLoadingOptions] = useState(true)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState("")
 
     const [title, setTitle] = useState("")
     const [customerId, setCustomerId] = useState("")
-    const [newCustomerName, setNewCustomerName] =
-        useState("")
+    const [newCustomerName, setNewCustomerName] = useState("")
     const [siteId, setSiteId] = useState("")
     const [assignedTo, setAssignedTo] = useState("")
     const [dueDate, setDueDate] = useState("")
@@ -84,73 +83,61 @@ export default function LeadsPage() {
     const [status, setStatus] = useState("new")
     const [notes, setNotes] = useState("")
 
+    const [customerFilter, setCustomerFilter] = useState("all")
+    const [assigneeFilter, setAssigneeFilter] = useState("all")
+    const [priorityFilter, setPriorityFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState("all")
+    const [sortMode, setSortMode] = useState<SortMode>("newest")
+
     async function loadData() {
         setLoadingOptions(true)
 
-        const [
-            customersResult,
-            sitesResult,
-            usersResult,
-            itemsResult,
-        ] = await Promise.all([
-            supabase
-                .from("clients")
-                .select("id, name")
-                .eq("active", true)
-                .order("name"),
-
-            supabase
-                .from("stores")
-                .select("id, name, client_id")
-                .order("name"),
-
-            supabase
-                .from("users")
-                .select("id, name, email, role")
-                .order("name"),
-
-            supabase
-                .from("internal_work_items")
-                .select(
-                    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
-                )
-                .order("created_at", {
-                    ascending: false,
-                }),
-        ])
+        const [customersResult, sitesResult, usersResult, itemsResult, authResult] =
+            await Promise.all([
+                supabase
+                    .from("clients")
+                    .select("id, name")
+                    .eq("active", true)
+                    .order("name"),
+                supabase
+                    .from("stores")
+                    .select("id, name, client_id")
+                    .order("name"),
+                supabase
+                    .from("users")
+                    .select("id, name, email, role")
+                    .order("name"),
+                supabase
+                    .from("internal_work_items")
+                    .select(
+                        "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
+                    )
+                    .order("created_at", { ascending: false }),
+                supabase.auth.getUser(),
+            ])
 
         if (!customersResult.error) {
-            setCustomers(
-                (customersResult.data ??
-                    []) as CustomerOption[]
-            )
+            setCustomers((customersResult.data ?? []) as CustomerOption[])
         }
 
         if (!sitesResult.error) {
-            setSites(
-                (sitesResult.data ?? []) as SiteOption[]
-            )
+            setSites((sitesResult.data ?? []) as SiteOption[])
         }
 
         if (!usersResult.error) {
-            const internalUsers = (
-                (usersResult.data ??
-                    []) as UserOption[]
-            ).filter(
+            const internalUsers = ((usersResult.data ?? []) as UserOption[]).filter(
                 (user) =>
-                    ![
-                        "client_hq",
-                        "client_store",
-                    ].includes(user.role ?? "")
+                    !["client_hq", "client_store"].includes(user.role ?? "")
             )
-
             setUsers(internalUsers)
         }
 
         if (!itemsResult.error) {
-            setItems(
-                (itemsResult.data ?? []) as WorkItem[]
-            )
+            setItems((itemsResult.data ?? []) as WorkItem[])
+        }
+
+        if (!authResult.error && authResult.data.user) {
+            setCurrentUserId(authResult.data.user.id)
         }
 
         setLoadingOptions(false)
@@ -162,19 +149,88 @@ export default function LeadsPage() {
 
     const filteredSites =
         customerId && customerId !== "__new__"
-            ? sites.filter(
-                  (site) =>
-                      site.client_id === customerId
-              )
+            ? sites.filter((site) => site.client_id === customerId)
             : []
+
+    const visibleItems = useMemo(() => {
+        const filtered = items.filter((item) => {
+            if (
+                customerFilter !== "all" &&
+                (customerFilter === "__none__"
+                    ? item.client_id !== null
+                    : item.client_id !== customerFilter)
+            ) {
+                return false
+            }
+
+            if (assigneeFilter !== "all") {
+                if (assigneeFilter === "mine") {
+                    if (!currentUserId || item.assigned_to !== currentUserId) return false
+                } else if (assigneeFilter === "__unassigned__") {
+                    if (item.assigned_to !== null) return false
+                } else if (item.assigned_to !== assigneeFilter) {
+                    return false
+                }
+            }
+
+            if (priorityFilter !== "all" && item.priority !== priorityFilter) {
+                return false
+            }
+
+            if (statusFilter !== "all" && item.status !== statusFilter) {
+                return false
+            }
+
+            return true
+        })
+
+        return [...filtered].sort((a, b) => {
+            if (sortMode === "oldest") {
+                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            }
+
+            if (sortMode === "title") {
+                return a.title.localeCompare(b.title)
+            }
+
+            if (sortMode === "due") {
+                if (!a.due_date && !b.due_date) return 0
+                if (!a.due_date) return 1
+                if (!b.due_date) return -1
+                return a.due_date.localeCompare(b.due_date)
+            }
+
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+    }, [
+        items,
+        customerFilter,
+        assigneeFilter,
+        priorityFilter,
+        statusFilter,
+        sortMode,
+        currentUserId,
+    ])
+
+    const hasFilters =
+        customerFilter !== "all" ||
+        assigneeFilter !== "all" ||
+        priorityFilter !== "all" ||
+        statusFilter !== "all" ||
+        sortMode !== "newest"
+
+    function clearFilters() {
+        setCustomerFilter("all")
+        setAssigneeFilter("all")
+        setPriorityFilter("all")
+        setStatusFilter("all")
+        setSortMode("newest")
+    }
 
     function handleCustomerChange(value: string) {
         setCustomerId(value)
         setSiteId("")
-
-        if (value !== "__new__") {
-            setNewCustomerName("")
-        }
+        if (value !== "__new__") setNewCustomerName("")
     }
 
     function resetForm() {
@@ -208,35 +264,18 @@ export default function LeadsPage() {
 
     function customerName(id: string | null) {
         if (!id) return "No customer"
-
-        return (
-            customers.find(
-                (customer) => customer.id === id
-            )?.name ?? "Customer"
-        )
+        return customers.find((customer) => customer.id === id)?.name ?? "Customer"
     }
 
     function siteName(id: string | null) {
         if (!id) return null
-
-        return (
-            sites.find((site) => site.id === id)
-                ?.name ?? "Site"
-        )
+        return sites.find((site) => site.id === id)?.name ?? "Site"
     }
 
     function assignedName(id: string | null) {
         if (!id) return "Unassigned"
-
-        const user = users.find(
-            (person) => person.id === id
-        )
-
-        return (
-            user?.name ||
-            user?.email ||
-            "Assigned"
-        )
+        const user = users.find((person) => person.id === id)
+        return user?.name || user?.email || "Assigned"
     }
 
     function statusLabel(value: string) {
@@ -248,29 +287,21 @@ export default function LeadsPage() {
             done: "Done",
             converted: "Converted",
         }
-
         return labels[value] ?? value
     }
 
     async function handleSave() {
         setError("")
-
         const cleanTitle = title.trim()
-        const cleanCustomerName =
-            newCustomerName.trim()
+        const cleanCustomerName = newCustomerName.trim()
 
         if (!cleanTitle) {
             setError("Please enter a title.")
             return
         }
 
-        if (
-            customerId === "__new__" &&
-            !cleanCustomerName
-        ) {
-            setError(
-                "Please enter the new customer name."
-            )
+        if (customerId === "__new__" && !cleanCustomerName) {
+            setError("Please enter the new customer name.")
             return
         }
 
@@ -278,34 +309,21 @@ export default function LeadsPage() {
 
         try {
             let finalCustomerId =
-                customerId &&
-                customerId !== "__new__"
-                    ? customerId
-                    : null
+                customerId && customerId !== "__new__" ? customerId : null
 
             if (customerId === "__new__") {
-                const existingCustomer =
-                    customers.find(
-                        (customer) =>
-                            customer.name
-                                .trim()
-                                .toLowerCase() ===
-                            cleanCustomerName.toLowerCase()
-                    )
+                const existingCustomer = customers.find(
+                    (customer) =>
+                        customer.name.trim().toLowerCase() ===
+                        cleanCustomerName.toLowerCase()
+                )
 
                 if (existingCustomer) {
-                    finalCustomerId =
-                        existingCustomer.id
+                    finalCustomerId = existingCustomer.id
                 } else {
-                    const {
-                        data: newCustomer,
-                        error: customerError,
-                    } = await supabase
+                    const { data: newCustomer, error: customerError } = await supabase
                         .from("clients")
-                        .insert({
-                            name: cleanCustomerName,
-                            active: true,
-                        })
+                        .insert({ name: cleanCustomerName, active: true })
                         .select("id, name")
                         .single()
 
@@ -315,17 +333,10 @@ export default function LeadsPage() {
                         )
                     }
 
-                    finalCustomerId =
-                        newCustomer.id
-
+                    finalCustomerId = newCustomer.id
                     setCustomers((current) =>
-                        [
-                            ...current,
-                            newCustomer,
-                        ].sort((a, b) =>
-                            a.name.localeCompare(
-                                b.name
-                            )
+                        [...current, newCustomer].sort((a, b) =>
+                            a.name.localeCompare(b.name)
                         )
                     )
                 }
@@ -337,77 +348,50 @@ export default function LeadsPage() {
             } = await supabase.auth.getUser()
 
             if (authError || !user) {
-                throw new Error(
-                    "Could not identify the logged-in RPM user."
-                )
+                throw new Error("Could not identify the logged-in RPM user.")
             }
 
             const itemValues = {
                 title: cleanTitle,
-                description:
-                    notes.trim() || null,
+                description: notes.trim() || null,
                 client_id: finalCustomerId,
                 store_id: siteId || null,
-                assigned_to:
-                    assignedTo || null,
+                assigned_to: assignedTo || null,
                 priority,
                 status,
                 due_date: dueDate || null,
                 source: "manual",
-                original_note:
-                    notes.trim() || null,
-                updated_at:
-                    new Date().toISOString(),
+                original_note: notes.trim() || null,
+                updated_at: new Date().toISOString(),
             }
 
             const query = editingItem
                 ? supabase
-                      .from(
-                          "internal_work_items"
-                      )
+                      .from("internal_work_items")
                       .update(itemValues)
-                      .eq(
-                          "id",
-                          editingItem.id
-                      )
+                      .eq("id", editingItem.id)
                 : supabase
-                      .from(
-                          "internal_work_items"
-                      )
-                      .insert({
-                          ...itemValues,
-                          created_by: user.id,
-                      })
+                      .from("internal_work_items")
+                      .insert({ ...itemValues, created_by: user.id })
 
-            const {
-                data: savedItem,
-                error: itemError,
-            } = await query
+            const { data: savedItem, error: itemError } = await query
                 .select(
                     "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
                 )
                 .single()
 
             if (itemError) {
-                throw new Error(
-                    `Could not save lead: ${itemError.message}`
-                )
+                throw new Error(`Could not save lead: ${itemError.message}`)
             }
 
             if (editingItem) {
                 setItems((current) =>
                     current.map((item) =>
-                        item.id ===
-                        editingItem.id
-                            ? (savedItem as WorkItem)
-                            : item
+                        item.id === editingItem.id ? (savedItem as WorkItem) : item
                     )
                 )
             } else {
-                setItems((current) => [
-                    savedItem as WorkItem,
-                    ...current,
-                ])
+                setItems((current) => [savedItem as WorkItem, ...current])
             }
 
             resetForm()
@@ -431,15 +415,12 @@ export default function LeadsPage() {
                         <p className="text-sm text-muted-foreground">
                             Job & Project Management
                         </p>
-
                         <h1 className="text-3xl font-bold tracking-tight">
                             Leads & To Do
                         </h1>
-
                         <p className="mt-2 text-muted-foreground">
-                            Capture incoming work,
-                            follow-ups and tasks before
-                            they become quotes or jobs.
+                            Capture incoming work, follow-ups and tasks before they become
+                            quotes or jobs.
                         </p>
                     </div>
 
@@ -447,13 +428,7 @@ export default function LeadsPage() {
                         open={open}
                         onOpenChange={(value) => {
                             setOpen(value)
-
-                            if (
-                                !value &&
-                                !saving
-                            ) {
-                                resetForm()
-                            }
+                            if (!value && !saving) resetForm()
                         }}
                     >
                         <DialogTrigger asChild>
@@ -470,7 +445,6 @@ export default function LeadsPage() {
                                         ? "Edit lead or to-do"
                                         : "Add lead or to-do"}
                                 </DialogTitle>
-
                                 <DialogDescription>
                                     {editingItem
                                         ? "Update the existing lead or to-do item."
@@ -480,39 +454,22 @@ export default function LeadsPage() {
 
                             <div className="grid gap-4 py-2">
                                 <div className="grid gap-2">
-                                    <Label htmlFor="lead-title">
-                                        Title
-                                    </Label>
-
+                                    <Label htmlFor="lead-title">Title</Label>
                                     <Input
                                         id="lead-title"
                                         value={title}
-                                        onChange={(e) =>
-                                            setTitle(
-                                                e.target
-                                                    .value
-                                            )
-                                        }
+                                        onChange={(e) => setTitle(e.target.value)}
                                         placeholder="e.g. Price replacement pylon face"
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label>
-                                            Customer
-                                        </Label>
-
+                                        <Label>Customer</Label>
                                         <Select
-                                            value={
-                                                customerId
-                                            }
-                                            onValueChange={
-                                                handleCustomerChange
-                                            }
-                                            disabled={
-                                                loadingOptions
-                                            }
+                                            value={customerId}
+                                            onValueChange={handleCustomerChange}
+                                            disabled={loadingOptions}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue
@@ -523,49 +480,25 @@ export default function LeadsPage() {
                                                     }
                                                 />
                                             </SelectTrigger>
-
                                             <SelectContent>
                                                 <SelectItem value="__new__">
-                                                    + Add
-                                                    new
-                                                    customer
+                                                    + Add new customer
                                                 </SelectItem>
-
-                                                {customers.map(
-                                                    (
-                                                        customer
-                                                    ) => (
-                                                        <SelectItem
-                                                            key={
-                                                                customer.id
-                                                            }
-                                                            value={
-                                                                customer.id
-                                                            }
-                                                        >
-                                                            {
-                                                                customer.name
-                                                            }
-                                                        </SelectItem>
-                                                    )
-                                                )}
+                                                {customers.map((customer) => (
+                                                    <SelectItem
+                                                        key={customer.id}
+                                                        value={customer.id}
+                                                    >
+                                                        {customer.name}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
-
-                                        {customerId ===
-                                            "__new__" && (
+                                        {customerId === "__new__" && (
                                             <Input
-                                                value={
-                                                    newCustomerName
-                                                }
-                                                onChange={(
-                                                    e
-                                                ) =>
-                                                    setNewCustomerName(
-                                                        e
-                                                            .target
-                                                            .value
-                                                    )
+                                                value={newCustomerName}
+                                                onChange={(e) =>
+                                                    setNewCustomerName(e.target.value)
                                                 }
                                                 placeholder="New customer name"
                                                 autoFocus
@@ -574,29 +507,20 @@ export default function LeadsPage() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label>
-                                            Site
-                                        </Label>
-
+                                        <Label>Site</Label>
                                         <Select
-                                            value={
-                                                siteId
-                                            }
-                                            onValueChange={
-                                                setSiteId
-                                            }
+                                            value={siteId}
+                                            onValueChange={setSiteId}
                                             disabled={
                                                 loadingOptions ||
                                                 !customerId ||
-                                                customerId ===
-                                                    "__new__"
+                                                customerId === "__new__"
                                             }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue
                                                     placeholder={
-                                                        customerId ===
-                                                        "__new__"
+                                                        customerId === "__new__"
                                                             ? "Add site later"
                                                             : customerId
                                                             ? "Optional site"
@@ -604,26 +528,12 @@ export default function LeadsPage() {
                                                     }
                                                 />
                                             </SelectTrigger>
-
                                             <SelectContent>
-                                                {filteredSites.map(
-                                                    (
-                                                        site
-                                                    ) => (
-                                                        <SelectItem
-                                                            key={
-                                                                site.id
-                                                            }
-                                                            value={
-                                                                site.id
-                                                            }
-                                                        >
-                                                            {
-                                                                site.name
-                                                            }
-                                                        </SelectItem>
-                                                    )
-                                                )}
+                                                {filteredSites.map((site) => (
+                                                    <SelectItem key={site.id} value={site.id}>
+                                                        {site.name}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -631,20 +541,11 @@ export default function LeadsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label>
-                                            Assigned to
-                                        </Label>
-
+                                        <Label>Assigned to</Label>
                                         <Select
-                                            value={
-                                                assignedTo
-                                            }
-                                            onValueChange={
-                                                setAssignedTo
-                                            }
-                                            disabled={
-                                                loadingOptions
-                                            }
+                                            value={assignedTo}
+                                            onValueChange={setAssignedTo}
+                                            disabled={loadingOptions}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue
@@ -655,143 +556,69 @@ export default function LeadsPage() {
                                                     }
                                                 />
                                             </SelectTrigger>
-
                                             <SelectContent>
-                                                {users.map(
-                                                    (
-                                                        user
-                                                    ) => (
-                                                        <SelectItem
-                                                            key={
-                                                                user.id
-                                                            }
-                                                            value={
-                                                                user.id
-                                                            }
-                                                        >
-                                                            {user.name ||
-                                                                user.email ||
-                                                                "Unnamed user"}
-                                                        </SelectItem>
-                                                    )
-                                                )}
+                                                {users.map((user) => (
+                                                    <SelectItem key={user.id} value={user.id}>
+                                                        {user.name || user.email || "Unnamed user"}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="lead-due">
-                                            Due date
-                                        </Label>
-
+                                        <Label htmlFor="lead-due">Due date</Label>
                                         <Input
                                             id="lead-due"
                                             type="date"
-                                            value={
-                                                dueDate
-                                            }
-                                            onChange={(
-                                                e
-                                            ) =>
-                                                setDueDate(
-                                                    e
-                                                        .target
-                                                        .value
-                                                )
-                                            }
+                                            value={dueDate}
+                                            onChange={(e) => setDueDate(e.target.value)}
                                         />
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div className="grid gap-2">
-                                        <Label>
-                                            Priority
-                                        </Label>
-
-                                        <Select
-                                            value={
-                                                priority
-                                            }
-                                            onValueChange={
-                                                setPriority
-                                            }
-                                        >
+                                        <Label>Priority</Label>
+                                        <Select value={priority} onValueChange={setPriority}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
-
                                             <SelectContent>
-                                                <SelectItem value="low">
-                                                    Low
-                                                </SelectItem>
-                                                <SelectItem value="normal">
-                                                    Normal
-                                                </SelectItem>
-                                                <SelectItem value="high">
-                                                    High
-                                                </SelectItem>
-                                                <SelectItem value="urgent">
-                                                    Urgent
-                                                </SelectItem>
+                                                <SelectItem value="low">Low</SelectItem>
+                                                <SelectItem value="normal">Normal</SelectItem>
+                                                <SelectItem value="high">High</SelectItem>
+                                                <SelectItem value="urgent">Urgent</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label>
-                                            Status
-                                        </Label>
-
-                                        <Select
-                                            value={
-                                                status
-                                            }
-                                            onValueChange={
-                                                setStatus
-                                            }
-                                        >
+                                        <Label>Status</Label>
+                                        <Select value={status} onValueChange={setStatus}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
-
                                             <SelectContent>
-                                                <SelectItem value="new">
-                                                    New
-                                                </SelectItem>
-                                                <SelectItem value="todo">
-                                                    To Do
-                                                </SelectItem>
+                                                <SelectItem value="new">New</SelectItem>
+                                                <SelectItem value="todo">To Do</SelectItem>
                                                 <SelectItem value="in_progress">
-                                                    In
-                                                    Progress
+                                                    In Progress
                                                 </SelectItem>
-                                                <SelectItem value="waiting">
-                                                    Waiting
-                                                </SelectItem>
-                                                <SelectItem value="done">
-                                                    Done
-                                                </SelectItem>
+                                                <SelectItem value="waiting">Waiting</SelectItem>
+                                                <SelectItem value="done">Done</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Label htmlFor="lead-notes">
-                                        Notes
-                                    </Label>
-
+                                    <Label htmlFor="lead-notes">Notes</Label>
                                     <textarea
                                         id="lead-notes"
                                         rows={5}
                                         value={notes}
-                                        onChange={(e) =>
-                                            setNotes(
-                                                e.target
-                                                    .value
-                                            )
-                                        }
+                                        onChange={(e) => setNotes(e.target.value)}
                                         placeholder="Add details, contact names, follow-up notes or the original voice note transcript..."
                                         className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                                     />
@@ -807,26 +634,12 @@ export default function LeadsPage() {
                             <DialogFooter>
                                 <Button
                                     variant="outline"
-                                    disabled={
-                                        saving
-                                    }
-                                    onClick={() =>
-                                        setOpen(
-                                            false
-                                        )
-                                    }
+                                    disabled={saving}
+                                    onClick={() => setOpen(false)}
                                 >
                                     Cancel
                                 </Button>
-
-                                <Button
-                                    onClick={
-                                        handleSave
-                                    }
-                                    disabled={
-                                        saving
-                                    }
-                                >
+                                <Button onClick={handleSave} disabled={saving}>
                                     {saving
                                         ? "Saving..."
                                         : editingItem
@@ -841,132 +654,181 @@ export default function LeadsPage() {
                 {items.length === 0 ? (
                     <div className="rounded-lg border bg-card p-10 text-center">
                         <ClipboardList className="mx-auto mb-4 size-10 text-muted-foreground" />
-
-                        <h2 className="text-lg font-semibold">
-                            No leads or tasks yet
-                        </h2>
-
+                        <h2 className="text-lg font-semibold">No leads or tasks yet</h2>
                         <p className="mt-2 text-sm text-muted-foreground">
-                            Your incoming leads
-                            and to-do items will
-                            appear here.
+                            Your incoming leads and to-do items will appear here.
                         </p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border bg-card">
                         <div className="min-w-[970px]">
                             <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
-                                <div>
-                                    Lead / To Do
-                                </div>
-                                <div>
-                                    Customer / Site
-                                </div>
-                                <div>
-                                    Assigned To
-                                </div>
-                                <div>
-                                    Priority
-                                </div>
-                                <div>
-                                    Status / Due
+                                <div>Lead / To Do</div>
+                                <div>Customer / Site</div>
+                                <div>Assigned To</div>
+                                <div>Priority</div>
+                                <div>Status / Due</div>
+                            </div>
+
+                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b bg-muted/20 px-4 py-2">
+                                <Select
+                                    value={sortMode}
+                                    onValueChange={(value) =>
+                                        setSortMode(value as SortMode)
+                                    }
+                                >
+                                    <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="newest">Newest first</SelectItem>
+                                        <SelectItem value="oldest">Oldest first</SelectItem>
+                                        <SelectItem value="due">Due date</SelectItem>
+                                        <SelectItem value="title">Title A-Z</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={customerFilter}
+                                    onValueChange={setCustomerFilter}
+                                >
+                                    <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="All customers" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All customers</SelectItem>
+                                        <SelectItem value="__none__">No customer</SelectItem>
+                                        {customers.map((customer) => (
+                                            <SelectItem key={customer.id} value={customer.id}>
+                                                {customer.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={assigneeFilter}
+                                    onValueChange={setAssigneeFilter}
+                                >
+                                    <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="All staff" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All staff</SelectItem>
+                                        <SelectItem value="mine">My items</SelectItem>
+                                        <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                                        {users.map((user) => (
+                                            <SelectItem key={user.id} value={user.id}>
+                                                {user.name || user.email || "Unnamed user"}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Select
+                                    value={priorityFilter}
+                                    onValueChange={setPriorityFilter}
+                                >
+                                    <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="All" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        <SelectItem value="low">Low</SelectItem>
+                                        <SelectItem value="normal">Normal</SelectItem>
+                                        <SelectItem value="high">High</SelectItem>
+                                        <SelectItem value="urgent">Urgent</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                <div className="flex gap-2">
+                                    <Select
+                                        value={statusFilter}
+                                        onValueChange={setStatusFilter}
+                                    >
+                                        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
+                                            <SelectValue placeholder="All statuses" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All statuses</SelectItem>
+                                            <SelectItem value="new">New</SelectItem>
+                                            <SelectItem value="todo">To Do</SelectItem>
+                                            <SelectItem value="in_progress">
+                                                In Progress
+                                            </SelectItem>
+                                            <SelectItem value="waiting">Waiting</SelectItem>
+                                            <SelectItem value="done">Done</SelectItem>
+                                            <SelectItem value="converted">Converted</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {hasFilters && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8 shrink-0"
+                                            onClick={clearFilters}
+                                            title="Clear filters"
+                                        >
+                                            <X className="size-4" />
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
 
-                            {items.map(
-                                (item) => (
+                            {visibleItems.length === 0 ? (
+                                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                                    No items match the selected filters.
+                                </div>
+                            ) : (
+                                visibleItems.map((item) => (
                                     <div
-                                        key={
-                                            item.id
-                                        }
+                                        key={item.id}
                                         role="button"
                                         tabIndex={0}
-                                        onClick={() =>
-                                            handleEdit(
-                                                item
-                                            )
-                                        }
+                                        onClick={() => handleEdit(item)}
                                         onKeyDown={(event) => {
-                                            if (
-                                                event.key ===
-                                                    "Enter" ||
-                                                event.key ===
-                                                    " "
-                                            ) {
+                                            if (event.key === "Enter" || event.key === " ") {
                                                 event.preventDefault()
-                                                handleEdit(
-                                                    item
-                                                )
+                                                handleEdit(item)
                                             }
                                         }}
                                         className="grid cursor-pointer grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b px-4 py-4 text-sm transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0"
                                     >
                                         <div>
-                                            <div className="font-medium">
-                                                {
-                                                    item.title
-                                                }
-                                            </div>
-
+                                            <div className="font-medium">{item.title}</div>
                                             {item.description && (
                                                 <div className="mt-1 line-clamp-2 text-muted-foreground">
-                                                    {
-                                                        item.description
-                                                    }
+                                                    {item.description}
                                                 </div>
                                             )}
                                         </div>
 
                                         <div>
-                                            <div>
-                                                {customerName(
-                                                    item.client_id
-                                                )}
-                                            </div>
-
-                                            {siteName(
-                                                item.store_id
-                                            ) && (
+                                            <div>{customerName(item.client_id)}</div>
+                                            {siteName(item.store_id) && (
                                                 <div className="text-muted-foreground">
-                                                    {siteName(
-                                                        item.store_id
-                                                    )}
+                                                    {siteName(item.store_id)}
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div>
-                                            {assignedName(
-                                                item.assigned_to
-                                            )}
-                                        </div>
-
-                                        <div className="capitalize">
-                                            {
-                                                item.priority
-                                            }
-                                        </div>
+                                        <div>{assignedName(item.assigned_to)}</div>
+                                        <div className="capitalize">{item.priority}</div>
 
                                         <div>
-                                            <div>
-                                                {statusLabel(
-                                                    item.status
-                                                )}
-                                            </div>
-
+                                            <div>{statusLabel(item.status)}</div>
                                             {item.due_date && (
                                                 <div className="mt-1 text-muted-foreground">
                                                     Due{" "}
                                                     {new Date(
                                                         `${item.due_date}T00:00:00`
-                                                    ).toLocaleDateString(
-                                                        "en-NZ"
-                                                    )}
+                                                    ).toLocaleDateString("en-NZ")}
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                )
+                                ))
                             )}
                         </div>
                     </div>
