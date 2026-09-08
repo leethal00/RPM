@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ClipboardList, Plus, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ClipboardList, Loader2, Plus, X } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ type SortMode = "newest" | "oldest" | "due" | "title"
 
 export default function LeadsPage() {
     const supabase = useMemo(() => createClient(), [])
+    const router = useRouter()
 
     const [open, setOpen] = useState(false)
     const [editingItem, setEditingItem] = useState<WorkItem | null>(null)
@@ -71,6 +73,7 @@ export default function LeadsPage() {
 
     const [loadingOptions, setLoadingOptions] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [converting, setConverting] = useState(false)
     const [error, setError] = useState("")
 
     const [title, setTitle] = useState("")
@@ -407,18 +410,131 @@ export default function LeadsPage() {
         }
     }
 
+    async function handleCreateQuote() {
+        if (!editingItem) return
+
+        setError("")
+        const cleanTitle = title.trim()
+
+        if (!cleanTitle) {
+            setError("Please enter a title before creating the quote.")
+            return
+        }
+
+        if (customerId === "__new__") {
+            setError("Save the new customer first, then create the quote.")
+            return
+        }
+
+        setConverting(true)
+
+        try {
+            const {
+                data: { user },
+                error: authError,
+            } = await supabase.auth.getUser()
+
+            if (authError || !user) {
+                throw new Error("Could not identify the logged-in RPM user.")
+            }
+
+            const { data: quote, error: quoteError } = await supabase
+                .from("costing_jobs")
+                .insert({
+                    title: cleanTitle,
+                    reference: null,
+                    qty: 1,
+                    client_id: customerId || null,
+                    store_id: siteId || null,
+                    details: notes.trim() || null,
+                    created_by: user.id,
+                    quoted_by: user.id,
+                })
+                .select("id")
+                .single()
+
+            if (quoteError || !quote) {
+                throw new Error(
+                    `Could not create quote: ${quoteError?.message ?? "Unknown error"}`
+                )
+            }
+
+            const { error: costingItemError } = await supabase
+                .from("costing_items")
+                .insert({
+                    job_id: quote.id,
+                    name: cleanTitle,
+                    mode: "build",
+                    qty: 1,
+                    sort: 0,
+                })
+
+            if (costingItemError) {
+                throw new Error(
+                    `Quote was created, but its first costing item could not be added: ${costingItemError.message}`
+                )
+            }
+
+            const convertedValues = {
+                title: cleanTitle,
+                description: notes.trim() || null,
+                client_id: customerId || null,
+                store_id: siteId || null,
+                assigned_to: assignedTo || null,
+                priority,
+                status: "converted",
+                due_date: dueDate || null,
+                source: "manual",
+                original_note: notes.trim() || null,
+                updated_at: new Date().toISOString(),
+            }
+
+            const { data: convertedItem, error: convertError } = await supabase
+                .from("internal_work_items")
+                .update(convertedValues)
+                .eq("id", editingItem.id)
+                .select(
+                    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
+                )
+                .single()
+
+            if (convertError) {
+                throw new Error(
+                    `Quote created, but the lead could not be marked converted: ${convertError.message}`
+                )
+            }
+
+            setItems((current) =>
+                current.map((item) =>
+                    item.id === editingItem.id ? (convertedItem as WorkItem) : item
+                )
+            )
+
+            setOpen(false)
+            router.push(`/quoting/${quote.id}`)
+        } catch (convertError) {
+            setError(
+                convertError instanceof Error
+                    ? convertError.message
+                    : "Something went wrong while creating the quote."
+            )
+        } finally {
+            setConverting(false)
+        }
+    }
+
     return (
         <DashboardLayout>
-            <div className="flex flex-col gap-6 p-6">
+            <div className="flex flex-col gap-4 p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             Job & Project Management
                         </p>
-                        <h1 className="text-3xl font-bold tracking-tight">
+                        <h1 className="text-2xl font-bold tracking-tight">
                             Leads & To Do
                         </h1>
-                        <p className="mt-2 text-muted-foreground">
+                        <p className="mt-1 text-sm text-muted-foreground">
                             Capture incoming work, follow-ups and tasks before they become
                             quotes or jobs.
                         </p>
@@ -428,12 +544,12 @@ export default function LeadsPage() {
                         open={open}
                         onOpenChange={(value) => {
                             setOpen(value)
-                            if (!value && !saving) resetForm()
+                            if (!value && !saving && !converting) resetForm()
                         }}
                     >
                         <DialogTrigger asChild>
-                            <Button>
-                                <Plus className="mr-2 size-4" />
+                            <Button size="sm">
+                                <Plus className="mr-1.5 size-3.5" />
                                 Add item
                             </Button>
                         </DialogTrigger>
@@ -447,7 +563,7 @@ export default function LeadsPage() {
                                 </DialogTitle>
                                 <DialogDescription>
                                     {editingItem
-                                        ? "Update the existing lead or to-do item."
+                                        ? "Update the existing lead or to-do item, or turn it into a quote."
                                         : "Capture incoming work quickly. Existing RPM customers, sites and staff are available below."}
                                 </DialogDescription>
                             </DialogHeader>
@@ -485,10 +601,7 @@ export default function LeadsPage() {
                                                     + Add new customer
                                                 </SelectItem>
                                                 {customers.map((customer) => (
-                                                    <SelectItem
-                                                        key={customer.id}
-                                                        value={customer.id}
-                                                    >
+                                                    <SelectItem key={customer.id} value={customer.id}>
                                                         {customer.name}
                                                     </SelectItem>
                                                 ))}
@@ -497,9 +610,7 @@ export default function LeadsPage() {
                                         {customerId === "__new__" && (
                                             <Input
                                                 value={newCustomerName}
-                                                onChange={(e) =>
-                                                    setNewCustomerName(e.target.value)
-                                                }
+                                                onChange={(e) => setNewCustomerName(e.target.value)}
                                                 placeholder="New customer name"
                                                 autoFocus
                                             />
@@ -602,11 +713,10 @@ export default function LeadsPage() {
                                             <SelectContent>
                                                 <SelectItem value="new">New</SelectItem>
                                                 <SelectItem value="todo">To Do</SelectItem>
-                                                <SelectItem value="in_progress">
-                                                    In Progress
-                                                </SelectItem>
+                                                <SelectItem value="in_progress">In Progress</SelectItem>
                                                 <SelectItem value="waiting">Waiting</SelectItem>
                                                 <SelectItem value="done">Done</SelectItem>
+                                                <SelectItem value="converted">Converted</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -631,38 +741,62 @@ export default function LeadsPage() {
                                 )}
                             </div>
 
-                            <DialogFooter>
-                                <Button
-                                    variant="outline"
-                                    disabled={saving}
-                                    onClick={() => setOpen(false)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button onClick={handleSave} disabled={saving}>
-                                    {saving
-                                        ? "Saving..."
-                                        : editingItem
-                                        ? "Save changes"
-                                        : "Save item"}
-                                </Button>
+                            <DialogFooter className="sm:justify-between">
+                                <div>
+                                    {editingItem && editingItem.status !== "converted" && (
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={handleCreateQuote}
+                                            disabled={saving || converting}
+                                        >
+                                            {converting ? (
+                                                <>
+                                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                                    Creating quote...
+                                                </>
+                                            ) : (
+                                                "Create Quote"
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        disabled={saving || converting}
+                                        onClick={() => setOpen(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleSave}
+                                        disabled={saving || converting}
+                                    >
+                                        {saving
+                                            ? "Saving..."
+                                            : editingItem
+                                            ? "Save changes"
+                                            : "Save item"}
+                                    </Button>
+                                </div>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>
 
                 {items.length === 0 ? (
-                    <div className="rounded-lg border bg-card p-10 text-center">
-                        <ClipboardList className="mx-auto mb-4 size-10 text-muted-foreground" />
-                        <h2 className="text-lg font-semibold">No leads or tasks yet</h2>
-                        <p className="mt-2 text-sm text-muted-foreground">
+                    <div className="rounded-lg border bg-card p-8 text-center">
+                        <ClipboardList className="mx-auto mb-3 size-9 text-muted-foreground" />
+                        <h2 className="text-base font-semibold">No leads or tasks yet</h2>
+                        <p className="mt-1 text-xs text-muted-foreground">
                             Your incoming leads and to-do items will appear here.
                         </p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border bg-card">
-                        <div className="min-w-[970px]">
-                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase text-muted-foreground">
+                        <div className="min-w-[900px]">
+                            <div className="grid grid-cols-[minmax(260px,2fr)_minmax(150px,1fr)_115px_80px_130px] gap-3 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground">
                                 <div>Lead / To Do</div>
                                 <div>Customer / Site</div>
                                 <div>Assigned To</div>
@@ -670,14 +804,9 @@ export default function LeadsPage() {
                                 <div>Status / Due</div>
                             </div>
 
-                            <div className="grid grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b bg-muted/20 px-4 py-2">
-                                <Select
-                                    value={sortMode}
-                                    onValueChange={(value) =>
-                                        setSortMode(value as SortMode)
-                                    }
-                                >
-                                    <SelectTrigger className="h-8 text-xs">
+                            <div className="grid grid-cols-[minmax(260px,2fr)_minmax(150px,1fr)_115px_80px_130px] gap-3 border-b bg-muted/20 px-3 py-1.5">
+                                <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}>
+                                    <SelectTrigger className="h-7 text-[11px]">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -688,11 +817,8 @@ export default function LeadsPage() {
                                     </SelectContent>
                                 </Select>
 
-                                <Select
-                                    value={customerFilter}
-                                    onValueChange={setCustomerFilter}
-                                >
-                                    <SelectTrigger className="h-8 text-xs">
+                                <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                                    <SelectTrigger className="h-7 text-[11px]">
                                         <SelectValue placeholder="All customers" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -706,11 +832,8 @@ export default function LeadsPage() {
                                     </SelectContent>
                                 </Select>
 
-                                <Select
-                                    value={assigneeFilter}
-                                    onValueChange={setAssigneeFilter}
-                                >
-                                    <SelectTrigger className="h-8 text-xs">
+                                <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                                    <SelectTrigger className="h-7 text-[11px]">
                                         <SelectValue placeholder="All staff" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -725,11 +848,8 @@ export default function LeadsPage() {
                                     </SelectContent>
                                 </Select>
 
-                                <Select
-                                    value={priorityFilter}
-                                    onValueChange={setPriorityFilter}
-                                >
-                                    <SelectTrigger className="h-8 text-xs">
+                                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                                    <SelectTrigger className="h-7 text-[11px]">
                                         <SelectValue placeholder="All" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -741,21 +861,16 @@ export default function LeadsPage() {
                                     </SelectContent>
                                 </Select>
 
-                                <div className="flex gap-2">
-                                    <Select
-                                        value={statusFilter}
-                                        onValueChange={setStatusFilter}
-                                    >
-                                        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
+                                <div className="flex gap-1.5">
+                                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                        <SelectTrigger className="h-7 min-w-0 flex-1 text-[11px]">
                                             <SelectValue placeholder="All statuses" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All statuses</SelectItem>
                                             <SelectItem value="new">New</SelectItem>
                                             <SelectItem value="todo">To Do</SelectItem>
-                                            <SelectItem value="in_progress">
-                                                In Progress
-                                            </SelectItem>
+                                            <SelectItem value="in_progress">In Progress</SelectItem>
                                             <SelectItem value="waiting">Waiting</SelectItem>
                                             <SelectItem value="done">Done</SelectItem>
                                             <SelectItem value="converted">Converted</SelectItem>
@@ -766,18 +881,18 @@ export default function LeadsPage() {
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            className="size-8 shrink-0"
+                                            className="size-7 shrink-0"
                                             onClick={clearFilters}
                                             title="Clear filters"
                                         >
-                                            <X className="size-4" />
+                                            <X className="size-3.5" />
                                         </Button>
                                     )}
                                 </div>
                             </div>
 
                             {visibleItems.length === 0 ? (
-                                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                                <div className="px-3 py-8 text-center text-xs text-muted-foreground">
                                     No items match the selected filters.
                                 </div>
                             ) : (
@@ -793,12 +908,12 @@ export default function LeadsPage() {
                                                 handleEdit(item)
                                             }
                                         }}
-                                        className="grid cursor-pointer grid-cols-[minmax(280px,2fr)_minmax(160px,1fr)_120px_90px_140px] gap-4 border-b px-4 py-4 text-sm transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0"
+                                        className="grid cursor-pointer grid-cols-[minmax(260px,2fr)_minmax(150px,1fr)_115px_80px_130px] gap-3 border-b px-3 py-2.5 text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0"
                                     >
                                         <div>
                                             <div className="font-medium">{item.title}</div>
                                             {item.description && (
-                                                <div className="mt-1 line-clamp-2 text-muted-foreground">
+                                                <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
                                                     {item.description}
                                                 </div>
                                             )}
@@ -807,7 +922,7 @@ export default function LeadsPage() {
                                         <div>
                                             <div>{customerName(item.client_id)}</div>
                                             {siteName(item.store_id) && (
-                                                <div className="text-muted-foreground">
+                                                <div className="text-[11px] text-muted-foreground">
                                                     {siteName(item.store_id)}
                                                 </div>
                                             )}
@@ -819,11 +934,9 @@ export default function LeadsPage() {
                                         <div>
                                             <div>{statusLabel(item.status)}</div>
                                             {item.due_date && (
-                                                <div className="mt-1 text-muted-foreground">
+                                                <div className="mt-0.5 text-[11px] text-muted-foreground">
                                                     Due{" "}
-                                                    {new Date(
-                                                        `${item.due_date}T00:00:00`
-                                                    ).toLocaleDateString("en-NZ")}
+                                                    {new Date(`${item.due_date}T00:00:00`).toLocaleDateString("en-NZ")}
                                                 </div>
                                             )}
                                         </div>
