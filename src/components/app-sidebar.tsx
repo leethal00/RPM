@@ -60,80 +60,28 @@ import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/types/database"
 
 const navItems = [
-    {
-        title: "Map View",
-        url: "/",
-        icon: Map,
-    },
-    {
-        title: "Sites / List",
-        url: "/stores",
-        icon: Building2,
-    },
-    {
-        title: "Analysis",
-        url: "/analysis",
-        icon: BarChart3,
-    },
-    {
-        title: "Active Jobs",
-        url: "/jobs",
-        icon: ClipboardList,
-    },
-    {
-        title: "Projects & Tasks",
-        url: "/tasks",
-        icon: Briefcase,
-    },
-    {
-        title: "PM Scheduler",
-        url: "/maintenance/pm",
-        icon: Hammer,
-    },
-    {
-        title: "Maintenance",
-        url: "/maintenance",
-        icon: Calendar,
-    },
+    { title: "Map View", url: "/", icon: Map },
+    { title: "Sites / List", url: "/stores", icon: Building2 },
+    { title: "Analysis", url: "/analysis", icon: BarChart3 },
+    { title: "Projects & Tasks", url: "/tasks", icon: Briefcase },
+    { title: "PM Scheduler", url: "/maintenance/pm", icon: Hammer },
+    { title: "Maintenance", url: "/maintenance", icon: Calendar },
 ]
 
 const supplyChainItems = [
-    {
-        title: "Vendors",
-        url: "/vendors",
-        icon: Briefcase,
-    },
+    { title: "Vendors", url: "/vendors", icon: Briefcase },
 ]
 
 const projectItems = [
-    {
-        title: "HQ Projects",
-        url: "/projects",
-        icon: PlusCircle,
-    },
+    { title: "HQ Projects", url: "/projects", icon: PlusCircle },
 ]
 
 const quotingItems = [
-     {
-        title: "Leads & To Do",
-        url: "/leads",
-        icon: ClipboardList,
-    },
-    {
-        title: "Jobs & Quotes",
-        url: "/quoting",
-        icon: Calculator,
-    },
-    {
-        title: "Products",
-        url: "/quoting/products",
-        icon: Package2,
-    },
-    {
-        title: "Catalogue",
-        url: "/quoting/catalogue",
-        icon: Layers,
-    },
+    { title: "Leads & To Do", url: "/leads", icon: ClipboardList },
+    { title: "Quotes", url: "/quoting", icon: Calculator },
+    { title: "Active Jobs", url: "/quoting/jobs", icon: Briefcase },
+    { title: "Products", url: "/quoting/products", icon: Package2 },
+    { title: "Catalogue", url: "/quoting/catalogue", icon: Layers },
 ]
 
 export function AppSidebar() {
@@ -147,25 +95,14 @@ export function AppSidebar() {
 
     React.useEffect(() => {
         async function fetchData() {
-            const {
-                data: { user },
-            } = await supabase.auth.getUser()
-
+            const { data: { user } } = await supabase.auth.getUser()
             setUser(user)
-
             if (user) {
-                const { data: profileData } = await supabase
-                    .from("users")
-                    .select("*")
-                    .eq("id", user.id)
-                    .single()
-
+                const { data: profileData } = await supabase.from("users").select("*").eq("id", user.id).single()
                 setProfile(profileData)
             }
-
             setLoading(false)
         }
-
         fetchData()
     }, [supabase])
 
@@ -181,43 +118,36 @@ export function AppSidebar() {
         router.refresh()
     }
 
-    const userName =
-        profile?.name ||
-        user?.email?.split("@")[0] ||
-        "User"
+    const userName = profile?.name || user?.email?.split("@")[0] || "User"
+    const userEmail = user?.email || "user@example.com"
+    const userInitials = userName.substring(0, 2).toUpperCase()
+    const isClientUser = profile?.role === "client_hq" || profile?.role === "client_store"
 
-    const userEmail =
-        user?.email ||
-        "user@example.com"
-
-    const userInitials =
-        userName.substring(0, 2).toUpperCase()
-
-    // Client users only see the site-management side of RPM.
-    // Rodier staff retain the full internal navigation.
-    const isClientUser =
-        profile?.role === "client_hq" ||
-        profile?.role === "client_store"
+    const isQuotingItemActive = (url: string) => {
+        if (url === "/quoting/jobs") return pathname.startsWith("/quoting/jobs")
+        if (url === "/quoting/products") return pathname.startsWith("/quoting/products")
+        if (url === "/quoting/catalogue") return pathname.startsWith("/quoting/catalogue")
+        if (url === "/quoting") {
+            return pathname === "/quoting" || (
+                pathname.startsWith("/quoting/") &&
+                !pathname.startsWith("/quoting/jobs") &&
+                !pathname.startsWith("/quoting/products") &&
+                !pathname.startsWith("/quoting/catalogue")
+            )
+        }
+        return pathname.startsWith(url)
+    }
 
     return (
-        <Sidebar
-            collapsible="icon"
-            className="border-r border-sidebar-border"
-        >
+        <Sidebar collapsible="icon" className="border-r border-sidebar-border">
             <SidebarHeader className="border-b border-sidebar-border p-4">
                 <div className="flex items-center gap-2 px-2">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                         <Building2 className="size-4" />
                     </div>
-
                     <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-                        <span className="font-semibold text-sidebar-foreground">
-                            RPM
-                        </span>
-
-                        <span className="text-xs text-sidebar-foreground/60">
-                            Rodier Property
-                        </span>
+                        <span className="font-semibold text-sidebar-foreground">RPM</span>
+                        <span className="text-xs text-sidebar-foreground/60">Rodier Property</span>
                     </div>
                 </div>
             </SidebarHeader>
@@ -225,33 +155,19 @@ export function AppSidebar() {
             <SidebarContent>
                 <SidebarGroup>
                     <div className="px-2 pt-2 mb-2">
-                        <SidebarMenuButton
-                            asChild
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"
-                        >
-                            <Link
-                                href="/jobs/new"
-                                className="flex items-center gap-2"
-                            >
+                        <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium">
+                            <Link href="/jobs/new" className="flex items-center gap-2">
                                 <PlusCircle className="size-4" />
                                 <span>Report Fault</span>
                             </Link>
                         </SidebarMenuButton>
                     </div>
-
-                    <SidebarGroupLabel>
-                        Main Navigation
-                    </SidebarGroupLabel>
-
+                    <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {navItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton
-                                        asChild
-                                        tooltip={item.title}
-                                        isActive={pathname === item.url}
-                                    >
+                                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
                                         <Link href={item.url}>
                                             <item.icon className="size-4" />
                                             <span>{item.title}</span>
@@ -266,27 +182,13 @@ export function AppSidebar() {
                 {!isClientUser && (
                     <>
                         <SidebarGroup>
-                            <SidebarGroupLabel>
-                                Supply Chain
-                            </SidebarGroupLabel>
-
+                            <SidebarGroupLabel>Supply Chain</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {supplyChainItems.map((item) => (
                                         <SidebarMenuItem key={item.title}>
-                                            <SidebarMenuButton
-                                                asChild
-                                                tooltip={item.title}
-                                                isActive={
-                                                    pathname === item.url
-                                                }
-                                            >
-                                                <Link href={item.url}>
-                                                    <item.icon className="size-4" />
-                                                    <span>
-                                                        {item.title}
-                                                    </span>
-                                                </Link>
+                                            <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                                <Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
                                     ))}
@@ -295,27 +197,13 @@ export function AppSidebar() {
                         </SidebarGroup>
 
                         <SidebarGroup>
-                            <SidebarGroupLabel>
-                                Strategic Portfolio
-                            </SidebarGroupLabel>
-
+                            <SidebarGroupLabel>Strategic Portfolio</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {projectItems.map((item) => (
                                         <SidebarMenuItem key={item.title}>
-                                            <SidebarMenuButton
-                                                asChild
-                                                tooltip={item.title}
-                                                isActive={
-                                                    pathname === item.url
-                                                }
-                                            >
-                                                <Link href={item.url}>
-                                                    <item.icon className="size-4" />
-                                                    <span>
-                                                        {item.title}
-                                                    </span>
-                                                </Link>
+                                            <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}>
+                                                <Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
                                     ))}
@@ -324,41 +212,13 @@ export function AppSidebar() {
                         </SidebarGroup>
 
                         <SidebarGroup>
-                            <SidebarGroupLabel>
-                                Job & Project Management
-                            </SidebarGroupLabel>
-
+                            <SidebarGroupLabel>Job & Project Management</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     {quotingItems.map((item) => (
                                         <SidebarMenuItem key={item.title}>
-                                            <SidebarMenuButton
-                                                asChild
-                                                tooltip={item.title}
-                                                isActive={
-                                                    item.url === "/quoting"
-                                                        ? pathname ===
-                                                              "/quoting" ||
-                                                          (pathname.startsWith(
-                                                              "/quoting/"
-                                                          ) &&
-                                                              !pathname.startsWith(
-                                                                  "/quoting/catalogue"
-                                                              ) &&
-                                                              !pathname.startsWith(
-                                                                  "/quoting/products"
-                                                              ))
-                                                        : pathname.startsWith(
-                                                              item.url
-                                                          )
-                                                }
-                                            >
-                                                <Link href={item.url}>
-                                                    <item.icon className="size-4" />
-                                                    <span>
-                                                        {item.title}
-                                                    </span>
-                                                </Link>
+                                            <SidebarMenuButton asChild tooltip={item.title} isActive={isQuotingItemActive(item.url)}>
+                                                <Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
                                     ))}
@@ -367,127 +227,19 @@ export function AppSidebar() {
                         </SidebarGroup>
 
                         <SidebarGroup>
-                            <SidebarGroupLabel>
-                                Administration
-                            </SidebarGroupLabel>
-
+                            <SidebarGroupLabel>Administration</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
                                     <SidebarMenuItem>
-                                        <SidebarMenuButton
-                                            asChild
-                                            isActive={pathname.startsWith(
-                                                "/settings"
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-2 cursor-pointer w-full">
-                                                <Settings className="size-4" />
-                                                <span>
-                                                    Portal Settings
-                                                </span>
-                                            </div>
+                                        <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")}>
+                                            <div className="flex items-center gap-2 cursor-pointer w-full"><Settings className="size-4" /><span>Portal Settings</span></div>
                                         </SidebarMenuButton>
-
                                         <SidebarMenuSub>
-                                            <SidebarMenuSubItem>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={
-                                                        pathname ===
-                                                        "/settings/users"
-                                                    }
-                                                >
-                                                    <Link
-                                                        href="/settings/users"
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <UserCog className="size-3.5" />
-                                                        <span>
-                                                            Users
-                                                        </span>
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-
-                                            <SidebarMenuSubItem>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={
-                                                        pathname ===
-                                                        "/settings/customers"
-                                                    }
-                                                >
-                                                    <Link
-                                                        href="/settings/customers"
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <Users className="size-3.5" />
-                                                        <span>
-                                                            Customers
-                                                        </span>
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-
-                                            <SidebarMenuSubItem>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={
-                                                        pathname ===
-                                                        "/settings/regions"
-                                                    }
-                                                >
-                                                    <Link
-                                                        href="/settings/regions"
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <MapPin className="size-3.5" />
-                                                        <span>
-                                                            Regions
-                                                        </span>
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-
-                                            <SidebarMenuSubItem>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={
-                                                        pathname ===
-                                                        "/settings/asset-types"
-                                                    }
-                                                >
-                                                    <Link
-                                                        href="/settings/asset-types"
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <Layers className="size-3.5" />
-                                                        <span>
-                                                            Asset Classifications
-                                                        </span>
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-
-                                            <SidebarMenuSubItem>
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={
-                                                        pathname ===
-                                                        "/settings/roles"
-                                                    }
-                                                >
-                                                    <Link
-                                                        href="/settings/roles"
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <UserCog className="size-3.5" />
-                                                        <span>
-                                                            Role permissions
-                                                        </span>
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
+                                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === "/settings/users"}><Link href="/settings/users" className="flex items-center gap-2"><UserCog className="size-3.5" /><span>Users</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === "/settings/customers"}><Link href="/settings/customers" className="flex items-center gap-2"><Users className="size-3.5" /><span>Customers</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === "/settings/regions"}><Link href="/settings/regions" className="flex items-center gap-2"><MapPin className="size-3.5" /><span>Regions</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === "/settings/asset-types"}><Link href="/settings/asset-types" className="flex items-center gap-2"><Layers className="size-3.5" /><span>Asset Classifications</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
+                                            <SidebarMenuSubItem><SidebarMenuSubButton asChild isActive={pathname === "/settings/roles"}><Link href="/settings/roles" className="flex items-center gap-2"><UserCog className="size-3.5" /><span>Role permissions</span></Link></SidebarMenuSubButton></SidebarMenuSubItem>
                                         </SidebarMenuSub>
                                     </SidebarMenuItem>
                                 </SidebarMenu>
@@ -497,64 +249,18 @@ export function AppSidebar() {
                 )}
 
                 <SidebarGroup>
-                    <SidebarGroupLabel>
-                        Support
-                    </SidebarGroupLabel>
-
+                    <SidebarGroupLabel>Support</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    asChild
-                                    tooltip="Help & Support"
-                                    isActive={pathname === "/help"}
-                                >
-                                    <Link href="/help">
-                                        <HelpCircle className="size-4" />
-                                        <span>
-                                            Help & Support
-                                        </span>
-                                    </Link>
+                                <SidebarMenuButton asChild tooltip="Help & Support" isActive={pathname === "/help"}>
+                                    <Link href="/help"><HelpCircle className="size-4" /><span>Help & Support</span></Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-
                             {!isClientUser && (
                                 <>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton
-                                            asChild
-                                            tooltip="Suggest a feature"
-                                            isActive={
-                                                pathname ===
-                                                "/feature-request"
-                                            }
-                                        >
-                                            <Link href="/feature-request">
-                                                <Lightbulb className="size-4" />
-                                                <span>
-                                                    Suggest a feature
-                                                </span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton
-                                            asChild
-                                            tooltip="Feature pipeline"
-                                            isActive={
-                                                pathname ===
-                                                "/feature-requests"
-                                            }
-                                        >
-                                            <Link href="/feature-requests">
-                                                <ClipboardList className="size-4" />
-                                                <span>
-                                                    Feature pipeline
-                                                </span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
+                                    <SidebarMenuItem><SidebarMenuButton asChild tooltip="Suggest a feature" isActive={pathname === "/feature-request"}><Link href="/feature-request"><Lightbulb className="size-4" /><span>Suggest a feature</span></Link></SidebarMenuButton></SidebarMenuItem>
+                                    <SidebarMenuItem><SidebarMenuButton asChild tooltip="Feature pipeline" isActive={pathname === "/feature-requests"}><Link href="/feature-requests"><ClipboardList className="size-4" /><span>Feature pipeline</span></Link></SidebarMenuButton></SidebarMenuItem>
                                 </>
                             )}
                         </SidebarMenu>
@@ -567,91 +273,26 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <SidebarMenuButton
-                                    size="lg"
-                                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                                >
-                                    <Avatar className="h-8 w-8 rounded-lg">
-                                        <AvatarImage
-                                            src={
-                                                profile?.avatar_url ||
-                                                ""
-                                            }
-                                            alt={userName}
-                                        />
-
-                                        <AvatarFallback className="rounded-lg">
-                                            {userInitials}
-                                        </AvatarFallback>
-                                    </Avatar>
-
+                                <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                                    <Avatar className="h-8 w-8 rounded-lg"><AvatarImage src={profile?.avatar_url || ""} alt={userName} /><AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback></Avatar>
                                     <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                                        <span className="truncate font-semibold">
-                                            {loading
-                                                ? "Loading..."
-                                                : userName}
-                                        </span>
-
-                                        <span className="truncate text-xs text-sidebar-foreground/60">
-                                            {loading
-                                                ? "..."
-                                                : userEmail}
-                                        </span>
+                                        <span className="truncate font-semibold">{loading ? "Loading..." : userName}</span>
+                                        <span className="truncate text-xs text-sidebar-foreground/60">{loading ? "..." : userEmail}</span>
                                     </div>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
-
-                            <DropdownMenuContent
-                                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-                                side="bottom"
-                                align="end"
-                                sideOffset={4}
-                            >
+                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg" side="bottom" align="end" sideOffset={4}>
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                        <Avatar className="h-8 w-8 rounded-lg">
-                                            <AvatarFallback className="rounded-lg">
-                                                {userInitials}
-                                            </AvatarFallback>
-                                        </Avatar>
-
-                                        <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">
-                                                {userName}
-                                            </span>
-
-                                            <span className="truncate text-xs">
-                                                {userEmail}
-                                            </span>
-                                        </div>
+                                        <Avatar className="h-8 w-8 rounded-lg"><AvatarFallback className="rounded-lg">{userInitials}</AvatarFallback></Avatar>
+                                        <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{userName}</span><span className="truncate text-xs">{userEmail}</span></div>
                                     </div>
                                 </DropdownMenuLabel>
-
                                 <DropdownMenuSeparator />
-
-                                {user && (
-                                    <DropdownMenuItem asChild>
-                                        <a href="/profile">
-                                            <Settings className="mr-2 size-4" />
-                                            Profile Settings
-                                        </a>
-                                    </DropdownMenuItem>
-                                )}
-
-                                <DropdownMenuItem
-                                    onClick={handleSwitchAccount}
-                                >
-                                    <LogIn className="mr-2 size-4" />
-                                    Switch account
-                                </DropdownMenuItem>
-
+                                {user && <DropdownMenuItem asChild><a href="/profile"><Settings className="mr-2 size-4" />Profile Settings</a></DropdownMenuItem>}
+                                <DropdownMenuItem onClick={handleSwitchAccount}><LogIn className="mr-2 size-4" />Switch account</DropdownMenuItem>
                                 <DropdownMenuSeparator />
-
-                                <DropdownMenuItem
-                                    onClick={handleSignOut}
-                                >
-                                    Log out
-                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleSignOut}>Log out</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </SidebarMenuItem>
