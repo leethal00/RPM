@@ -4,10 +4,6 @@ import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 
 export const dynamic = "force-dynamic"
 
-function rpmReference(id: string) {
-    return `RPM-${id.slice(0, 8).toUpperCase()}`
-}
-
 async function xeroJson(url: string, accessToken: string, tenantId: string) {
     const response = await fetch(url, { headers: xeroHeaders(accessToken, tenantId) })
     const text = await response.text()
@@ -51,14 +47,17 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         let invoiceNumber = job.xero_invoice_number as string | null
         if (xeroStatus === "INVOICED" && !invoiceNumber) {
-            const where = encodeURIComponent(`Reference==\"${rpmReference(id)}\"`)
-            const invoiceResult = await xeroJson(`${XERO_API}/Invoices?where=${where}&order=Date%20DESC`, xero.accessToken, xero.tenantId)
-            const invoice = invoiceResult?.Invoices?.[0]
-            if (invoice?.InvoiceNumber) {
-                invoiceNumber = invoice.InvoiceNumber
-                updates.xero_invoice_number = invoiceNumber
-                updates.job_number = invoiceNumber
-                updates.status = "in_progress"
+            const reference = String(quote.Reference || "").trim()
+            if (reference) {
+                const where = encodeURIComponent(`Reference==\"${reference.replaceAll('"', '\\"')}\"`)
+                const invoiceResult = await xeroJson(`${XERO_API}/Invoices?where=${where}&order=Date%20DESC`, xero.accessToken, xero.tenantId)
+                const invoice = invoiceResult?.Invoices?.[0]
+                if (invoice?.InvoiceNumber) {
+                    invoiceNumber = invoice.InvoiceNumber
+                    updates.xero_invoice_number = invoiceNumber
+                    updates.job_number = invoiceNumber
+                    updates.status = "in_progress"
+                }
             }
         }
 
