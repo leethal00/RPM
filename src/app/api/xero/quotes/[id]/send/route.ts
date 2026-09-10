@@ -12,6 +12,18 @@ function rpmReference(id: string) {
     return `RPM-${id.slice(0, 8).toUpperCase()}`
 }
 
+function normalise(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function shortSiteName(name: string) {
+    return name
+        .replace(/\bfreestander\b/gi, "")
+        .replace(/\bstand\s*alone\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
     const response = await fetch(url, {
         ...init,
@@ -24,6 +36,45 @@ async function xeroJson(url: string, init: RequestInit, accessToken: string, ten
         throw new Error(detail || body?.Message || body?.Detail || `Xero API error ${response.status}`)
     }
     return body
+}
+
+async function findContactId(
+    clientName: string,
+    storeName: string | undefined,
+    email: string | undefined,
+    accessToken: string,
+    tenantId: string
+) {
+    const siteShort = storeName ? shortSiteName(storeName) : ""
+
+    // Store-linked RPM work should prefer the site-specific Xero contact, e.g. "McDonalds Albany".
+    if (siteShort) {
+        const where = encodeURIComponent(`Name.Contains(\"${siteShort.replaceAll('"', '\\"')}\")`)
+        const result = await xeroJson(`${XERO_API}/Contacts?where=${where}`, { method: "GET" }, accessToken, tenantId)
+        const candidates = (result?.Contacts || []) as Array<{ ContactID?: string; Name?: string }>
+        const clientTokens = normalise(clientName).split(" ").filter(Boolean)
+        const siteTokens = normalise(siteShort).split(" ").filter(Boolean)
+        const scored = candidates
+            .map((contact) => {
+                const name = normalise(contact.Name || "")
+                const clientScore = clientTokens.reduce((n, token) => n + (name.includes(token) ? 2 : 0), 0)
+                const siteScore = siteTokens.reduce((n, token) => n + (name.includes(token) ? 3 : 0), 0)
+                return { contact, score: clientScore + siteScore }
+            })
+            .sort((a, b) => b.score - a.score)
+        if (scored[0]?.score > 0 && scored[0].contact.ContactID) return scored[0].contact.ContactID
+    }
+
+    const exactWhere = encodeURIComponent(`Name==\"${clientName.replaceAll('"', '\\"')}\"`)
+    const exact = await xeroJson(`${XERO_API}/Contacts?where=${exactWhere}`, { method: "GET" }, accessToken, tenantId)
+    if (exact?.Contacts?.[0]?.ContactID) return exact.Contacts[0].ContactID as string
+
+    const newContactName = siteShort ? `${clientName} ${siteShort}` : clientName
+    const created = await xeroJson(`${XERO_API}/Contacts`, {
+        method: "POST",
+        body: JSON.stringify({ Contacts: [{ Name: newContactName, ...(email ? { EmailAddress: email } : {}) }] }),
+    }, accessToken, tenantId)
+    return created?.Contacts?.[0]?.ContactID as string | undefined
 }
 
 export async function POST(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -43,13 +94,13 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     if (jobError || !job) return NextResponse.json({ error: "Quote not found" }, { status: 404 })
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
-    const { data: items, error: itemsError } = await admin
-        .from("costing_items")
-        .select("id,name,details,qty,unit_price,sort")
-        .eq("job_id", id)
-        .order("sort")
+    const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
+        admin.from("costing_items").select("id,name,details,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
+    ])
 
     if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    if (linesError) return NextResponse.json({ error: linesError.message }, { status: 500 })
     if (!items?.length) return NextResponse.json({ error: "Add at least one item before sending the quote to Xero." }, { status: 400 })
 
     const xero = await getValidXero()
@@ -58,27 +109,29 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     try {
         const client = Array.isArray(job.clients) ? job.clients[0] : job.clients
         const store = Array.isArray(job.stores) ? job.stores[0] : job.stores
-        const contactName = client?.name || "Rodier RPM customer"
-
-        const where = encodeURIComponent(`Name==\"${String(contactName).replaceAll('"', '\\"')}\"`)
-        const contacts = await xeroJson(`${XERO_API}/Contacts?where=${where}`, { method: "GET" }, xero.accessToken, xero.tenantId)
-        let contactId = contacts?.Contacts?.[0]?.ContactID as string | undefined
-
-        if (!contactId) {
-            const created = await xeroJson(`${XERO_API}/Contacts`, {
-                method: "POST",
-                body: JSON.stringify({ Contacts: [{ Name: contactName, ...(client?.contact_email ? { EmailAddress: client.contact_email } : {}) }] }),
-            }, xero.accessToken, xero.tenantId)
-            contactId = created?.Contacts?.[0]?.ContactID
-        }
-
+        const clientName = client?.name || "Rodier RPM customer"
+        const contactId = await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
-        const lineItems = items.map((item) => ({
-            Description: [item.name, item.details].filter(Boolean).join(" — "),
-            Quantity: Number(item.qty || 1),
-            UnitAmount: Number(item.unit_price || 0),
-        }))
+        const lines = costingLines || []
+        const lineItems = items.map((item) => {
+            let unitAmount = Number(item.unit_price || 0)
+            if (item.mode === "build") {
+                unitAmount = lines
+                    .filter((line) => line.item_id === item.id)
+                    .reduce((sum, line) => {
+                        const sell = line.unit_sell_override != null
+                            ? Number(line.unit_sell_override)
+                            : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
+                        return sum + Number(line.qty || 0) * sell
+                    }, 0)
+            }
+            return {
+                Description: [item.name, item.details].filter(Boolean).join(" — "),
+                Quantity: Number(item.qty || 1),
+                UnitAmount: Number(unitAmount.toFixed(2)),
+            }
+        })
 
         const itemTotal = lineItems.reduce((sum, line) => sum + line.Quantity * line.UnitAmount, 0)
         const adjustedTotal = job.adjusted_total == null ? null : Number(job.adjusted_total)
@@ -88,7 +141,8 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         const expiry = new Date()
         expiry.setDate(expiry.getDate() + 30)
-        const ref = rpmReference(id)
+        const internalRef = rpmReference(id)
+        const visibleReference = job.reference?.trim() || store?.name || job.title
         const xeroQuote = await xeroJson(`${XERO_API}/Quotes`, {
             method: "POST",
             body: JSON.stringify({
@@ -97,8 +151,10 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                     Date: isoDate(new Date()),
                     ExpiryDate: isoDate(expiry),
                     Status: "DRAFT",
-                    Reference: ref,
-                    Terms: [job.reference, store?.name, job.details].filter(Boolean).join(" | ") || undefined,
+                    Reference: visibleReference,
+                    Title: job.title,
+                    Summary: internalRef,
+                    Terms: job.details || undefined,
                     LineItems: lineItems,
                 }],
             }),
