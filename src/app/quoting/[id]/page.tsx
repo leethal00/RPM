@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calculator, FileText, Loader2, Pencil, RefreshCw, Send } from "lucide-react"
+import { ArrowLeft, Calculator, ExternalLink, FileText, Loader2, Pencil, RefreshCw, Send } from "lucide-react"
 import Link from "next/link"
 import { PageShell } from "@/components/page-shell"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -37,6 +37,7 @@ export default function CostingJobDetailPage() {
     const [editOpen, setEditOpen] = useState(false)
     const [sendingXero, setSendingXero] = useState(false)
     const [syncingXero, setSyncingXero] = useState(false)
+    const [updatingXero, setUpdatingXero] = useState(false)
     const [xeroError, setXeroError] = useState("")
 
     const { data, isLoading, mutate } = useSupabaseQuery<CostingJob | null>(
@@ -50,6 +51,9 @@ export default function CostingJobDetailPage() {
     )
 
     const job = data ?? undefined
+    const xeroQuoteUrl = job?.xero_quote_id
+        ? `https://go.xero.com/Accounts/Receivable/Quotes/View/${job.xero_quote_id}`
+        : null
 
     async function sendToXero() {
         if (!job || sendingXero) return
@@ -64,6 +68,22 @@ export default function CostingJobDetailPage() {
             setXeroError(error instanceof Error ? error.message : "Could not send quote to Xero.")
         } finally {
             setSendingXero(false)
+        }
+    }
+
+    async function updateXero() {
+        if (!job || updatingXero) return
+        setXeroError("")
+        setUpdatingXero(true)
+        try {
+            const response = await fetch(`/api/xero/quotes/${job.id}/update`, { method: "POST" })
+            const body = await response.json()
+            if (!response.ok) throw new Error(body.error || "Could not update Xero quote.")
+            await mutate()
+        } catch (error) {
+            setXeroError(error instanceof Error ? error.message : "Could not update Xero quote.")
+        } finally {
+            setUpdatingXero(false)
         }
     }
 
@@ -111,7 +131,13 @@ export default function CostingJobDetailPage() {
                                 </p>
                                 {(job.xero_quote_number || job.xero_invoice_number || job.job_number) && (
                                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                        {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
+                                        {job.xero_quote_number && (
+                                            xeroQuoteUrl ? (
+                                                <a href={xeroQuoteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground hover:underline">
+                                                    Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong><ExternalLink className="size-3" />
+                                                </a>
+                                            ) : <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>
+                                        )}
                                         {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
                                         {job.job_number && <span>Job no: <strong className="text-foreground">{job.job_number}</strong></span>}
                                     </div>
@@ -124,17 +150,31 @@ export default function CostingJobDetailPage() {
                                         {sendingXero ? "Sending..." : "Send to Xero"}
                                     </Button>
                                 ) : (
-                                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={syncXero} disabled={syncingXero}>
-                                        {syncingXero ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                                        {syncingXero ? "Checking..." : "Check Xero"}
-                                    </Button>
+                                    <>
+                                        {job.status === "quoted" && (
+                                            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={updateXero} disabled={updatingXero}>
+                                                {updatingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                                                {updatingXero ? "Updating..." : "Update Xero"}
+                                            </Button>
+                                        )}
+                                        <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={syncXero} disabled={syncingXero}>
+                                            {syncingXero ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                                            {syncingXero ? "Checking..." : "Check Xero"}
+                                        </Button>
+                                    </>
                                 )}
                                 <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
                                     <Link href={`/quoting/${id}/job-card`} target="_blank">
                                         <FileText className="size-3.5" /> Job card
                                     </Link>
                                 </Button>
-                                <Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>
+                                {xeroQuoteUrl && job.status !== "quote" ? (
+                                    <a href={xeroQuoteUrl} target="_blank" rel="noreferrer" title="Open this quote in Xero">
+                                        <Badge variant="secondary" className="cursor-pointer hover:bg-muted">{STATUS_LABEL[job.status]} <ExternalLink className="ml-1 inline size-3" /></Badge>
+                                    </a>
+                                ) : (
+                                    <Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>
+                                )}
                             </div>
                         </div>
 
