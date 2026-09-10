@@ -53,10 +53,14 @@ type WorkItem = {
     priority: string
     status: string
     due_date: string | null
+    converted_costing_job_id: string | null
     created_at: string
 }
 
 type SortMode = "newest" | "oldest" | "due" | "title"
+
+const WORK_ITEM_SELECT =
+    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, converted_costing_job_id, created_at"
 
 export default function LeadsPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -112,9 +116,7 @@ export default function LeadsPage() {
                     .order("name"),
                 supabase
                     .from("internal_work_items")
-                    .select(
-                        "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
-                    )
+                    .select(WORK_ITEM_SELECT)
                     .order("created_at", { ascending: false }),
                 supabase.auth.getUser(),
             ])
@@ -129,8 +131,7 @@ export default function LeadsPage() {
 
         if (!usersResult.error) {
             const internalUsers = ((usersResult.data ?? []) as UserOption[]).filter(
-                (user) =>
-                    !["client_hq", "client_store"].includes(user.role ?? "")
+                (user) => !["client_hq", "client_store"].includes(user.role ?? "")
             )
             setUsers(internalUsers)
         }
@@ -250,7 +251,12 @@ export default function LeadsPage() {
         setError("")
     }
 
-    function handleEdit(item: WorkItem) {
+    function handleOpen(item: WorkItem) {
+        if (item.status === "converted" && item.converted_costing_job_id) {
+            router.push(`/quoting/${item.converted_costing_job_id}`)
+            return
+        }
+
         setEditingItem(item)
         setTitle(item.title)
         setCustomerId(item.client_id ?? "")
@@ -317,8 +323,7 @@ export default function LeadsPage() {
             if (customerId === "__new__") {
                 const existingCustomer = customers.find(
                     (customer) =>
-                        customer.name.trim().toLowerCase() ===
-                        cleanCustomerName.toLowerCase()
+                        customer.name.trim().toLowerCase() === cleanCustomerName.toLowerCase()
                 )
 
                 if (existingCustomer) {
@@ -331,16 +336,12 @@ export default function LeadsPage() {
                         .single()
 
                     if (customerError) {
-                        throw new Error(
-                            `Could not create customer: ${customerError.message}`
-                        )
+                        throw new Error(`Could not create customer: ${customerError.message}`)
                     }
 
                     finalCustomerId = newCustomer.id
                     setCustomers((current) =>
-                        [...current, newCustomer].sort((a, b) =>
-                            a.name.localeCompare(b.name)
-                        )
+                        [...current, newCustomer].sort((a, b) => a.name.localeCompare(b.name))
                     )
                 }
             }
@@ -378,9 +379,7 @@ export default function LeadsPage() {
                       .insert({ ...itemValues, created_by: user.id })
 
             const { data: savedItem, error: itemError } = await query
-                .select(
-                    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
-                )
+                .select(WORK_ITEM_SELECT)
                 .single()
 
             if (itemError) {
@@ -486,6 +485,7 @@ export default function LeadsPage() {
                 due_date: dueDate || null,
                 source: "manual",
                 original_note: notes.trim() || null,
+                converted_costing_job_id: quote.id,
                 updated_at: new Date().toISOString(),
             }
 
@@ -493,9 +493,7 @@ export default function LeadsPage() {
                 .from("internal_work_items")
                 .update(convertedValues)
                 .eq("id", editingItem.id)
-                .select(
-                    "id, title, description, client_id, store_id, assigned_to, priority, status, due_date, created_at"
-                )
+                .select(WORK_ITEM_SELECT)
                 .single()
 
             if (convertError) {
@@ -531,12 +529,9 @@ export default function LeadsPage() {
                         <p className="text-xs text-muted-foreground">
                             Job & Project Management
                         </p>
-                        <h1 className="text-2xl font-bold tracking-tight">
-                            Leads & To Do
-                        </h1>
+                        <h1 className="text-2xl font-bold tracking-tight">Leads & To Do</h1>
                         <p className="mt-1 text-sm text-muted-foreground">
-                            Capture incoming work, follow-ups and tasks before they become
-                            quotes or jobs.
+                            Capture incoming work, follow-ups and tasks before they become quotes or jobs.
                         </p>
                     </div>
 
@@ -557,9 +552,7 @@ export default function LeadsPage() {
                         <DialogContent className="sm:max-w-[620px]">
                             <DialogHeader>
                                 <DialogTitle>
-                                    {editingItem
-                                        ? "Edit lead or to-do"
-                                        : "Add lead or to-do"}
+                                    {editingItem ? "Edit lead or to-do" : "Add lead or to-do"}
                                 </DialogTitle>
                                 <DialogDescription>
                                     {editingItem
@@ -597,9 +590,7 @@ export default function LeadsPage() {
                                                 />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="__new__">
-                                                    + Add new customer
-                                                </SelectItem>
+                                                <SelectItem value="__new__">+ Add new customer</SelectItem>
                                                 {customers.map((customer) => (
                                                     <SelectItem key={customer.id} value={customer.id}>
                                                         {customer.name}
@@ -769,10 +760,7 @@ export default function LeadsPage() {
                                     >
                                         Cancel
                                     </Button>
-                                    <Button
-                                        onClick={handleSave}
-                                        disabled={saving || converting}
-                                    >
+                                    <Button onClick={handleSave} disabled={saving || converting}>
                                         {saving
                                             ? "Saving..."
                                             : editingItem
@@ -805,7 +793,10 @@ export default function LeadsPage() {
                             </div>
 
                             <div className="grid grid-cols-[minmax(260px,2fr)_minmax(150px,1fr)_115px_80px_130px] gap-3 border-b bg-muted/20 px-3 py-1.5">
-                                <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}>
+                                <Select
+                                    value={sortMode}
+                                    onValueChange={(value) => setSortMode(value as SortMode)}
+                                >
                                     <SelectTrigger className="h-7 text-[11px]">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -901,11 +892,11 @@ export default function LeadsPage() {
                                         key={item.id}
                                         role="button"
                                         tabIndex={0}
-                                        onClick={() => handleEdit(item)}
+                                        onClick={() => handleOpen(item)}
                                         onKeyDown={(event) => {
                                             if (event.key === "Enter" || event.key === " ") {
                                                 event.preventDefault()
-                                                handleEdit(item)
+                                                handleOpen(item)
                                             }
                                         }}
                                         className="grid cursor-pointer grid-cols-[minmax(260px,2fr)_minmax(150px,1fr)_115px_80px_130px] gap-3 border-b px-3 py-2.5 text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0"
@@ -936,7 +927,9 @@ export default function LeadsPage() {
                                             {item.due_date && (
                                                 <div className="mt-0.5 text-[11px] text-muted-foreground">
                                                     Due{" "}
-                                                    {new Date(`${item.due_date}T00:00:00`).toLocaleDateString("en-NZ")}
+                                                    {new Date(
+                                                        `${item.due_date}T00:00:00`
+                                                    ).toLocaleDateString("en-NZ")}
                                                 </div>
                                             )}
                                         </div>
