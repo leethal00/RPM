@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calculator, FileText, Pencil } from "lucide-react"
+import { ArrowLeft, Calculator, FileText, Loader2, Pencil, RefreshCw, Send } from "lucide-react"
 import Link from "next/link"
 import { PageShell } from "@/components/page-shell"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -19,8 +19,13 @@ import { CostingJobForm } from "@/components/costing-job-form"
 import type { CostingJob, CostingStatus } from "@/types/database"
 
 const STATUS_LABEL: Record<CostingStatus, string> = {
-    quote: "Quote", quoted: "Quoted", approved: "Approved", in_progress: "In progress",
-    complete: "Complete", invoiced: "Invoiced", cancelled: "Cancelled",
+    quote: "Draft Quote",
+    quoted: "Xero Quote",
+    approved: "Accepted",
+    in_progress: "Job",
+    complete: "Complete",
+    invoiced: "Invoiced",
+    cancelled: "Cancelled",
 }
 
 export default function CostingJobDetailPage() {
@@ -30,6 +35,9 @@ export default function CostingJobDetailPage() {
     const id = params.id as string
 
     const [editOpen, setEditOpen] = useState(false)
+    const [sendingXero, setSendingXero] = useState(false)
+    const [syncingXero, setSyncingXero] = useState(false)
+    const [xeroError, setXeroError] = useState("")
 
     const { data, isLoading, mutate } = useSupabaseQuery<CostingJob | null>(
         id ? `costing-job-${id}` : null,
@@ -42,6 +50,38 @@ export default function CostingJobDetailPage() {
     )
 
     const job = data ?? undefined
+
+    async function sendToXero() {
+        if (!job || sendingXero) return
+        setXeroError("")
+        setSendingXero(true)
+        try {
+            const response = await fetch(`/api/xero/quotes/${job.id}/send`, { method: "POST" })
+            const body = await response.json()
+            if (!response.ok) throw new Error(body.error || "Could not send quote to Xero.")
+            await mutate()
+        } catch (error) {
+            setXeroError(error instanceof Error ? error.message : "Could not send quote to Xero.")
+        } finally {
+            setSendingXero(false)
+        }
+    }
+
+    async function syncXero() {
+        if (!job || syncingXero) return
+        setXeroError("")
+        setSyncingXero(true)
+        try {
+            const response = await fetch(`/api/xero/quotes/${job.id}/sync`, { method: "POST" })
+            const body = await response.json()
+            if (!response.ok) throw new Error(body.error || "Could not sync Xero status.")
+            await mutate()
+        } catch (error) {
+            setXeroError(error instanceof Error ? error.message : "Could not sync Xero status.")
+        } finally {
+            setSyncingXero(false)
+        }
+    }
 
     return (
         <DashboardLayout>
@@ -69,8 +109,26 @@ export default function CostingJobDetailPage() {
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}
                                 </p>
+                                {(job.xero_quote_number || job.xero_invoice_number || job.job_number) && (
+                                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
+                                        {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
+                                        {job.job_number && <span>Job no: <strong className="text-foreground">{job.job_number}</strong></span>}
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                                {!job.xero_quote_id ? (
+                                    <Button size="sm" className="h-9 gap-1.5" onClick={sendToXero} disabled={sendingXero}>
+                                        {sendingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                                        {sendingXero ? "Sending..." : "Send to Xero"}
+                                    </Button>
+                                ) : (
+                                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={syncXero} disabled={syncingXero}>
+                                        {syncingXero ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                                        {syncingXero ? "Checking..." : "Check Xero"}
+                                    </Button>
+                                )}
                                 <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
                                     <Link href={`/quoting/${id}/job-card`} target="_blank">
                                         <FileText className="size-3.5" /> Job card
@@ -79,6 +137,12 @@ export default function CostingJobDetailPage() {
                                 <Badge variant="secondary">{STATUS_LABEL[job.status]}</Badge>
                             </div>
                         </div>
+
+                        {xeroError && (
+                            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {xeroError}
+                            </div>
+                        )}
 
                         <Dialog open={editOpen} onOpenChange={setEditOpen}>
                             <DialogContent className="sm:max-w-[600px]">
