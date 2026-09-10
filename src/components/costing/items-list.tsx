@@ -25,7 +25,6 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [items, setItems] = useState<CostingItem[]>([])
     const [lines, setLines] = useState<CostingLine[]>([])
     const [loading, setLoading] = useState(true)
-    const [adjusted, setAdjusted] = useState(job.adjusted_total != null ? String(job.adjusted_total) : "")
     const [deleteTarget, setDeleteTarget] = useState<CostingItem | null>(null)
     const [products, setProducts] = useState<CostingItem[] | null>(null)
     const [productOpen, setProductOpen] = useState(false)
@@ -54,11 +53,15 @@ export function ItemsList({ job }: { job: CostingJob }) {
         return () => { active = false }
     }, [supabase, job.id])
 
-    // per-one cost/sell for an item
     function unit(it: CostingItem) {
         if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
         const its = lines.filter((l) => l.item_id === it.id)
-        return { cost: its.reduce((a, l) => a + lineCost(l), 0), sell: its.reduce((a, l) => a + lineSell(l), 0) }
+        const calculatedSell = its.reduce((a, l) => a + lineSell(l), 0)
+        const sellOverride = Number(it.unit_price || 0)
+        return {
+            cost: its.reduce((a, l) => a + lineCost(l), 0),
+            sell: sellOverride > 0 ? sellOverride : calculatedSell,
+        }
     }
 
     const rows = items.map((it) => {
@@ -69,8 +72,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const jobCost = rows.reduce((a, r) => a + r.totalCost, 0)
     const jobSell = rows.reduce((a, r) => a + r.totalSell, 0)
     const margin = jobSell > 0 ? 1 - jobCost / jobSell : 0
-    const adjustedNum = adjusted.trim() === "" ? jobSell : Number(adjusted) || jobSell
-    const profit = adjustedNum - jobCost
+    const profit = jobSell - jobCost
 
     async function addItem(mode: "build" | "simple") {
         const maxSort = Math.max(0, ...items.map((i) => i.sort))
@@ -108,7 +110,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: tpl.id })
         if (error) return toast.error(error.message)
         toast.success(`Saved "${it.name || "item"}" to Products`)
-        setProducts(null) // invalidate cached product list so the picker re-fetches
+        setProducts(null)
     }
 
     async function patchItem(id: string, patch: Partial<CostingItem>) {
@@ -125,12 +127,6 @@ export function ItemsList({ job }: { job: CostingJob }) {
         setDeleteTarget(null)
         const { error } = await supabase.from("costing_items").delete().eq("id", id)
         if (error) toast.error(error.message)
-    }
-
-    async function saveAdjusted(value: string) {
-        const num = value.trim() === "" ? null : Number(value)
-        if (num != null && isNaN(num)) return
-        await supabase.from("costing_jobs").update({ adjusted_total: num }).eq("id", job.id)
     }
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
@@ -169,7 +165,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 <th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th>
                                 <th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th>
                                 <th className="font-medium px-2 py-2 w-28 text-right">Total</th>
-                                <th className="font-medium px-2 py-2 w-16 text-right">Margin</th>
+                                <th className="font-medium px-2 py-2 w-20 text-right">Margin</th>
                                 <th className="w-16"></th>
                             </tr>
                         </thead>
@@ -192,7 +188,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                             {build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} onCommit={(v) => patchItem(it.id, { unit_cost: v ?? 0 })} />}
                                         </td>
                                         <td className="px-2 py-1.5 text-right tabular-nums">
-                                            {build ? nz(us) : <NumCell value={Number(it.unit_price)} onCommit={(v) => patchItem(it.id, { unit_price: v ?? 0 })} />}
+                                            <NumCell value={us} onCommit={(v) => patchItem(it.id, { unit_price: v ?? 0 })} />
                                         </td>
                                         <td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td>
                                         <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td>
@@ -220,31 +216,38 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 )
                             })}
                         </tbody>
+                        <tfoot className="bg-muted/20 border-t border-border/70">
+                            <tr>
+                                <td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td>
+                                <td className="px-2 py-3 text-right">
+                                    <div className="text-[11px] text-muted-foreground">Cost</div>
+                                    <div className="font-semibold tabular-nums">{nz(jobCost)}</div>
+                                </td>
+                                <td className="px-2 py-3 text-right">
+                                    <div className="text-[11px] text-muted-foreground">Sell</div>
+                                    <div className="font-semibold tabular-nums">{nz(jobSell)}</div>
+                                </td>
+                                <td className="px-2 py-3 text-right">
+                                    <div className="text-[11px] text-muted-foreground">Profit</div>
+                                    <div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div>
+                                </td>
+                                <td className="px-2 py-3 text-right">
+                                    <div className="text-[11px] text-muted-foreground">Margin</div>
+                                    <div className="font-semibold tabular-nums">{pct(margin)}</div>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             )}
-
-            {/* Job totals */}
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                <Tile label="Cost" value={nz(jobCost)} />
-                <Tile label="Sell" value={nz(jobSell)} />
-                <Tile label="Margin" value={pct(margin)} />
-                <div>
-                    <label className="text-xs text-muted-foreground">Adjusted total (override)</label>
-                    <input type="number" step="any" value={adjusted} placeholder={jobSell.toFixed(2)}
-                        onChange={(e) => setAdjusted(e.target.value)} onBlur={(e) => saveAdjusted(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums" />
-                </div>
-                <Tile label="Profit" value={nz(profit)} className={profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"} />
-            </div>
 
             <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
                 <DialogContent className="sm:max-w-[440px]">
                     <DialogHeader>
                         <DialogTitle>Delete this item?</DialogTitle>
                         <DialogDescription>
-                            <strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be
-                            permanently deleted. This can&apos;t be undone.
+                            <strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be permanently deleted. This can&apos;t be undone.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -284,15 +287,6 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
-    )
-}
-
-function Tile({ label, value, className = "" }: { label: string; value: string; className?: string }) {
-    return (
-        <div>
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className={`text-lg font-semibold tabular-nums mt-0.5 ${className}`}>{value}</div>
         </div>
     )
 }
