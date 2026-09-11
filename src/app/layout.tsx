@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Providers } from "@/components/providers"
+import { PwaRegister } from "@/components/pwa-register"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +17,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RPM - rodier property maintenance",
-  description: "Asset Management for St Pierre's Sushi",
+  title: "RPM - Rodier Property Maintenance",
+  description: "Rodier Property Maintenance",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "RPM",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/R.jpg",
+    apple: "/R.jpg",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#111827",
 };
 
 export default function RootLayout({
@@ -27,9 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
@@ -39,6 +55,7 @@ export default function RootLayout({
           <Providers>
             {children}
           </Providers>
+          <PwaRegister />
           <Toaster />
         </ThemeProvider>
       </body>
