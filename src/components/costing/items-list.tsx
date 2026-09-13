@@ -18,14 +18,8 @@ const lineCost = (l: CostingLine) => Number(l.qty) * Number(l.unit_cost)
 const unitSell = (l: CostingLine) => l.unit_sell_override != null ? Number(l.unit_sell_override) : Number(l.unit_cost) * (1 + Number(l.markup))
 const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
 
-type XeroProduct = {
-    id: string
-    code: string
-    name: string
-    description: string
-    sell: number
-    cost: number
-}
+type XeroProduct = { id: string; code: string; name: string; description: string; sell: number; cost: number }
+type Suggestion = { key: string; source: "rpm" | "xero"; name: string; detail: string; sell: number; rpm?: CostingItem; xero?: XeroProduct }
 
 export function ItemsList({ job }: { job: CostingJob }) {
     const supabase = useMemo(() => createClient(), [])
@@ -39,6 +33,8 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [xeroError, setXeroError] = useState<string | null>(null)
     const [productSearch, setProductSearch] = useState("")
     const [productOpen, setProductOpen] = useState(false)
+    const [editingName, setEditingName] = useState<string | null>(null)
+    const [nameDraft, setNameDraft] = useState<Record<string, string>>({})
 
     async function reload() {
         const [{ data: its }, { data: ls }] = await Promise.all([
@@ -47,28 +43,8 @@ export function ItemsList({ job }: { job: CostingJob }) {
         ])
         setItems((its as CostingItem[]) || []); setLines((ls as CostingLine[]) || [])
     }
-    useEffect(() => { let active = true; (async () => { await reload(); if (active) setLoading(false) })(); return () => { active = false } }, [job.id])
 
-    function unit(it: CostingItem) {
-        if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
-        const ls = lines.filter(l => l.item_id === it.id)
-        const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
-        const override = Number(it.unit_price || 0)
-        return { cost: ls.reduce((a, l) => a + lineCost(l), 0), sell: override > 0 ? override : calculatedSell }
-    }
-    const rows = items.map(it => { const u = unit(it); const qty = Number(it.qty) || 1; return { it, unitCost: u.cost, unitSell: u.sell, totalCost: qty * u.cost, totalSell: qty * u.sell } })
-    const jobCost = rows.reduce((a, r) => a + r.totalCost, 0)
-    const jobSell = rows.reduce((a, r) => a + r.totalSell, 0)
-    const profit = jobSell - jobCost
-    const margin = jobSell > 0 ? 1 - jobCost / jobSell : 0
-
-    async function patchItem(id: string, patch: Partial<CostingItem>) { setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i)); const { error } = await supabase.from("costing_items").update(patch).eq("id", id); if (error) toast.error(error.message) }
-    async function addItem(mode: "build" | "simple") { const maxSort = Math.max(0, ...items.map(i => i.sort)); const { data, error } = await supabase.from("costing_items").insert({ job_id: job.id, name: "", mode, qty: 1, sort: maxSort + 1 }).select("*").single(); if (error) return toast.error(error.message); const item = data as CostingItem; setItems(p => [...p, item]); if (mode === "build") router.push(`/quoting/${job.id}/item/${item.id}`) }
-    async function confirmDelete() { if (!deleteTarget) return; const id = deleteTarget.id; setDeleteTarget(null); setItems(p => p.filter(i => i.id !== id)); setLines(p => p.filter(l => l.item_id !== id)); const { error } = await supabase.from("costing_items").delete().eq("id", id); if (error) toast.error(error.message) }
-
-    async function openProducts() {
-        setProductOpen(true)
-        setProductSearch("")
+    async function loadLibraries() {
         if (products === null) {
             const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
             const { data } = tpl?.id ? await supabase.from("costing_items").select("*").eq("job_id", tpl.id).order("name") : { data: [] }
@@ -88,48 +64,74 @@ export function ItemsList({ job }: { job: CostingJob }) {
         }
     }
 
-    async function addProduct(p: CostingItem) {
-        setProductOpen(false)
-        const { error } = await supabase.rpc("clone_costing_item", { src_item: p.id, target_job: job.id })
-        if (error) return toast.error(error.message)
-        toast.success(`Added "${p.name || "product"}"`)
-        reload()
-    }
+    useEffect(() => { let active = true; (async () => { await reload(); if (active) setLoading(false) })(); return () => { active = false } }, [job.id])
 
-    async function addXeroProduct(p: XeroProduct) {
-        const maxSort = Math.max(0, ...items.map(i => i.sort))
-        const { data, error } = await supabase.from("costing_items").insert({
-            job_id: job.id,
-            name: p.name || p.code || "Xero item",
-            details: p.description || null,
-            mode: "simple",
-            qty: 1,
-            unit_cost: Number(p.cost || 0),
-            unit_price: Number(p.sell || 0),
-            sort: maxSort + 1,
-        }).select("*").single()
-        if (error) return toast.error(error.message)
-        setItems(prev => [...prev, data as CostingItem])
-        setProductOpen(false)
-        toast.success(`Added "${p.name || p.code}" from Xero`)
+    function unit(it: CostingItem) {
+        if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
+        const ls = lines.filter(l => l.item_id === it.id)
+        const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
+        const override = Number(it.unit_price || 0)
+        return { cost: ls.reduce((a, l) => a + lineCost(l), 0), sell: override > 0 ? override : calculatedSell }
     }
+    const rows = items.map(it => { const u = unit(it); const qty = Number(it.qty) || 1; return { it, unitCost: u.cost, unitSell: u.sell, totalCost: qty * u.cost, totalSell: qty * u.sell } })
+    const jobCost = rows.reduce((a, r) => a + r.totalCost, 0)
+    const jobSell = rows.reduce((a, r) => a + r.totalSell, 0)
+    const profit = jobSell - jobCost
+    const margin = jobSell > 0 ? 1 - jobCost / jobSell : 0
 
+    async function patchItem(id: string, patch: Partial<CostingItem>) { setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i)); const { error } = await supabase.from("costing_items").update(patch).eq("id", id); if (error) toast.error(error.message) }
+    async function addItem(mode: "build" | "simple") { const maxSort = Math.max(0, ...items.map(i => i.sort)); const { data, error } = await supabase.from("costing_items").insert({ job_id: job.id, name: "", mode, qty: 1, sort: maxSort + 1 }).select("*").single(); if (error) return toast.error(error.message); const item = data as CostingItem; setItems(p => [...p, item]); if (mode === "build") router.push(`/quoting/${job.id}/item/${item.id}`); else { setEditingName(item.id); setNameDraft(d => ({ ...d, [item.id]: "" })); loadLibraries() } }
+    async function confirmDelete() { if (!deleteTarget) return; const id = deleteTarget.id; setDeleteTarget(null); setItems(p => p.filter(i => i.id !== id)); setLines(p => p.filter(l => l.item_id !== id)); const { error } = await supabase.from("costing_items").delete().eq("id", id); if (error) toast.error(error.message) }
+
+    async function openProducts() { setProductOpen(true); setProductSearch(""); await loadLibraries() }
+    async function addProduct(p: CostingItem) { setProductOpen(false); const { error } = await supabase.rpc("clone_costing_item", { src_item: p.id, target_job: job.id }); if (error) return toast.error(error.message); toast.success(`Added "${p.name || "product"}"`); reload() }
+    async function addXeroProduct(p: XeroProduct) { const maxSort = Math.max(0, ...items.map(i => i.sort)); const { data, error } = await supabase.from("costing_items").insert({ job_id: job.id, name: p.name || p.code || "Xero item", details: p.description || null, mode: "simple", qty: 1, unit_cost: Number(p.cost || 0), unit_price: Number(p.sell || 0), sort: maxSort + 1 }).select("*").single(); if (error) return toast.error(error.message); setItems(prev => [...prev, data as CostingItem]); setProductOpen(false); toast.success(`Added "${p.name || p.code}" from Xero`) }
     async function saveAsProduct(it: CostingItem) { const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle(); if (!tpl?.id) return toast.error("Product library not found"); const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: tpl.id }); if (error) return toast.error(error.message); toast.success(`Saved "${it.name || "item"}" to Products`); setProducts(null) }
+
+    function suggestionsFor(it: CostingItem): Suggestion[] {
+        const q = (nameDraft[it.id] ?? it.name ?? "").trim().toLowerCase()
+        if (!q || q.length < 2) return []
+        const rpmMatches: Suggestion[] = (products || []).filter(p => `${p.name || ""} ${p.details || ""}`.toLowerCase().includes(q)).slice(0, 5).map(p => ({ key: `rpm-${p.id}`, source: "rpm", name: p.name || "Untitled product", detail: p.details || (p.mode === "build" ? "RPM product with BOM" : "RPM product"), sell: Number(p.unit_price || 0), rpm: p }))
+        const rpmNames = new Set((products || []).map(p => (p.name || "").trim().toLowerCase()).filter(Boolean))
+        const xeroMatches: Suggestion[] = (xeroProducts || []).filter(p => !rpmNames.has((p.name || "").trim().toLowerCase()) && `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(q)).slice(0, 7).map(p => ({ key: `xero-${p.id}`, source: "xero", name: p.name || p.code, detail: p.description || p.code, sell: Number(p.sell || 0), xero: p }))
+        return [...rpmMatches, ...xeroMatches].slice(0, 8)
+    }
+
+    async function chooseSuggestion(it: CostingItem, s: Suggestion) {
+        setEditingName(null)
+        if (s.source === "xero" && s.xero) {
+            const p = s.xero
+            setNameDraft(d => ({ ...d, [it.id]: p.name || p.code }))
+            await patchItem(it.id, { name: p.name || p.code, details: p.description || null, mode: "simple", unit_cost: Number(p.cost || 0), unit_price: Number(p.sell || 0) })
+            toast.success(`Loaded "${p.name || p.code}" from Xero`)
+            return
+        }
+        if (s.rpm) {
+            const { error } = await supabase.rpc("clone_costing_item", { src_item: s.rpm.id, target_job: job.id })
+            if (error) return toast.error(error.message)
+            await supabase.from("costing_items").delete().eq("id", it.id)
+            toast.success(`Loaded "${s.rpm.name || "product"}" from RPM`)
+            reload()
+        }
+    }
+
+    async function commitName(it: CostingItem) {
+        const value = nameDraft[it.id] ?? it.name
+        setEditingName(null)
+        if (value !== it.name) await patchItem(it.id, { name: value })
+    }
 
     const search = productSearch.trim().toLowerCase()
     const filteredRpm = (products || []).filter(p => !search || `${p.name || ""} ${p.details || ""}`.toLowerCase().includes(search))
     const rpmNames = new Set((products || []).map(p => (p.name || "").trim().toLowerCase()).filter(Boolean))
-    const filteredXero = (xeroProducts || []).filter(p => {
-        if (rpmNames.has((p.name || "").trim().toLowerCase())) return false
-        return !search || `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(search)
-    })
+    const filteredXero = (xeroProducts || []).filter(p => { if (rpmNames.has((p.name || "").trim().toLowerCase())) return false; return !search || `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(search) })
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
     return <div className="mt-6 space-y-5">
         <div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">Items in this job — signs with their own BOM (build), or simple cost lines (travel, freight…).</p><div className="flex items-center gap-2"><Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button><Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button><Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => addItem("simple")}><Plus className="size-3.5" /> Simple item</Button></div></div>
-        {rows.length === 0 ? <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">No items yet.</div> : <div className="border border-border/60 rounded-lg overflow-x-auto"><table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground text-xs"><tr className="text-left"><th className="font-medium px-3 py-2 min-w-[200px]">Item</th><th className="font-medium px-2 py-2 w-20">Type</th><th className="font-medium px-2 py-2 w-16 text-right">Qty</th><th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th><th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th><th className="font-medium px-2 py-2 w-28 text-right">Total</th><th className="font-medium px-2 py-2 w-20 text-right">Margin</th><th className="w-24"></th></tr></thead>
-            <tbody>{rows.map(({ it, unitCost, unitSell: us, totalSell }) => { const m = us > 0 ? 1 - unitCost / us : 0; const build = it.mode === "build"; return <tr key={it.id} className="border-t border-border/60 group"><td className="px-3 py-1.5"><TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /></td><td className="px-2 py-1.5"><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></td><td className="px-2 py-1.5"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td><td className="px-1 py-1.5"><div className="flex justify-end gap-1">{build && <button onClick={() => router.push(`/quoting/${job.id}/item/${it.id}`)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}<button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr> })}</tbody>
+        {rows.length === 0 ? <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">No items yet.</div> : <div className="border border-border/60 rounded-lg overflow-visible"><table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground text-xs"><tr className="text-left"><th className="font-medium px-3 py-2 min-w-[260px]">Item</th><th className="font-medium px-2 py-2 w-20">Type</th><th className="font-medium px-2 py-2 w-16 text-right">Qty</th><th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th><th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th><th className="font-medium px-2 py-2 w-28 text-right">Total</th><th className="font-medium px-2 py-2 w-20 text-right">Margin</th><th className="w-24"></th></tr></thead>
+            <tbody>{rows.map(({ it, unitCost, unitSell: us, totalSell }) => { const m = us > 0 ? 1 - unitCost / us : 0; const build = it.mode === "build"; const suggestions = !build && editingName === it.id ? suggestionsFor(it) : []; return <tr key={it.id} className="border-t border-border/60 group"><td className="px-3 py-1.5 relative">{build ? <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /> : <><input value={nameDraft[it.id] ?? it.name ?? ""} placeholder="Start typing an item…" onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })); loadLibraries() }} onChange={e => { setNameDraft(d => ({ ...d, [it.id]: e.target.value })); setEditingName(it.id) }} onKeyDown={e => { if (e.key === "Enter" && suggestions[0]) { e.preventDefault(); chooseSuggestion(it, suggestions[0]) } else if (e.key === "Escape") setEditingName(null) }} onBlur={() => setTimeout(() => commitName(it), 150)} className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none" />{suggestions.length > 0 && <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">{suggestions.map(s => <button key={s.key} type="button" onMouseDown={e => e.preventDefault()} onClick={() => chooseSuggestion(it, s)} className="w-full px-3 py-2 text-left hover:bg-muted/60 border-b last:border-b-0 flex gap-3 items-start"><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{s.name}</span><Badge variant="secondary" className={s.source === "rpm" ? "text-[10px] bg-violet-500/15 text-violet-600" : "text-[10px] bg-blue-500/15 text-blue-600"}>{s.source === "rpm" ? "RPM" : "Xero"}</Badge></span>{s.detail && <span className="block text-xs text-muted-foreground truncate">{s.detail}</span>}</span><span className="tabular-nums text-sm">{s.sell ? nz(s.sell) : ""}</span></button>)}</div>}</>}</td><td className="px-2 py-1.5"><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></td><td className="px-2 py-1.5"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td><td className="px-1 py-1.5"><div className="flex justify-end gap-1">{build && <button onClick={() => router.push(`/quoting/${job.id}/item/${it.id}`)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}<button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr> })}</tbody>
             <tfoot className="bg-muted/20 border-t border-border/70"><tr><td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td><td></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td></tr></tfoot>
         </table></div>}
         <Dialog open={deleteTarget != null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}><DialogContent className="sm:max-w-[440px]"><DialogHeader><DialogTitle>Delete this item?</DialogTitle><DialogDescription><strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be permanently deleted. This can&apos;t be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="destructive" onClick={confirmDelete}>Delete item</Button></DialogFooter></DialogContent></Dialog>
