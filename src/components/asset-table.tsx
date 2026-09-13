@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import {
     Table,
     TableBody,
@@ -8,7 +9,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ImageIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Asset } from "@/types/database"
 
@@ -41,14 +42,19 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
         return `Q${quarter} ${date.getFullYear()}`
     }
 
+    const getThumbnail = (asset: Asset) => {
+        const photos = asset.asset_photos || []
+        return photos.find(photo => photo.is_thumbnail) || [...photos].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    }
+
     return (
         <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
             <Table>
                 <TableHeader>
                     <TableRow className="border-b border-border/60 hover:bg-transparent">
+                        <TableHead className="h-10 text-xs font-medium text-muted-foreground w-[92px]">Photo</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground">Type / group</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground">Status</TableHead>
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground">Photo</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground">Dimensions</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground">Next service</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground text-right w-[80px]"></TableHead>
@@ -64,6 +70,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                     ) : (
                         assets.map((asset) => {
                             const status = getStatus(asset)
+                            const thumbnail = getThumbnail(asset)
                             const assetHref = `/stores/${storeId}/assets/${asset.id}`
                             return (
                                 <TableRow
@@ -72,6 +79,23 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                                     onMouseEnter={() => router.prefetch(assetHref)}
                                     className="group border-b border-border/40 last:border-b-0 hover:bg-accent/30 transition-colors cursor-pointer"
                                 >
+                                    <TableCell className="py-2.5">
+                                        {thumbnail ? (
+                                            <div className="relative h-12 w-16 overflow-hidden rounded-md border border-border/60 bg-muted/40">
+                                                <Image
+                                                    src={thumbnail.url}
+                                                    alt={`${asset.asset_types?.label || "Asset"} thumbnail`}
+                                                    fill
+                                                    className="object-cover"
+                                                    sizes="64px"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="h-12 w-16 rounded-md border border-dashed border-border/60 bg-muted/20 flex items-center justify-center text-muted-foreground/50">
+                                                <ImageIcon className="size-4" />
+                                            </div>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="py-3">
                                         <div className="flex flex-col gap-0.5">
                                             <span className="font-medium text-foreground group-hover:text-primary transition-colors">{asset.asset_types?.label}</span>
@@ -85,9 +109,6 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                                             <span className={`size-1.5 rounded-full ${status.dot}`} />
                                             {status.label}
                                         </div>
-                                    </TableCell>
-                                    <TableCell className="py-3 text-sm text-muted-foreground">
-                                        {asset.asset_photos && asset.asset_photos.length > 0 ? "Yes" : "—"}
                                     </TableCell>
                                     <TableCell className="py-3 text-sm text-muted-foreground">
                                         {asset.asset_dimensions || "—"}
