@@ -12,10 +12,6 @@ function shortSiteName(name: string) {
     return name.replace(/\bfreestander\b/gi, "").replace(/\bstand\s*alone\b/gi, "").replace(/\s+/g, " ").trim()
 }
 
-function rpmReference(id: string) {
-    return `RPM-${id.slice(0, 8).toUpperCase()}`
-}
-
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
     const response = await fetch(url, {
         ...init,
@@ -125,8 +121,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
                 Reference: visibleReference,
-                Title: job.title,
-                Summary: rpmReference(id),
                 Terms: job.details || undefined,
                 LineItems: lineItems,
             }] }),
