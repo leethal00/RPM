@@ -358,5 +358,6 @@ export interface AssetPhoto {
   url: string
   caption: string | null
   internal_only: boolean
+  is_thumbnail: boolean
   created_at: string
 }
