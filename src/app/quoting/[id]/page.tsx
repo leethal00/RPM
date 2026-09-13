@@ -163,11 +163,13 @@ export default function CostingJobDetailPage() {
                                         </Button>
                                     </>
                                 )}
-                                <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
-                                    <Link href={`/quoting/${id}/job-card`} target="_blank">
-                                        <FileText className="size-3.5" /> Job card
-                                    </Link>
-                                </Button>
+                                {["approved", "in_progress", "complete", "invoiced"].includes(job.status) && (
+                                    <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
+                                        <Link href={`/quoting/${id}/job-card`} target="_blank">
+                                            <FileText className="size-3.5" /> Job card
+                                        </Link>
+                                    </Button>
+                                )}
                                 {xeroQuoteUrl && job.status !== "quote" ? (
                                     <a href={xeroQuoteUrl} target="_blank" rel="noreferrer" title="Open this quote in Xero">
                                         <Badge variant="secondary" className="cursor-pointer hover:bg-muted">{STATUS_LABEL[job.status]} <ExternalLink className="ml-1 inline size-3" /></Badge>
