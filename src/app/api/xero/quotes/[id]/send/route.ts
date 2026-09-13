@@ -96,7 +96,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,adjusted_total,status,xero_quote_id,client_id,store_id,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,contact_name,adjusted_total,status,xero_quote_id,client_id,store_id,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
@@ -151,6 +151,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const introDescription = [
             `${siteLabel}:`,
             job.details?.trim() || job.reference?.trim() || job.title.trim(),
+            job.contact_name?.trim() ? `Contact: ${job.contact_name.trim()}` : null,
         ].filter(Boolean).join("\n")
 
         const lineItems = [
