@@ -47,7 +47,6 @@ async function findContactId(
 ) {
     const siteShort = storeName ? shortSiteName(storeName) : ""
 
-    // Store-linked RPM work should prefer the site-specific Xero contact, e.g. "McDonalds Albany".
     if (siteShort) {
         const where = encodeURIComponent(`Name.Contains(\"${siteShort.replaceAll('"', '\\"')}\")`)
         const result = await xeroJson(`${XERO_API}/Contacts?where=${where}`, { method: "GET" }, accessToken, tenantId)
@@ -142,7 +141,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const expiry = new Date()
         expiry.setDate(expiry.getDate() + 30)
         const internalRef = rpmReference(id)
-        const visibleReference = job.reference?.trim() || store?.name || job.title
+        const visibleReference = job.title.trim()
         const xeroQuote = await xeroJson(`${XERO_API}/Quotes`, {
             method: "POST",
             body: JSON.stringify({
