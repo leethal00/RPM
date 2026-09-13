@@ -20,6 +20,20 @@ function shortSiteName(name: string) {
         .trim()
 }
 
+function cleanItemDetails(name: string, details?: string | null) {
+    const raw = (details || "").trim()
+    if (!raw) return ""
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return raw.replace(new RegExp(`^${escaped}\\s*[:—-]?\\s*`, "i"), "").trim()
+}
+
+function accountCodeForItem(name: string) {
+    const n = normalise(name)
+    if (n.includes("travel") || n.includes("mileage")) return "250"
+    if (n.includes("material")) return "240"
+    return "200"
+}
+
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
     const response = await fetch(url, {
         ...init,
@@ -109,7 +123,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const lines = costingLines || []
-        const lineItems = items.map((item) => {
+        const pricedLineItems = items.map((item) => {
             let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines
@@ -123,18 +137,27 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 const override = Number(item.unit_price || 0)
                 unitAmount = override > 0 ? override : calculated
             }
+            const details = cleanItemDetails(item.name, item.details)
             return {
-                Description: [item.name, item.details].filter(Boolean).join(" — "),
+                Description: details ? `${item.name}:\n${details}` : item.name,
                 Quantity: Number(item.qty || 1),
                 UnitAmount: Number(unitAmount.toFixed(2)),
+                AccountCode: accountCodeForItem(item.name),
+                TaxType: "OUTPUT2",
             }
         })
 
-        const itemTotal = lineItems.reduce((sum, line) => sum + line.Quantity * line.UnitAmount, 0)
-        const adjustedTotal = job.adjusted_total == null ? null : Number(job.adjusted_total)
-        if (adjustedTotal != null && Math.abs(adjustedTotal - itemTotal) > 0.005) {
-            lineItems.push({ Description: "Quote total adjustment", Quantity: 1, UnitAmount: Number((adjustedTotal - itemTotal).toFixed(2)) })
-        }
+        const siteLabel = store?.name ? `${clientName} ${store.name}`.trim() : clientName
+        const introDescription = [
+            `${siteLabel}:`,
+            job.details?.trim() || job.reference?.trim() || job.title.trim(),
+        ].filter(Boolean).join("\n")
+
+        const lineItems = [
+            { Description: introDescription },
+            { Description: "--" },
+            ...pricedLineItems,
+        ]
 
         const expiry = new Date()
         expiry.setDate(expiry.getDate() + 30)
@@ -148,7 +171,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                     ExpiryDate: isoDate(expiry),
                     Status: "DRAFT",
                     Reference: visibleReference,
-                    Terms: job.details || undefined,
                     LineItems: lineItems,
                 }],
             }),
