@@ -5,9 +5,9 @@ const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
 const CONNECTIONS_URL = "https://api.xero.com/connections"
 export const XERO_API = "https://api.xero.com/api.xro/2.0"
 
-// RPM only needs Xero Quotes/Invoices and Contacts at this stage.
-// New Xero apps use granular Accounting API scopes (2026+).
-export const XERO_SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts"
+// RPM needs Quotes/Invoices, Contacts, and Xero Items for quote autocomplete.
+// The Items endpoint is part of Xero's accounting settings scope.
+export const XERO_SCOPES = "openid profile email offline_access accounting.invoices accounting.contacts accounting.settings"
 
 type Tokens = { access_token: string; refresh_token: string; expires_in: number; scope: string }
 
