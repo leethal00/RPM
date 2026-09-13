@@ -120,7 +120,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
             lineItems.push({ Description: "Quote total adjustment", Quantity: 1, UnitAmount: Number((adjustedTotal - itemTotal).toFixed(2)) })
         }
 
-        const visibleReference = job.reference?.trim() || store?.name || job.title
+        const visibleReference = job.title.trim()
         const updated = await xeroJson(`${XERO_API}/Quotes`, {
             method: "POST",
             body: JSON.stringify({ Quotes: [{
