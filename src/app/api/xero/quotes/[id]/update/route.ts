@@ -12,6 +12,20 @@ function shortSiteName(name: string) {
     return name.replace(/\bfreestander\b/gi, "").replace(/\bstand\s*alone\b/gi, "").replace(/\s+/g, " ").trim()
 }
 
+function cleanItemDetails(name: string, details?: string | null) {
+    const raw = (details || "").trim()
+    if (!raw) return ""
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return raw.replace(new RegExp(`^${escaped}\\s*[:—-]?\\s*`, "i"), "").trim()
+}
+
+function accountCodeForItem(name: string) {
+    const n = normalise(name)
+    if (n.includes("travel") || n.includes("mileage")) return "250"
+    if (n.includes("material")) return "240"
+    return "200"
+}
+
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
     const response = await fetch(url, {
         ...init,
@@ -95,7 +109,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const lines = costingLines || []
-        const lineItems = (items || []).map((item) => {
+        const pricedLineItems = (items || []).map((item) => {
             let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
@@ -105,12 +119,26 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 const override = Number(item.unit_price || 0)
                 unitAmount = override > 0 ? override : calculated
             }
+            const details = cleanItemDetails(item.name, item.details)
             return {
-                Description: [item.name, item.details].filter(Boolean).join(" — "),
+                Description: details ? `${item.name}:\n${details}` : item.name,
                 Quantity: Number(item.qty || 1),
                 UnitAmount: Number(unitAmount.toFixed(2)),
+                AccountCode: accountCodeForItem(item.name),
+                TaxType: "OUTPUT2",
             }
         })
+
+        const siteLabel = store?.name ? `${clientName} ${store.name}`.trim() : clientName
+        const introDescription = [
+            `${siteLabel}:`,
+            job.details?.trim() || job.reference?.trim() || job.title.trim(),
+        ].filter(Boolean).join("\n")
+        const lineItems = [
+            { Description: introDescription },
+            { Description: "--" },
+            ...pricedLineItems,
+        ]
 
         const visibleReference = job.title.trim()
         const updated = await xeroJson(`${XERO_API}/Quotes`, {
@@ -121,7 +149,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
                 Reference: visibleReference,
-                Terms: job.details || undefined,
                 LineItems: lineItems,
             }] }),
         }, xero.accessToken, xero.tenantId)
