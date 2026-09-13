@@ -49,7 +49,6 @@ export interface Store {
   has_drive_thru: boolean
   created_at: string
   updated_at: string
-  // Joined relations
   assets?: Asset[]
   jobs?: Job[]
   projects?: Project[]
@@ -96,7 +95,6 @@ export interface Asset {
   notes: string | null
   created_at: string
   updated_at: string
-  // Joined relations
   asset_types?: AssetType
   asset_photos?: AssetPhoto[]
   stores?: Store
@@ -123,7 +121,6 @@ export interface Job {
   media_urls: string[]
   created_at: string
   updated_at: string
-  // Joined relations
   stores?: Store
   assets?: Asset
   vendors?: Vendor
@@ -144,14 +141,9 @@ export interface Project {
   created_by: string | null
   created_at: string
   updated_at: string
-  // Joined relations
   stores?: Store
   jobs?: Job[]
 }
-
-// ── Job Costing module ───────────────────────────────────────────────
-// Rodier-internal signage costing. New `costing_*` tables; see
-// docs/job-costing-data-model.md. Not exposed to client roles.
 
 export interface Material {
   id: string
@@ -207,7 +199,6 @@ export interface CostingJob {
   created_by: string | null
   created_at: string
   updated_at: string
-  // Joined relations
   clients?: Client | null
   stores?: Store | null
   costing_lines?: CostingLine[]
@@ -256,7 +247,6 @@ export interface CostingItem {
   sort: number
   created_at: string
   updated_at: string
-  // computed in app for build items
   costing_lines?: CostingLine[]
 }
 
@@ -348,7 +338,6 @@ export interface SitePhoto {
   is_primary: boolean
   created_at: string
   updated_at: string
-  // Joined relations
   album?: SitePhotoAlbum | null
 }
 
@@ -358,6 +347,6 @@ export interface AssetPhoto {
   url: string
   caption: string | null
   internal_only: boolean
-  is_thumbnail: boolean
+  is_thumbnail?: boolean
   created_at: string
 }
