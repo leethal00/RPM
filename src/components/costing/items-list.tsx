@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, ChevronRight, Package2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Plus, Trash2, ChevronRight, Package2, Search } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NumCell, TextCell } from "./cells"
@@ -17,6 +18,15 @@ const lineCost = (l: CostingLine) => Number(l.qty) * Number(l.unit_cost)
 const unitSell = (l: CostingLine) => l.unit_sell_override != null ? Number(l.unit_sell_override) : Number(l.unit_cost) * (1 + Number(l.markup))
 const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
 
+type XeroProduct = {
+    id: string
+    code: string
+    name: string
+    description: string
+    sell: number
+    cost: number
+}
+
 export function ItemsList({ job }: { job: CostingJob }) {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
@@ -25,6 +35,9 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<CostingItem | null>(null)
     const [products, setProducts] = useState<CostingItem[] | null>(null)
+    const [xeroProducts, setXeroProducts] = useState<XeroProduct[] | null>(null)
+    const [xeroError, setXeroError] = useState<string | null>(null)
+    const [productSearch, setProductSearch] = useState("")
     const [productOpen, setProductOpen] = useState(false)
 
     async function reload() {
@@ -52,19 +65,74 @@ export function ItemsList({ job }: { job: CostingJob }) {
     async function patchItem(id: string, patch: Partial<CostingItem>) { setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i)); const { error } = await supabase.from("costing_items").update(patch).eq("id", id); if (error) toast.error(error.message) }
     async function addItem(mode: "build" | "simple") { const maxSort = Math.max(0, ...items.map(i => i.sort)); const { data, error } = await supabase.from("costing_items").insert({ job_id: job.id, name: "", mode, qty: 1, sort: maxSort + 1 }).select("*").single(); if (error) return toast.error(error.message); const item = data as CostingItem; setItems(p => [...p, item]); if (mode === "build") router.push(`/quoting/${job.id}/item/${item.id}`) }
     async function confirmDelete() { if (!deleteTarget) return; const id = deleteTarget.id; setDeleteTarget(null); setItems(p => p.filter(i => i.id !== id)); setLines(p => p.filter(l => l.item_id !== id)); const { error } = await supabase.from("costing_items").delete().eq("id", id); if (error) toast.error(error.message) }
-    async function openProducts() { setProductOpen(true); if (products === null) { const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle(); const { data } = tpl?.id ? await supabase.from("costing_items").select("*").eq("job_id", tpl.id).order("name") : { data: [] }; setProducts((data as CostingItem[]) || []) } }
-    async function addProduct(p: CostingItem) { setProductOpen(false); const { error } = await supabase.rpc("clone_costing_item", { src_item: p.id, target_job: job.id }); if (error) return toast.error(error.message); toast.success(`Added "${p.name || "product"}"`); reload() }
+
+    async function openProducts() {
+        setProductOpen(true)
+        setProductSearch("")
+        if (products === null) {
+            const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
+            const { data } = tpl?.id ? await supabase.from("costing_items").select("*").eq("job_id", tpl.id).order("name") : { data: [] }
+            setProducts((data as CostingItem[]) || [])
+        }
+        if (xeroProducts === null) {
+            setXeroError(null)
+            try {
+                const response = await fetch("/api/xero/items", { cache: "no-store" })
+                const body = await response.json()
+                if (!response.ok) throw new Error(body?.error || "Could not load Xero items")
+                setXeroProducts((body?.items || []) as XeroProduct[])
+            } catch (error) {
+                setXeroProducts([])
+                setXeroError(error instanceof Error ? error.message : "Could not load Xero items")
+            }
+        }
+    }
+
+    async function addProduct(p: CostingItem) {
+        setProductOpen(false)
+        const { error } = await supabase.rpc("clone_costing_item", { src_item: p.id, target_job: job.id })
+        if (error) return toast.error(error.message)
+        toast.success(`Added "${p.name || "product"}"`)
+        reload()
+    }
+
+    async function addXeroProduct(p: XeroProduct) {
+        const maxSort = Math.max(0, ...items.map(i => i.sort))
+        const { data, error } = await supabase.from("costing_items").insert({
+            job_id: job.id,
+            name: p.name || p.code || "Xero item",
+            details: p.description || null,
+            mode: "simple",
+            qty: 1,
+            unit_cost: Number(p.cost || 0),
+            unit_price: Number(p.sell || 0),
+            sort: maxSort + 1,
+        }).select("*").single()
+        if (error) return toast.error(error.message)
+        setItems(prev => [...prev, data as CostingItem])
+        setProductOpen(false)
+        toast.success(`Added "${p.name || p.code}" from Xero`)
+    }
+
     async function saveAsProduct(it: CostingItem) { const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle(); if (!tpl?.id) return toast.error("Product library not found"); const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: tpl.id }); if (error) return toast.error(error.message); toast.success(`Saved "${it.name || "item"}" to Products`); setProducts(null) }
+
+    const search = productSearch.trim().toLowerCase()
+    const filteredRpm = (products || []).filter(p => !search || `${p.name || ""} ${p.details || ""}`.toLowerCase().includes(search))
+    const rpmNames = new Set((products || []).map(p => (p.name || "").trim().toLowerCase()).filter(Boolean))
+    const filteredXero = (xeroProducts || []).filter(p => {
+        if (rpmNames.has((p.name || "").trim().toLowerCase())) return false
+        return !search || `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(search)
+    })
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
     return <div className="mt-6 space-y-5">
-        <div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">Items in this job — signs with their own BOM (build), or simple cost lines (travel, freight…).</p><div className="flex items-center gap-2"><Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button><Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button><Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => addItem("simple")}><Plus className="size-3.5" /> Simple line</Button></div></div>
+        <div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">Items in this job — signs with their own BOM (build), or simple cost lines (travel, freight…).</p><div className="flex items-center gap-2"><Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button><Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button><Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => addItem("simple")}><Plus className="size-3.5" /> Simple item</Button></div></div>
         {rows.length === 0 ? <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">No items yet.</div> : <div className="border border-border/60 rounded-lg overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground text-xs"><tr className="text-left"><th className="font-medium px-3 py-2 min-w-[200px]">Item</th><th className="font-medium px-2 py-2 w-20">Type</th><th className="font-medium px-2 py-2 w-16 text-right">Qty</th><th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th><th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th><th className="font-medium px-2 py-2 w-28 text-right">Total</th><th className="font-medium px-2 py-2 w-20 text-right">Margin</th><th className="w-24"></th></tr></thead>
-            <tbody>{rows.map(({ it, unitCost, unitSell: us, totalSell }) => { const m = us > 0 ? 1 - unitCost / us : 0; const build = it.mode === "build"; return <tr key={it.id} className="border-t border-border/60 group"><td className="px-3 py-1.5"><TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /></td><td className="px-2 py-1.5"><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></td><td className="px-2 py-1.5"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td><td className="px-1 py-1.5"><div className="flex justify-end gap-1">{build && <button onClick={() => router.push(`/quoting/${job.id}/item/${it.id}`)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}<button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr> })}</tbody>
+            <tbody>{rows.map(({ it, unitCost, unitSell: us, totalSell }) => { const m = us > 0 ? 1 - unitCost / us : 0; const build = it.mode === "build"; return <tr key={it.id} className="border-t border-border/60 group"><td className="px-3 py-1.5"><TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /></td><td className="px-2 py-1.5"><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></td><td className="px-2 py-1.5"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td><td className="px-1 py-1.5"><div className="flex justify-end gap-1">{build && <button onClick={() => router.push(`/quoting/${job.id}/item/${it.id}`)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}<button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr> })}</tbody>
             <tfoot className="bg-muted/20 border-t border-border/70"><tr><td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td><td></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td></tr></tfoot>
         </table></div>}
         <Dialog open={deleteTarget != null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}><DialogContent className="sm:max-w-[440px]"><DialogHeader><DialogTitle>Delete this item?</DialogTitle><DialogDescription><strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be permanently deleted. This can&apos;t be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="destructive" onClick={confirmDelete}>Delete item</Button></DialogFooter></DialogContent></Dialog>
-        <Dialog open={productOpen} onOpenChange={setProductOpen}><DialogContent className="sm:max-w-[520px]"><DialogHeader><DialogTitle>Add a product</DialogTitle><DialogDescription>Drops a saved product (with its full BOM) into this job.</DialogDescription></DialogHeader><div className="max-h-[360px] overflow-y-auto">{products === null ? <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div> : products.length === 0 ? <div className="py-8 text-center text-sm text-muted-foreground">No products yet.</div> : <ul className="divide-y divide-border/60">{products.map(p => <li key={p.id}><button type="button" onClick={() => addProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center gap-2"><Package2 className="size-4 text-muted-foreground" /><span className="flex-1">{p.name || "Untitled product"}</span></button></li>)}</ul>}</div></DialogContent></Dialog>
+        <Dialog open={productOpen} onOpenChange={setProductOpen}><DialogContent className="sm:max-w-[620px]"><DialogHeader><DialogTitle>Add a product</DialogTitle><DialogDescription>Search RPM products with BOMs and existing Xero items. Xero items come in as editable simple items; an RPM product with the same name takes priority.</DialogDescription></DialogHeader><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input autoFocus value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search product, item code or description…" className="pl-8" /></div><div className="max-h-[420px] overflow-y-auto border rounded-md"><ul className="divide-y divide-border/60">{filteredRpm.map(p => <li key={`rpm-${p.id}`}><button type="button" onClick={() => addProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2"><Package2 className="size-4 text-muted-foreground mt-0.5" /><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{p.name || "Untitled product"}</span><Badge variant="secondary" className="text-[10px] bg-violet-500/15 text-violet-600">RPM {p.mode === "build" ? "BOM" : "Product"}</Badge></span>{p.details && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.details}</span>}</span></button></li>)}{filteredXero.map(p => <li key={`xero-${p.id}`}><button type="button" onClick={() => addXeroProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2"><Package2 className="size-4 text-muted-foreground mt-0.5" /><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{p.name}</span><Badge variant="secondary" className="text-[10px] bg-blue-500/15 text-blue-600">Xero item</Badge>{p.code && <span className="text-[11px] text-muted-foreground">{p.code}</span>}<span className="ml-auto text-sm tabular-nums">{nz(p.sell)}</span></span>{p.description && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.description}</span>}</span></button></li>)}</ul>{products === null || xeroProducts === null ? <div className="py-8 text-center text-sm text-muted-foreground">Loading products…</div> : filteredRpm.length === 0 && filteredXero.length === 0 ? <div className="py-8 text-center text-sm text-muted-foreground">No matching products.</div> : null}</div>{xeroError && <p className="text-xs text-amber-600">Xero items unavailable: {xeroError}. RPM products are still available.</p>}</DialogContent></Dialog>
     </div>
 }
