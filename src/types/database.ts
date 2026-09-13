@@ -186,6 +186,7 @@ export interface CostingJob {
   store_id: string | null
   reference: string | null
   details: string | null
+  contact_name: string | null
   quoted_by: string | null
   qty: number
   status: CostingStatus
