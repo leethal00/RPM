@@ -35,6 +35,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         client_id: job?.client_id || "none",
         store_id: job?.store_id || "none",
         details: job?.details || "",
+        contact_name: job?.contact_name || "",
     })
 
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
@@ -80,7 +81,6 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         fetchRefs()
     }, [supabase])
 
-    // Sites belong to a client — only offer the selected client's sites.
     const hasClient = formData.client_id !== "none"
     const clientStores = hasClient ? stores.filter((s) => s.client_id === formData.client_id) : []
 
@@ -104,6 +104,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
             client_id: formData.client_id === "none" ? null : formData.client_id,
             store_id: formData.store_id === "none" ? null : formData.store_id,
             details: formData.details || null,
+            contact_name: formData.contact_name.trim() || null,
         }
 
         if (job) {
@@ -125,7 +126,6 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
             return
         }
 
-        // New jobs get one default "build" item so single-item jobs are one-click.
         if (!job && data?.id) {
             await supabase.from("costing_items").insert({
                 job_id: data.id, name: formData.title, mode: "build", qty: parseFloat(formData.qty) || 1, sort: 0,
@@ -193,7 +193,6 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                                 value={formData.client_id}
                                 onValueChange={(v) => {
                                     if (v === "__new__") { setAddingClient(true); return }
-                                    // Clear the site if it doesn't belong to the newly-selected client.
                                     setFormData((f) => {
                                         const keep = stores.some((s) => s.id === f.store_id && s.client_id === v)
                                         return { ...f, client_id: v, store_id: keep ? f.store_id : "none" }
@@ -250,6 +249,17 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                             </Select>
                         )}
                     </div>
+                </div>
+
+                <div className="grid gap-2">
+                    <Label htmlFor="contact_name" className="text-xs font-medium text-muted-foreground">Quote contact (optional)</Label>
+                    <Input
+                        id="contact_name"
+                        placeholder="e.g. Moshik Yunus"
+                        value={formData.contact_name}
+                        onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Shown as “Contact: …” in the introductory line of the Xero quote.</p>
                 </div>
 
                 <div className="grid gap-2">
