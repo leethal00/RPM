@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, Lock, LockOpen } from "lucide-react"
+import { ImageIcon, Plus, Trash2, Loader2, Camera, UploadCloud, Lock, LockOpen, Star, Check } from "lucide-react"
 import { toast } from "sonner"
 import type { AssetPhoto } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
@@ -60,6 +60,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
         }
         let succeeded = 0
         let failed = 0
+        let makeNextThumbnail = !photos.some(photo => photo.is_thumbnail)
         try {
             for (const raw of images) {
                 try {
@@ -84,9 +85,11 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                             url: publicUrl,
                             caption: file.name,
                             internal_only: uploadInternalOnly,
+                            is_thumbnail: makeNextThumbnail,
                         })
                     if (dbError) throw dbError
 
+                    if (makeNextThumbnail) makeNextThumbnail = false
                     succeeded++
                 } catch (err: unknown) {
                     failed++
@@ -127,6 +130,38 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
         if (files.length > 0) uploadFiles(files)
     }
 
+    const setThumbnail = async (photo: AssetPhoto) => {
+        if (photo.is_thumbnail) return
+        const previous = photos.find(p => p.is_thumbnail)
+
+        if (previous) {
+            const { error: clearError } = await supabase
+                .from('asset_photos')
+                .update({ is_thumbnail: false })
+                .eq('id', previous.id)
+            if (clearError) {
+                toast.error(`Could not change thumbnail: ${clearError.message}`)
+                return
+            }
+        }
+
+        const { error } = await supabase
+            .from('asset_photos')
+            .update({ is_thumbnail: true })
+            .eq('id', photo.id)
+
+        if (error) {
+            if (previous) {
+                await supabase.from('asset_photos').update({ is_thumbnail: true }).eq('id', previous.id)
+            }
+            toast.error(`Could not change thumbnail: ${error.message}`)
+            return
+        }
+
+        setPhotos(current => current.map(p => ({ ...p, is_thumbnail: p.id === photo.id })))
+        toast.success("Asset thumbnail updated")
+    }
+
     const handleDelete = async (photo: AssetPhoto) => {
         if (!confirm("Are you sure you want to delete this asset photo?")) return
         try {
@@ -137,7 +172,19 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
             }
             const { error } = await supabase.from('asset_photos').delete().eq('id', photo.id)
             if (error) throw error
-            setPhotos(photos.filter(p => p.id !== photo.id))
+
+            const remaining = photos.filter(p => p.id !== photo.id)
+            if (photo.is_thumbnail && remaining.length > 0) {
+                const replacement = remaining[0]
+                const { error: replacementError } = await supabase
+                    .from('asset_photos')
+                    .update({ is_thumbnail: true })
+                    .eq('id', replacement.id)
+                if (!replacementError) {
+                    replacement.is_thumbnail = true
+                }
+            }
+            setPhotos(remaining)
             toast.success("Asset photo deleted")
         } catch (error: unknown) {
             toast.error(`Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`)
@@ -165,10 +212,13 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
     return (
         <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
-                <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
-                    <Camera className="size-3.5" />
-                    Asset photos
-                </h3>
+                <div>
+                    <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-1">
+                        <Camera className="size-3.5" />
+                        Asset photos
+                    </h3>
+                    {photos.length > 0 && <p className="text-[11px] text-muted-foreground mt-1">Choose a thumbnail to show in the site asset list.</p>}
+                </div>
                 <div className="flex flex-col items-end gap-1.5">
                     <Label htmlFor="asset-photo-upload" className="cursor-pointer">
                         <div className="inline-flex items-center gap-1.5 border border-border/80 bg-card text-foreground px-2.5 py-1 rounded-md hover:bg-accent/40 transition-colors text-xs">
@@ -221,7 +271,7 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                 ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 p-2">
                         {photos.map((photo) => (
-                            <div key={photo.id} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
+                            <div key={photo.id} className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${photo.is_thumbnail ? 'border-emerald-500 ring-2 ring-emerald-500/30' : photo.internal_only ? 'border-amber-400/60 ring-1 ring-amber-400/30' : 'border-border/60'}`}>
                                 <Image
                                     src={photo.url}
                                     alt={photo.caption ?? "Asset photo"}
@@ -236,7 +286,23 @@ export function AssetPhotoGallery({ assetId }: AssetPhotoGalleryProps) {
                                         Internal
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                {photo.is_thumbnail && (
+                                    <div className="absolute top-1 right-1 inline-flex items-center gap-0.5 bg-emerald-600/95 text-white text-[9px] font-medium px-1.5 py-0.5 rounded">
+                                        <Check className="size-2.5" />
+                                        Thumbnail
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                    <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="size-7 rounded-full"
+                                        title={photo.is_thumbnail ? "Current thumbnail" : "Set as thumbnail"}
+                                        onClick={() => setThumbnail(photo)}
+                                        disabled={photo.is_thumbnail}
+                                    >
+                                        {photo.is_thumbnail ? <Check className="size-3.5" /> : <Star className="size-3.5" />}
+                                    </Button>
                                     <Button
                                         variant="secondary"
                                         size="icon"
