@@ -67,7 +67,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     const admin = xeroAdmin()
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,adjusted_total,xero_quote_id,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,xero_quote_id,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
@@ -102,10 +102,12 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const lineItems = (items || []).map((item) => {
             let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
-                unitAmount = lines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
+                const calculated = lines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
                     const sell = line.unit_sell_override != null ? Number(line.unit_sell_override) : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
                     return sum + Number(line.qty || 0) * sell
                 }, 0)
+                const override = Number(item.unit_price || 0)
+                unitAmount = override > 0 ? override : calculated
             }
             return {
                 Description: [item.name, item.details].filter(Boolean).join(" — "),
@@ -113,12 +115,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 UnitAmount: Number(unitAmount.toFixed(2)),
             }
         })
-
-        const itemTotal = lineItems.reduce((sum, line) => sum + line.Quantity * line.UnitAmount, 0)
-        const adjustedTotal = job.adjusted_total == null ? null : Number(job.adjusted_total)
-        if (adjustedTotal != null && Math.abs(adjustedTotal - itemTotal) > 0.005) {
-            lineItems.push({ Description: "Quote total adjustment", Quantity: 1, UnitAmount: Number((adjustedTotal - itemTotal).toFixed(2)) })
-        }
 
         const visibleReference = job.title.trim()
         const updated = await xeroJson(`${XERO_API}/Quotes`, {
@@ -128,7 +124,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 Contact: { ContactID: contactId },
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
-                Status: "DRAFT",
                 Reference: visibleReference,
                 Title: job.title,
                 Summary: rpmReference(id),
