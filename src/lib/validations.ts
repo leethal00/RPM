@@ -70,6 +70,7 @@ export const costingJobSchema = z.object({
   title: z.string().min(2, "Job title is required").max(200, "Job title must be 200 characters or less"),
   reference: z.string().max(200).optional().or(z.literal("")),
   details: z.string().optional().or(z.literal("")),
+  contact_name: z.string().max(200, "Contact name must be 200 characters or less").optional().or(z.literal("")),
   qty: z.string().refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), "Qty must be a positive number").optional().or(z.literal("")),
   client_id: z.string().optional(),
   store_id: z.string().optional(),
