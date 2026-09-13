@@ -8,10 +8,6 @@ function isoDate(date: Date) {
     return date.toISOString().slice(0, 10)
 }
 
-function rpmReference(id: string) {
-    return `RPM-${id.slice(0, 8).toUpperCase()}`
-}
-
 function normalise(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 }
@@ -116,7 +112,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const lineItems = items.map((item) => {
             let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
-                unitAmount = lines
+                const calculated = lines
                     .filter((line) => line.item_id === item.id)
                     .reduce((sum, line) => {
                         const sell = line.unit_sell_override != null
@@ -124,6 +120,8 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                             : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
                         return sum + Number(line.qty || 0) * sell
                     }, 0)
+                const override = Number(item.unit_price || 0)
+                unitAmount = override > 0 ? override : calculated
             }
             return {
                 Description: [item.name, item.details].filter(Boolean).join(" — "),
@@ -140,7 +138,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         const expiry = new Date()
         expiry.setDate(expiry.getDate() + 30)
-        const internalRef = rpmReference(id)
         const visibleReference = job.title.trim()
         const xeroQuote = await xeroJson(`${XERO_API}/Quotes`, {
             method: "POST",
@@ -151,8 +148,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                     ExpiryDate: isoDate(expiry),
                     Status: "DRAFT",
                     Reference: visibleReference,
-                    Title: job.title,
-                    Summary: internalRef,
                     Terms: job.details || undefined,
                     LineItems: lineItems,
                 }],
