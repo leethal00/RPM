@@ -32,7 +32,7 @@ import type { Store, Asset, AssetType, Job, Project, AssetPhoto } from "@/types/
 type AssetRow = Asset & {
     asset_types: Pick<AssetType, 'label'> | null
     jobs: Pick<Job, 'status'>[]
-    asset_photos: Pick<AssetPhoto, 'id'>[]
+    asset_photos: Pick<AssetPhoto, 'id' | 'url' | 'is_thumbnail' | 'created_at'>[]
 }
 type ProjectRow = Project & { jobs: Pick<Job, 'id' | 'status' | 'budget_impact'>[] }
 
@@ -57,7 +57,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
             *,
             asset_types ( label ),
             jobs ( status ),
-            asset_photos ( id )
+            asset_photos ( id, url, is_thumbnail, created_at )
         `).eq('store_id', id)
     )
 
