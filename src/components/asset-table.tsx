@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import { useMemo, useState } from "react"
 import {
     Table,
     TableBody,
@@ -9,7 +10,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { ChevronRight, ImageIcon } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, ImageIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Asset } from "@/types/database"
 
@@ -18,21 +19,26 @@ interface AssetTableProps {
     storeId: string
 }
 
+type SortKey = "photo" | "type" | "status" | "dimensions" | "nextService"
+type SortDirection = "asc" | "desc"
+
 export function AssetTable({ assets, storeId }: AssetTableProps) {
     const router = useRouter()
+    const [sortKey, setSortKey] = useState<SortKey>("type")
+    const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
 
     const getStatus = (asset: Asset) => {
         const activeFaults = asset.jobs?.filter(j => j.status === 'open' || j.status === 'in_progress')
         if (activeFaults && activeFaults.length > 0) {
-            return { label: "Faulted", dot: "bg-destructive", tone: "text-destructive" }
+            return { label: "Faulted", dot: "bg-destructive", tone: "text-destructive", rank: 0 }
         }
         if (asset.next_service_date) {
             const nextDue = new Date(asset.next_service_date)
             if (nextDue < new Date()) {
-                return { label: "Overdue", dot: "bg-amber-500", tone: "text-amber-600 dark:text-amber-400" }
+                return { label: "Overdue", dot: "bg-amber-500", tone: "text-amber-600 dark:text-amber-400", rank: 1 }
             }
         }
-        return { label: "Healthy", dot: "bg-emerald-500", tone: "text-muted-foreground" }
+        return { label: "Healthy", dot: "bg-emerald-500", tone: "text-muted-foreground", rank: 2 }
     }
 
     const getQuarterLabel = (dateString?: string | null) => {
@@ -47,16 +53,66 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
         return photos.find(photo => photo.is_thumbnail) || [...photos].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
     }
 
+    const toggleSort = (key: SortKey) => {
+        if (sortKey === key) {
+            setSortDirection(current => current === "asc" ? "desc" : "asc")
+        } else {
+            setSortKey(key)
+            setSortDirection("asc")
+        }
+    }
+
+    const sortedAssets = useMemo(() => {
+        const multiplier = sortDirection === "asc" ? 1 : -1
+        return [...assets].sort((a, b) => {
+            let comparison = 0
+
+            if (sortKey === "photo") {
+                comparison = Number(Boolean(getThumbnail(a))) - Number(Boolean(getThumbnail(b)))
+            } else if (sortKey === "type") {
+                const aValue = `${a.asset_types?.label || ""} ${a.asset_group || ""}`.trim()
+                const bValue = `${b.asset_types?.label || ""} ${b.asset_group || ""}`.trim()
+                comparison = aValue.localeCompare(bValue, undefined, { sensitivity: "base" })
+            } else if (sortKey === "status") {
+                comparison = getStatus(a).rank - getStatus(b).rank
+            } else if (sortKey === "dimensions") {
+                comparison = (a.asset_dimensions || "").localeCompare(b.asset_dimensions || "", undefined, { numeric: true, sensitivity: "base" })
+            } else if (sortKey === "nextService") {
+                const aTime = a.next_service_date ? new Date(a.next_service_date).getTime() : Number.POSITIVE_INFINITY
+                const bTime = b.next_service_date ? new Date(b.next_service_date).getTime() : Number.POSITIVE_INFINITY
+                comparison = aTime - bTime
+            }
+
+            return comparison * multiplier
+        })
+    }, [assets, sortDirection, sortKey])
+
+    const SortHeader = ({ column, label, className = "" }: { column: SortKey; label: string; className?: string }) => {
+        const active = sortKey === column
+        const Icon = !active ? ArrowUpDown : sortDirection === "asc" ? ArrowUp : ArrowDown
+        return (
+            <button
+                type="button"
+                onClick={() => toggleSort(column)}
+                className={`inline-flex items-center gap-1.5 hover:text-foreground transition-colors ${active ? "text-foreground" : "text-muted-foreground"} ${className}`}
+                aria-label={`Sort by ${label}`}
+            >
+                {label}
+                <Icon className="size-3" />
+            </button>
+        )
+    }
+
     return (
         <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
             <Table>
                 <TableHeader>
                     <TableRow className="border-b border-border/60 hover:bg-transparent">
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground w-[92px]">Photo</TableHead>
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground">Type / group</TableHead>
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground">Status</TableHead>
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground">Dimensions</TableHead>
-                        <TableHead className="h-10 text-xs font-medium text-muted-foreground">Next service</TableHead>
+                        <TableHead className="h-10 text-xs font-medium w-[92px]"><SortHeader column="photo" label="Photo" /></TableHead>
+                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="type" label="Type / group" /></TableHead>
+                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="status" label="Status" /></TableHead>
+                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="dimensions" label="Dimensions" /></TableHead>
+                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="nextService" label="Next service" /></TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground text-right w-[80px]"></TableHead>
                     </TableRow>
                 </TableHeader>
@@ -68,7 +124,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                             </TableCell>
                         </TableRow>
                     ) : (
-                        assets.map((asset) => {
+                        sortedAssets.map((asset) => {
                             const status = getStatus(asset)
                             const thumbnail = getThumbnail(asset)
                             const assetHref = `/stores/${storeId}/assets/${asset.id}`
