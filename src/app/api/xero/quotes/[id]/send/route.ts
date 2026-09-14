@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 
 export const dynamic = "force-dynamic"
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
 
 function isoDate(date: Date) {
     return date.toISOString().slice(0, 10)
@@ -104,7 +105,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
-        admin.from("costing_items").select("id,name,details,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_items").select("id,name,details,sign_code,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
         admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
     ])
 
@@ -123,7 +124,13 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const lines = costingLines || []
+        let sectionNumber = 0
         const pricedLineItems = items.map((item) => {
+            if (item.sign_code === SECTION_HEADING_CODE) {
+                sectionNumber += 1
+                return { Description: `${sectionNumber}. ${(item.name || "SECTION").trim().toUpperCase()}` }
+            }
+
             let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines
