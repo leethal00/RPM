@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import { ItemsList } from "@/components/costing/items-list"
 import { ProductionItems } from "@/components/costing/production-items"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
@@ -117,7 +116,7 @@ export default function ActiveJobDetailPage() {
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader><DialogTitle>Edit active job</DialogTitle><DialogDescription>These are production-only changes. The accepted quote remains as the historical quoted version.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Edit active job</DialogTitle><DialogDescription>These changes apply to the production job. The completed quote remains available in quote history.</DialogDescription></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid gap-2"><Label>Job title</Label><Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}/></div>
             <div className="grid gap-2"><Label>Contact</Label><Input value={editContact} onChange={(e) => setEditContact(e.target.value)} placeholder="Site / job contact"/></div>
@@ -127,15 +126,13 @@ export default function ActiveJobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Tabs defaultValue="production" className="mt-5">
+      <Tabs defaultValue="items" className="mt-5">
         <TabsList>
-          <TabsTrigger value="production">Production Items</TabsTrigger>
-          <TabsTrigger value="quoted">Quoted Items</TabsTrigger>
+          <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
         </TabsList>
-        <TabsContent value="production" className="pt-3"><ProductionItems jobId={job.id}/></TabsContent>
-        <TabsContent value="quoted" className="pt-3"><div className="mb-3 text-sm text-muted-foreground">Approved quote snapshot — read only.</div><div className="pointer-events-none select-none opacity-90"><ItemsList job={job}/></div></TabsContent>
+        <TabsContent value="items" className="pt-3"><ProductionItems jobId={job.id}/></TabsContent>
         <TabsContent value="actuals"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual"><EstVsActual job={job}/></TabsContent>
       </Tabs>
