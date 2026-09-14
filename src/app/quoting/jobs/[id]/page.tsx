@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Briefcase, FileText, Pencil } from "lucide-react"
@@ -41,6 +41,9 @@ export default function ActiveJobDetailPage() {
   const [editTitle, setEditTitle] = useState("")
   const [editDetails, setEditDetails] = useState("")
   const [editContact, setEditContact] = useState("")
+  const [editQuotedBy, setEditQuotedBy] = useState("")
+  const [editJobLead, setEditJobLead] = useState("")
+  const [teamMembers, setTeamMembers] = useState<string[]>([])
   const [savingJob, setSavingJob] = useState(false)
 
   const { data, isLoading, mutate } = useSupabaseQuery<ActiveJob | null>(id ? `active-job-${id}` : null, async () => {
@@ -54,11 +57,22 @@ export default function ActiveJobDetailPage() {
   const jobDetails = job?.production_details ?? job?.details ?? ""
   const jobContact = job?.production_contact_name ?? job?.contact_name ?? ""
 
+  useEffect(() => {
+    async function fetchTeamMembers() {
+      const { data: team } = await supabase.from("users").select("name,email").order("name")
+      const teamRows = (team || []) as Array<{ name: string | null; email: string | null }>
+      setTeamMembers(Array.from(new Set(teamRows.map((member) => member.name?.trim() || member.email?.split("@")[0]).filter(Boolean) as string[])))
+    }
+    void fetchTeamMembers()
+  }, [supabase])
+
   function openEdit() {
     if (!job) return
     setEditTitle(jobTitle)
     setEditDetails(jobDetails)
     setEditContact(jobContact)
+    setEditQuotedBy(job.quoted_by_name || "")
+    setEditJobLead(job.job_lead_name || "")
     setEditOpen(true)
   }
 
@@ -69,6 +83,8 @@ export default function ActiveJobDetailPage() {
       production_title: editTitle.trim(),
       production_details: editDetails.trim() || null,
       production_contact_name: editContact.trim() || null,
+      quoted_by_name: editQuotedBy.trim() || null,
+      job_lead_name: editJobLead.trim() || null,
       updated_at: new Date().toISOString(),
     }).eq("id", job.id)
     setSavingJob(false)
@@ -106,6 +122,8 @@ export default function ActiveJobDetailPage() {
             {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
             {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
             <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
+            <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
+            <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
             {editingDate ? <span className="inline-flex items-center gap-1.5"><span>Complete by:</span><Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="h-7 w-36 text-xs"/><Button size="xs" onClick={saveCompletionDate}>Save</Button><Button size="xs" variant="ghost" onClick={() => setEditingDate(false)}>Cancel</Button></span> : <button className="hover:underline" onClick={() => { setDateValue(job.completion_date || ""); setEditingDate(true) }}>Complete by: <strong className="text-foreground">{formatDate(job.completion_date)}</strong> <Pencil className="ml-1 inline size-3"/></button>}
           </div>
           {jobContact && <p className="mt-2 text-sm text-muted-foreground"><span className="font-medium text-foreground">Contact:</span> {jobContact}</p>}
@@ -120,6 +138,11 @@ export default function ActiveJobDetailPage() {
           <div className="space-y-4 py-2">
             <div className="grid gap-2"><Label>Job title</Label><Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}/></div>
             <div className="grid gap-2"><Label>Contact</Label><Input value={editContact} onChange={(e) => setEditContact(e.target.value)} placeholder="Site / job contact"/></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2"><Label>Quoted by</Label><Input list="active-job-team-members" value={editQuotedBy} onChange={(e) => setEditQuotedBy(e.target.value)} placeholder="e.g. Stu"/></div>
+              <div className="grid gap-2"><Label>Job lead</Label><Input list="active-job-team-members" value={editJobLead} onChange={(e) => setEditJobLead(e.target.value)} placeholder="e.g. Darren"/></div>
+              <datalist id="active-job-team-members">{teamMembers.map((name) => <option key={name} value={name}/>)}</datalist>
+            </div>
             <div className="grid gap-2"><Label>Job description / scope</Label><Textarea value={editDetails} onChange={(e) => setEditDetails(e.target.value)} className="min-h-[140px]"/></div>
             <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button onClick={saveJobEdits} disabled={savingJob}>{savingJob ? "Saving…" : "Save job"}</Button></div>
           </div>
