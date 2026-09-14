@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Briefcase, FileText, Pencil } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -35,7 +35,10 @@ function formatDate(value?: string | null) {
 export default function ActiveJobDetailPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { id } = useParams<{ id: string }>()
+  const requestedTab = searchParams.get("tab")
+  const activeTab = requestedTab === "time" || requestedTab === "actuals" || requestedTab === "est-vs-actual" ? requestedTab : "items"
   const [editOpen, setEditOpen] = useState(false)
   const [editingDate, setEditingDate] = useState(false)
   const [dateValue, setDateValue] = useState("")
@@ -150,7 +153,7 @@ export default function ActiveJobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Tabs defaultValue="items" className="mt-5">
+      <Tabs value={activeTab} onValueChange={(value) => router.replace(`/quoting/jobs/${id}${value === "items" ? "" : `?tab=${value}`}`)} className="mt-5">
         <TabsList>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="time">Time</TabsTrigger>
