@@ -36,27 +36,27 @@ export default function DashboardLayout({
             <SidebarProvider>
                 <AppSidebar />
                 <SidebarInset>
-                    <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+                    <header className="flex h-14 shrink-0 items-center justify-between border-b px-3 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-11">
                         <div className="flex items-center gap-2">
                             <SidebarTrigger className="-ml-1" />
-                            <Separator orientation="vertical" className="mr-2 h-4" />
-                            <div className="flex items-center gap-3 px-4">
+                            <Separator orientation="vertical" className="mr-1 h-4" />
+                            <div className="flex items-center gap-2 px-2">
                                 <img
                                     src="/R.jpg"
                                     alt="Rodier"
-                                    className="h-9 w-9 rounded-full object-cover"
+                                    className="h-8 w-8 rounded-full object-cover"
                                 />
                                 <h1 className="text-lg font-semibold tracking-tight text-foreground">
                                 Rodier Property Management
                                 </h1>
                                 <CustomerFilterDropdown />
+                            </div>
                         </div>
-                        </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                             <ThemeToggle />
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                    <div className="flex flex-1 flex-col gap-3 p-3 pt-0">
                         {children}
                     </div>
                 </SidebarInset>
