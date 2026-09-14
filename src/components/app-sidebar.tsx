@@ -24,7 +24,7 @@ const projectItems = [{ title: "HQ Projects", url: "/projects", icon: PlusCircle
 const quotingItems = [
     { title: "Leads & To Do", url: "/leads", icon: ClipboardList },
     { title: "Quotes", url: "/quoting", icon: Calculator },
-    { title: "Active Jobs", url: "/quoting/jobs", icon: Briefcase },
+    { title: "Jobs", url: "/quoting/jobs", icon: Briefcase },
     { title: "Products", url: "/quoting/products", icon: Package2 },
     { title: "Catalogue", url: "/quoting/catalogue", icon: Layers },
 ]
