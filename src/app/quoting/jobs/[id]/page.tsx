@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import { ProductionItems } from "@/components/costing/production-items"
+import { ItemsList } from "@/components/costing/items-list"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { toast } from "sonner"
@@ -132,7 +132,7 @@ export default function ActiveJobDetailPage() {
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
         </TabsList>
-        <TabsContent value="items" className="pt-3"><ProductionItems jobId={job.id}/></TabsContent>
+        <TabsContent value="items"><ItemsList job={job}/></TabsContent>
         <TabsContent value="actuals"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual"><EstVsActual job={job}/></TabsContent>
       </Tabs>
