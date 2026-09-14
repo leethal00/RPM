@@ -8,8 +8,8 @@ import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Calculator, Search, Copy } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Plus, Calculator, Search, Copy, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { CostingJobForm } from "@/components/costing-job-form"
 import { XeroConnect } from "@/components/costing/xero-connect"
 import { TablePagination } from "@/components/table-pagination"
@@ -42,6 +42,8 @@ export default function QuotesPage() {
     const [view, setView] = useState<QuoteView>("active")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [copyingId, setCopyingId] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<QuoteRow | null>(null)
+    const [deleting, setDeleting] = useState(false)
     const statuses = view === "active" ? ["quote", "quoted"] : ["approved", "in_progress", "complete", "invoiced", "cancelled"]
     const key = `quotes-${view}-${page}-${clientId ?? "all"}-${search}`
 
@@ -95,6 +97,22 @@ export default function QuotesPage() {
         }
     }
 
+    async function deleteQuote() {
+        if (!deleteTarget || deleting) return
+        setDeleting(true)
+        try {
+            const { error } = await supabase.from("costing_jobs").delete().eq("id", deleteTarget.id)
+            if (error) throw error
+            toast.success("Quote deleted from RPM")
+            setDeleteTarget(null)
+            await mutate()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not delete quote")
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     const quotes = result?.items || []
     const totalCount = result?.count ?? 0
 
@@ -108,6 +126,21 @@ export default function QuotesPage() {
 
         <div className="flex items-center gap-2 mb-4"><div className="relative flex-1 max-w-md"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input placeholder="Search quote, reference or Xero quote #…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-9" /></div><span className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "quote" : "quotes"}</span></div>
 
-        {isLoading ? <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />)}</div> : quotes.length ? <><div className="border border-border/60 rounded-lg overflow-hidden"><table className="w-full text-sm"><thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-4 py-2.5">Quote</th><th className="font-medium px-4 py-2.5">Client / Site</th><th className="font-medium px-4 py-2.5 w-28">Xero #</th><th className="font-medium px-4 py-2.5 w-36">Status</th>{view === "completed" && <th className="w-28"></th>}</tr></thead><tbody>{quotes.map(q => { const meta = STATUS[q.status] || STATUS.quote; return <tr key={q.id} onClick={() => router.push(q.status === "in_progress" || q.status === "complete" || q.status === "invoiced" || q.status === "cancelled" ? `/quoting/jobs/${q.id}` : `/quoting/${q.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30"><td className="px-4 py-3"><div className="font-medium">{q.title}</div>{q.reference && <div className="text-xs text-muted-foreground">{q.reference}</div>}</td><td className="px-4 py-3 text-muted-foreground">{q.clients?.name || "Ad-hoc"}{q.stores?.name ? ` · ${q.stores.name}` : ""}</td><td className="px-4 py-3 tabular-nums">{q.xero_quote_number || "—"}</td><td className="px-4 py-3"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td>{view === "completed" && <td className="px-3 py-2 text-right"><Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={copyingId === q.id} onClick={(e) => { e.stopPropagation(); copyQuote(q) }}><Copy className="size-3.5" /> Copy</Button></td>}</tr> })}</tbody></table></div><TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} /></> : <div className="py-16 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">{view === "active" ? "No active quotes." : "No completed quotes yet."}</div>}
+        {isLoading ? <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />)}</div> : quotes.length ? <><div className="border border-border/60 rounded-lg overflow-hidden"><table className="w-full text-sm"><thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-4 py-2.5">Quote</th><th className="font-medium px-4 py-2.5">Client / Site</th><th className="font-medium px-4 py-2.5 w-28">Xero #</th><th className="font-medium px-4 py-2.5 w-36">Status</th><th className="w-36"></th></tr></thead><tbody>{quotes.map(q => { const meta = STATUS[q.status] || STATUS.quote; return <tr key={q.id} onClick={() => router.push(q.status === "in_progress" || q.status === "complete" || q.status === "invoiced" || q.status === "cancelled" ? `/quoting/jobs/${q.id}` : `/quoting/${q.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30"><td className="px-4 py-3"><div className="font-medium">{q.title}</div>{q.reference && <div className="text-xs text-muted-foreground">{q.reference}</div>}</td><td className="px-4 py-3 text-muted-foreground">{q.clients?.name || "Ad-hoc"}{q.stores?.name ? ` · ${q.stores.name}` : ""}</td><td className="px-4 py-3 tabular-nums">{q.xero_quote_number || "—"}</td><td className="px-4 py-3"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td><td className="px-3 py-2"><div className="flex justify-end gap-1.5"><Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={copyingId === q.id} onClick={(e) => { e.stopPropagation(); copyQuote(q) }}><Copy className="size-3.5" /> Copy</Button>{view === "active" && <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" title="Delete quote" onClick={(e) => { e.stopPropagation(); setDeleteTarget(q) }}><Trash2 className="size-3.5" /></Button>}</div></td></tr> })}</tbody></table></div><TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} /></> : <div className="py-16 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">{view === "active" ? "No active quotes." : "No completed quotes yet."}</div>}
+
+        <Dialog open={deleteTarget != null} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
+            <DialogContent className="sm:max-w-[440px]">
+                <DialogHeader>
+                    <DialogTitle>Delete this quote?</DialogTitle>
+                    <DialogDescription>
+                        <strong>{deleteTarget?.title}</strong> will be removed from RPM. {deleteTarget?.xero_quote_id ? "The Xero quote will not be deleted, so remove it separately in Xero if you no longer need it." : "This cannot be undone."}
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+                    <Button variant="destructive" onClick={deleteQuote} disabled={deleting}>{deleting ? "Deleting…" : "Delete quote"}</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </PageShell></DashboardLayout>
 }
