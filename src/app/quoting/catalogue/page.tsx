@@ -5,7 +5,8 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, Layers, Search, RotateCcw, ListTree, X } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Plus, Trash2, Layers, Search, RotateCcw, ListTree, X, GripVertical } from "lucide-react"
 import { toast } from "sonner"
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -100,6 +101,9 @@ export default function CataloguePage() {
     const [creatingSection, setCreatingSection] = useState(false)
     const [addingSubsectionFor, setAddingSubsectionFor] = useState<string | null>(null)
     const [newSubsectionName, setNewSubsectionName] = useState("")
+    const [activeTab, setActiveTab] = useState("catalogue")
+    const [draggingSubsectionId, setDraggingSubsectionId] = useState<number | null>(null)
+    const [dragOverSection, setDragOverSection] = useState<string | null>(null)
     const { order, widths, move, setWidth, reset } = useColumnLayout("catalogue-columns-v1", DEFAULT_LAYOUT)
 
     useEffect(() => {
@@ -259,6 +263,36 @@ export default function CataloguePage() {
         toast.success(`Subsection renamed to “${name}”`)
     }
 
+    async function moveSubsection(record: CostingSection, targetSection: string) {
+        const subsection = record.subsection
+        if (!subsection || record.section === targetSection) return
+        const duplicate = sections.some((section) => section.id !== record.id && section.section === targetSection &&
+            (section.subsection ?? "").localeCompare(subsection, undefined, { sensitivity: "accent" }) === 0)
+        if (duplicate) {
+            setDraggingSubsectionId(null)
+            setDragOverSection(null)
+            return toast.error(`“${subsection}” already exists in ${targetSection}`)
+        }
+
+        const targetSorts = sections.filter((section) => section.section === targetSection).map((section) => section.sort)
+        const nextSort = Math.max(0, ...targetSorts) + 10
+        const results = await Promise.all([
+            supabase.from("costing_sections").update({ section: targetSection, sort: nextSort }).eq("id", record.id),
+            supabase.from("materials").update({ section: targetSection }).eq("section", record.section).eq("subsection", subsection),
+            supabase.from("costing_lines").update({ section: targetSection }).eq("section", record.section).eq("subsection", subsection),
+        ])
+        const error = results.find((result) => result.error)?.error
+        setDraggingSubsectionId(null)
+        setDragOverSection(null)
+        if (error) return toast.error(error.message)
+
+        setSections((prev) => prev.map((section) => section.id === record.id
+            ? { ...section, section: targetSection, sort: nextSort } : section))
+        setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === subsection
+            ? { ...material, section: targetSection } : material))
+        toast.success(`Moved “${subsection}” to ${targetSection}`)
+    }
+
     function renderCell(key: string, m: Material) {
         switch (key) {
             case "code": return <TextCell value={m.code ?? ""} placeholder="—" onCommit={(v) => patch(m.id, { code: v || null })} />
@@ -317,16 +351,27 @@ export default function CataloguePage() {
                     kicker="Quoting & Costing"
                     title="Catalogue & Sections"
                     description="Manage priced materials, labour, and the sections used throughout quoting and costing."
-                    actions={
+                    actions={activeTab === "catalogue" ? (
                         <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>
                             <Plus className="size-3.5" /> Add material
                         </Button>
-                    }
+                    ) : undefined}
                 />
 
-                <datalist id={SUPPLIER_LIST_ID}>{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+                    <TabsList>
+                        <TabsTrigger value="catalogue" className="gap-1.5 px-4">
+                            <Layers className="size-3.5" /> Catalogue Items
+                        </TabsTrigger>
+                        <TabsTrigger value="sections" className="gap-1.5 px-4">
+                            <ListTree className="size-3.5" /> Sections
+                        </TabsTrigger>
+                    </TabsList>
 
-                <div className="flex items-center gap-2 mt-4">
+                    <TabsContent value="catalogue" className="mt-2">
+                        <datalist id={SUPPLIER_LIST_ID}>{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
+
+                <div className="flex items-center gap-2 mt-2">
                     <div className="relative flex-1 max-w-sm">
                         <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                         <Input
@@ -407,8 +452,10 @@ export default function CataloguePage() {
                     Tip: pick a supplier above, then edit their unit costs — each edit stamps today&apos;s date.
                     Bulk price-list upload is coming once item codes are in (matched on code).
                 </p>
+                    </TabsContent>
 
-                <section className="mt-8 pt-6 border-t border-border/60">
+                    <TabsContent value="sections" className="mt-2">
+                <section>
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <div className="flex items-center gap-2">
@@ -424,9 +471,27 @@ export default function CataloguePage() {
                         </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+                    <div className="columns-1 lg:columns-2 xl:columns-3 gap-3 mt-4">
                         {sectionGroups.map(({ name, subsections }) => (
-                            <div key={name} className="rounded-lg border border-border/60 bg-card overflow-hidden">
+                            <div
+                                key={name}
+                                onDragOver={(e) => {
+                                    if (draggingSubsectionId == null) return
+                                    e.preventDefault()
+                                    e.dataTransfer.dropEffect = "move"
+                                    setDragOverSection(name)
+                                }}
+                                onDragLeave={(e) => {
+                                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverSection(null)
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault()
+                                    const id = draggingSubsectionId ?? Number(e.dataTransfer.getData("text/plain"))
+                                    const subsection = sections.find((section) => section.id === id)
+                                    if (subsection) void moveSubsection(subsection, name)
+                                }}
+                                className={`break-inside-avoid mb-3 rounded-lg border bg-card overflow-hidden transition-colors ${dragOverSection === name ? "border-primary bg-primary/5" : "border-border/60"}`}
+                            >
                                 <div className="flex items-center gap-2 bg-muted/35 px-3 py-2.5 border-b border-border/60">
                                     <Layers className="size-3.5 text-muted-foreground shrink-0" />
                                     <input
@@ -448,7 +513,21 @@ export default function CataloguePage() {
                                         <div className="space-y-1">
                                             {subsections.map((subsection) => (
                                                 <div key={subsection.id} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/30">
-                                                    <span className="size-1.5 rounded-full bg-muted-foreground/35 shrink-0" />
+                                                    <button
+                                                        type="button"
+                                                        draggable
+                                                        onDragStart={(e) => {
+                                                            setDraggingSubsectionId(subsection.id)
+                                                            e.dataTransfer.effectAllowed = "move"
+                                                            e.dataTransfer.setData("text/plain", String(subsection.id))
+                                                        }}
+                                                        onDragEnd={() => { setDraggingSubsectionId(null); setDragOverSection(null) }}
+                                                        className="cursor-grab active:cursor-grabbing text-muted-foreground/55 hover:text-foreground shrink-0"
+                                                        title="Drag to another section"
+                                                        aria-label={`Move ${subsection.subsection} to another section`}
+                                                    >
+                                                        <GripVertical className="size-3.5" />
+                                                    </button>
                                                     <input
                                                         key={subsection.subsection}
                                                         defaultValue={subsection.subsection ?? ""}
@@ -492,6 +571,8 @@ export default function CataloguePage() {
                         ))}
                     </div>
                 </section>
+                    </TabsContent>
+                </Tabs>
 
                 <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
                     <DialogContent className="sm:max-w-[440px]">
@@ -530,7 +611,7 @@ export default function CataloguePage() {
                             placeholder="Section name"
                         />
                         <DialogFooter>
-                            <Button variant="outline" disabled={creatingSection} onClick={() => setNewSectionFor(null)}>Cancel</Button>
+                            <Button variant="outline" disabled={creatingSection} onClick={() => { setNewSectionOpen(false); setNewSectionFor(null) }}>Cancel</Button>
                             <Button disabled={!newSectionName.trim() || creatingSection} onClick={createSection}>
                                 {creatingSection ? "Creating…" : "Create section"}
                             </Button>
