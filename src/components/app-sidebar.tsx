@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench } from "lucide-react"
+import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -25,6 +25,7 @@ const quotingItems = [
     { title: "Leads & To Do", url: "/leads", icon: ClipboardList },
     { title: "Quotes", url: "/quoting", icon: Calculator },
     { title: "Jobs", url: "/quoting/jobs", icon: Briefcase },
+    { title: "Time Entries", url: "/quoting/time", icon: Clock },
     { title: "Products", url: "/quoting/products", icon: Package2 },
     { title: "Catalogue", url: "/quoting/catalogue", icon: Layers },
 ]
@@ -39,7 +40,7 @@ export function AppSidebar() {
     const handleSwitchAccount = async () => { await supabase.auth.signOut(); router.push("/login?switch=1"); router.refresh() }
     const userName = profile?.name || user?.email?.split("@")[0] || "User", userEmail = user?.email || "user@example.com", userInitials = userName.substring(0, 2).toUpperCase()
     const isClientUser = profile?.role === "client_hq" || profile?.role === "client_store"
-    const isQuotingItemActive = (url: string) => url === "/quoting/jobs" ? pathname.startsWith("/quoting/jobs") : url === "/quoting/products" ? pathname.startsWith("/quoting/products") : url === "/quoting/catalogue" ? pathname.startsWith("/quoting/catalogue") : url === "/quoting" ? pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/jobs") && !pathname.startsWith("/quoting/products") && !pathname.startsWith("/quoting/catalogue")) : pathname.startsWith(url)
+    const isQuotingItemActive = (url: string) => url === "/quoting/time" ? pathname.startsWith("/quoting/time") : url === "/quoting/jobs" ? pathname.startsWith("/quoting/jobs") : url === "/quoting/products" ? pathname.startsWith("/quoting/products") : url === "/quoting/catalogue" ? pathname.startsWith("/quoting/catalogue") : url === "/quoting" ? pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/jobs") && !pathname.startsWith("/quoting/time") && !pathname.startsWith("/quoting/products") && !pathname.startsWith("/quoting/catalogue")) : pathname.startsWith(url)
 
     return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader className="border-b border-sidebar-border p-4"><div className="flex items-center gap-2 px-2"><div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Building2 className="size-4" /></div><div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden"><span className="font-semibold text-sidebar-foreground">RPM</span><span className="text-xs text-sidebar-foreground/60">Rodier Property</span></div></div></SidebarHeader>
