@@ -36,10 +36,13 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         store_id: job?.store_id || "none",
         details: job?.details || "",
         contact_name: job?.contact_name || "",
+        quoted_by_name: job?.quoted_by_name || "",
+        job_lead_name: job?.job_lead_name || "",
     })
 
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
+    const [teamMembers, setTeamMembers] = useState<string[]>([])
     const [fetching, setFetching] = useState(true)
     const [addingClient, setAddingClient] = useState(false)
     const [newClientName, setNewClientName] = useState("")
@@ -70,16 +73,26 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
     useEffect(() => {
         async function fetchRefs() {
             setFetching(true)
-            const [{ data: c }, { data: s }] = await Promise.all([
+            const [{ data: c }, { data: s }, { data: team }, { data: auth }] = await Promise.all([
                 supabase.from("clients").select("id, name").order("name"),
                 supabase.from("stores").select("id, name, client_id").order("name"),
+                supabase.from("users").select("id, name, email").order("name"),
+                supabase.auth.getUser(),
             ])
             setClients(c || [])
             setStores(s || [])
+            const teamRows = (team || []) as Array<{ id: string; name: string | null; email: string | null }>
+            const names = Array.from(new Set(teamRows.map((member) => member.name?.trim() || member.email?.split("@")[0]).filter(Boolean) as string[]))
+            setTeamMembers(names)
+            if (!job && auth.user?.id) {
+                const currentMember = teamRows.find((member) => member.id === auth.user?.id)
+                const currentName = currentMember?.name?.trim() || currentMember?.email?.split("@")[0] || ""
+                if (currentName) setFormData((current) => current.quoted_by_name ? current : { ...current, quoted_by_name: currentName })
+            }
             setFetching(false)
         }
         fetchRefs()
-    }, [supabase])
+    }, [supabase, job])
 
     const hasClient = formData.client_id !== "none"
     const clientStores = hasClient ? stores.filter((s) => s.client_id === formData.client_id) : []
@@ -105,6 +118,8 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
             store_id: formData.store_id === "none" ? null : formData.store_id,
             details: formData.details || null,
             contact_name: formData.contact_name.trim() || null,
+            quoted_by_name: formData.quoted_by_name.trim() || null,
+            job_lead_name: formData.job_lead_name.trim() || null,
         }
 
         if (job) {
@@ -149,6 +164,32 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                         required
                     />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="quoted_by_name" className="text-xs font-medium text-muted-foreground">Quoted by</Label>
+                        <Input
+                            id="quoted_by_name"
+                            list="costing-team-members"
+                            placeholder="e.g. Stu"
+                            value={formData.quoted_by_name}
+                            onChange={(e) => setFormData({ ...formData, quoted_by_name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="job_lead_name" className="text-xs font-medium text-muted-foreground">Job lead</Label>
+                        <Input
+                            id="job_lead_name"
+                            list="costing-team-members"
+                            placeholder="Assign now or later"
+                            value={formData.job_lead_name}
+                            onChange={(e) => setFormData({ ...formData, job_lead_name: e.target.value })}
+                        />
+                    </div>
+                    <datalist id="costing-team-members">
+                        {teamMembers.map((name) => <option key={name} value={name} />)}
+                    </datalist>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
