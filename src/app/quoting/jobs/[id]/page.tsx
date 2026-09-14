@@ -17,6 +17,7 @@ import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { ItemsList } from "@/components/costing/items-list"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
+import { TimeEntries } from "@/components/costing/time-entries"
 import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
 
@@ -152,10 +153,12 @@ export default function ActiveJobDetailPage() {
       <Tabs defaultValue="items" className="mt-5">
         <TabsList>
           <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
         </TabsList>
         <TabsContent value="items"><ItemsList job={job}/></TabsContent>
+        <TabsContent value="time"><TimeEntries job={job}/></TabsContent>
         <TabsContent value="actuals"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual"><EstVsActual job={job}/></TabsContent>
       </Tabs>
