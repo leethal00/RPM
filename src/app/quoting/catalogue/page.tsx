@@ -5,7 +5,7 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, Layers, Search, RotateCcw } from "lucide-react"
+import { Plus, Trash2, Layers, Search, RotateCcw, ListTree, X } from "lucide-react"
 import { toast } from "sonner"
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -14,7 +14,7 @@ import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { NumCell, TextCell, SupplierCell } from "@/components/costing/cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
-import type { Material } from "@/types/database"
+import type { CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "catalogue-suppliers-dl"
 const today = () => new Date().toISOString().slice(0, 10)
@@ -93,16 +93,27 @@ export default function CataloguePage() {
     const [search, setSearch] = useState("")
     const [supplier, setSupplier] = useState("all")
     const [deleteTarget, setDeleteTarget] = useState<Material | null>(null)
+    const [sections, setSections] = useState<CostingSection[]>([])
+    const [newSectionFor, setNewSectionFor] = useState<Material | null>(null)
+    const [newSectionOpen, setNewSectionOpen] = useState(false)
+    const [newSectionName, setNewSectionName] = useState("")
+    const [creatingSection, setCreatingSection] = useState(false)
+    const [addingSubsectionFor, setAddingSubsectionFor] = useState<string | null>(null)
+    const [newSubsectionName, setNewSubsectionName] = useState("")
     const { order, widths, move, setWidth, reset } = useColumnLayout("catalogue-columns-v1", DEFAULT_LAYOUT)
 
     useEffect(() => {
         let active = true
         ;(async () => {
-            const { data, error } = await supabase.from("materials").select("*")
-                .order("supplier").order("section").order("description")
+            const [{ data, error }, { data: sectionData, error: sectionError }] = await Promise.all([
+                supabase.from("materials").select("*").order("supplier").order("section").order("description"),
+                supabase.from("costing_sections").select("*").order("sort").order("section"),
+            ])
             if (!active) return
             if (error) toast.error(error.message)
+            if (sectionError) toast.error(sectionError.message)
             setMaterials((data as Material[]) || [])
+            setSections((sectionData as CostingSection[]) || [])
             setLoading(false)
         })()
         return () => { active = false }
@@ -112,6 +123,16 @@ export default function CataloguePage() {
         () => Array.from(new Set(materials.map((m) => m.supplier).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
         [materials]
     )
+    const sectionNames = useMemo(() => {
+        const defined = sections.map((s) => s.section)
+        const inUse = materials.map((m) => m.section).filter(Boolean)
+        return Array.from(new Set([...defined, ...inUse]))
+    }, [materials, sections])
+    const sectionGroups = useMemo(() => sectionNames.map((name) => ({
+        name,
+        subsections: sections.filter((section) => section.section === name && section.subsection)
+            .sort((a, b) => a.sort - b.sort),
+    })), [sectionNames, sections])
 
     const tokens = search.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const filtered = materials.filter((m) => {
@@ -130,12 +151,131 @@ export default function CataloguePage() {
         if (error) toast.error(error.message)
     }
 
+    function chooseSection(material: Material, value: string) {
+        if (value === "__create__") {
+            setNewSectionFor(material)
+            setNewSectionName("")
+            setNewSectionOpen(true)
+            return
+        }
+        if (value !== material.section) patch(material.id, { section: value })
+    }
+
+    function openCreateSection() {
+        setNewSectionFor(null)
+        setNewSectionName("")
+        setNewSectionOpen(true)
+    }
+
+    async function createSection() {
+        const name = newSectionName.trim()
+        if (!name) return
+
+        const existing = sectionNames.find((section) => section.localeCompare(name, undefined, { sensitivity: "accent" }) === 0)
+        if (existing) {
+            if (newSectionFor) await patch(newSectionFor.id, { section: existing })
+            else toast.error(`“${existing}” already exists`)
+            setNewSectionOpen(false)
+            setNewSectionName("")
+            return
+        }
+
+        setCreatingSection(true)
+        const nextSort = Math.max(0, ...sections.map((section) => section.sort)) + 100
+        const { data, error } = await supabase.from("costing_sections")
+            .insert({ section: name, subsection: null, sort: nextSort }).select("*").single()
+        if (error) {
+            setCreatingSection(false)
+            return toast.error(error.message)
+        }
+
+        setSections((prev) => [...prev, data as CostingSection])
+        if (newSectionFor) await patch(newSectionFor.id, { section: name })
+        setCreatingSection(false)
+        setNewSectionOpen(false)
+        setNewSectionFor(null)
+        setNewSectionName("")
+        toast.success(`Section “${name}” created`)
+    }
+
+    async function renameSection(oldName: string, value: string) {
+        const name = value.trim()
+        if (!name || name === oldName) return
+        if (sectionNames.some((section) => section !== oldName && section.localeCompare(name, undefined, { sensitivity: "accent" }) === 0)) {
+            return toast.error(`“${name}” already exists`)
+        }
+
+        const results = await Promise.all([
+            supabase.from("costing_sections").update({ section: name }).eq("section", oldName),
+            supabase.from("materials").update({ section: name }).eq("section", oldName),
+            supabase.from("costing_lines").update({ section: name }).eq("section", oldName),
+        ])
+        const error = results.find((result) => result.error)?.error
+        if (error) return toast.error(error.message)
+
+        setSections((prev) => prev.map((section) => section.section === oldName ? { ...section, section: name } : section))
+        setMaterials((prev) => prev.map((material) => material.section === oldName ? { ...material, section: name } : material))
+        toast.success(`Section renamed to “${name}”`)
+    }
+
+    async function addSubsection(sectionName: string) {
+        const name = newSubsectionName.trim()
+        if (!name) return
+        const duplicate = sections.some((section) => section.section === sectionName &&
+            (section.subsection ?? "").localeCompare(name, undefined, { sensitivity: "accent" }) === 0)
+        if (duplicate) return toast.error(`“${name}” already exists in ${sectionName}`)
+
+        const sectionSorts = sections.filter((section) => section.section === sectionName).map((section) => section.sort)
+        const nextSort = Math.max(0, ...sectionSorts) + 10
+        const { data, error } = await supabase.from("costing_sections")
+            .insert({ section: sectionName, subsection: name, sort: nextSort }).select("*").single()
+        if (error) return toast.error(error.message)
+
+        setSections((prev) => [...prev, data as CostingSection])
+        setAddingSubsectionFor(null)
+        setNewSubsectionName("")
+        toast.success(`Subsection “${name}” added`)
+    }
+
+    async function renameSubsection(record: CostingSection, value: string) {
+        const name = value.trim()
+        const oldName = record.subsection
+        if (!name || !oldName || name === oldName) return
+        const duplicate = sections.some((section) => section.id !== record.id && section.section === record.section &&
+            (section.subsection ?? "").localeCompare(name, undefined, { sensitivity: "accent" }) === 0)
+        if (duplicate) return toast.error(`“${name}” already exists in ${record.section}`)
+
+        const results = await Promise.all([
+            supabase.from("costing_sections").update({ subsection: name }).eq("id", record.id),
+            supabase.from("materials").update({ subsection: name }).eq("section", record.section).eq("subsection", oldName),
+            supabase.from("costing_lines").update({ subsection: name }).eq("section", record.section).eq("subsection", oldName),
+        ])
+        const error = results.find((result) => result.error)?.error
+        if (error) return toast.error(error.message)
+
+        setSections((prev) => prev.map((section) => section.id === record.id ? { ...section, subsection: name } : section))
+        setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === oldName
+            ? { ...material, subsection: name } : material))
+        toast.success(`Subsection renamed to “${name}”`)
+    }
+
     function renderCell(key: string, m: Material) {
         switch (key) {
             case "code": return <TextCell value={m.code ?? ""} placeholder="—" onCommit={(v) => patch(m.id, { code: v || null })} />
             case "description": return <TextCell value={m.description} placeholder="Description" onCommit={(v) => patch(m.id, { description: v })} />
             case "supplier": return <SupplierCell value={m.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => patch(m.id, { supplier: v || null })} />
-            case "section": return <TextCell value={m.section ?? ""} placeholder="Section" onCommit={(v) => patch(m.id, { section: v || "Materials" })} />
+            case "section": return (
+                <select
+                    value={m.section ?? "Materials"}
+                    onChange={(e) => chooseSection(m, e.target.value)}
+                    className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
+                    aria-label={`Section for ${m.description || "catalogue item"}`}
+                >
+                    {sectionNames.map((section) => <option key={section} value={section}>{section}</option>)}
+                    <option disabled>──────────</option>
+                    <option value="__create__">+ Create new section…</option>
+                </select>
+            )
             case "unit_cost": return <NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} />
             case "default_markup": return <NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
             case "watts": return m.section === "Wiring - LED"
@@ -152,6 +292,7 @@ export default function CataloguePage() {
     const tableWidth = order.reduce((s, k) => s + (widths[k] ?? 100), 0) + 44
 
     async function addMaterial() {
+        setSearch("")
         const payload = { description: "", section: "Materials", default_markup: 0.5, unit_cost: 0, active: true,
             supplier: supplier !== "all" ? supplier : null }
         const { data, error } = await supabase.from("materials").insert(payload).select("*").single()
@@ -174,8 +315,8 @@ export default function CataloguePage() {
                 <PageHeader
                     icon={Layers}
                     kicker="Quoting & Costing"
-                    title="Catalogue"
-                    description="Priced materials & labour. Filter by supplier to update prices in bulk when a supplier reprices."
+                    title="Catalogue & Sections"
+                    description="Manage priced materials, labour, and the sections used throughout quoting and costing."
                     actions={
                         <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>
                             <Plus className="size-3.5" /> Add material
@@ -188,7 +329,27 @@ export default function CataloguePage() {
                 <div className="flex items-center gap-2 mt-4">
                     <div className="relative flex-1 max-w-sm">
                         <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                        <Input placeholder="Search code or description…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 h-9" />
+                        <Input
+                            placeholder="Search code or description…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-8 pr-9 h-9"
+                        />
+                        {search && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    setSearch("")
+                                    const input = e.currentTarget.previousElementSibling as HTMLInputElement | null
+                                    input?.focus()
+                                }}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Clear search"
+                                aria-label="Clear catalogue search"
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        )}
                     </div>
                     <select value={supplier} onChange={(e) => setSupplier(e.target.value)}
                         className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring">
@@ -204,14 +365,14 @@ export default function CataloguePage() {
                 {loading ? (
                     <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-4" />
                 ) : (
-                    <div className="border border-border/60 rounded-lg overflow-x-auto mt-3">
+                    <div className="border border-border/60 rounded-lg max-h-[46vh] overflow-auto mt-3">
                         <table className="text-sm table-fixed min-w-full" style={{ width: tableWidth }}>
                             <colgroup>
                                 {order.map((k) => <col key={k} style={{ width: widths[k] }} />)}
                                 <col style={{ width: 44 }} />
                                 <col />
                             </colgroup>
-                            <thead className="bg-muted/40 text-muted-foreground">
+                            <thead className="bg-muted text-muted-foreground sticky top-0 z-10">
                                 <tr className="text-left">
                                     {order.map((k) => (
                                         <ColHeader key={k} col={COL_BY_KEY[k]} width={widths[k] ?? COL_BY_KEY[k].width} onMove={move} onResize={setWidth} />
@@ -247,6 +408,91 @@ export default function CataloguePage() {
                     Bulk price-list upload is coming once item codes are in (matched on code).
                 </p>
 
+                <section className="mt-8 pt-6 border-t border-border/60">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <ListTree className="size-4 text-muted-foreground" />
+                                <h2 className="text-lg font-semibold">Sections</h2>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Rename sections and subsections here. Changes carry through to existing catalogue and costing items.
+                            </p>
+                        </div>
+                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={openCreateSection}>
+                            <Plus className="size-3.5" /> Add section
+                        </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+                        {sectionGroups.map(({ name, subsections }) => (
+                            <div key={name} className="rounded-lg border border-border/60 bg-card overflow-hidden">
+                                <div className="flex items-center gap-2 bg-muted/35 px-3 py-2.5 border-b border-border/60">
+                                    <Layers className="size-3.5 text-muted-foreground shrink-0" />
+                                    <input
+                                        key={name}
+                                        defaultValue={name}
+                                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
+                                        onBlur={(e) => { if (e.target.value !== name) renameSection(name, e.target.value) }}
+                                        className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm font-semibold outline-none"
+                                        aria-label={`Rename section ${name}`}
+                                    />
+                                    <span className="text-xs text-muted-foreground shrink-0">
+                                        {subsections.length} subsection{subsections.length === 1 ? "" : "s"}
+                                    </span>
+                                </div>
+                                <div className="p-2">
+                                    {subsections.length === 0 ? (
+                                        <p className="px-2 py-2 text-xs text-muted-foreground">No subsections yet.</p>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {subsections.map((subsection) => (
+                                                <div key={subsection.id} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/30">
+                                                    <span className="size-1.5 rounded-full bg-muted-foreground/35 shrink-0" />
+                                                    <input
+                                                        key={subsection.subsection}
+                                                        defaultValue={subsection.subsection ?? ""}
+                                                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
+                                                        onBlur={(e) => { if (e.target.value !== subsection.subsection) renameSubsection(subsection, e.target.value) }}
+                                                        className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
+                                                        aria-label={`Rename subsection ${subsection.subsection}`}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {addingSubsectionFor === name ? (
+                                        <div className="flex items-center gap-2 px-2 pt-2">
+                                            <Input
+                                                autoFocus
+                                                value={newSubsectionName}
+                                                onChange={(e) => setNewSubsectionName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") { e.preventDefault(); addSubsection(name) }
+                                                    else if (e.key === "Escape") setAddingSubsectionFor(null)
+                                                }}
+                                                placeholder="Subsection name"
+                                                className="h-8 text-sm"
+                                            />
+                                            <Button size="sm" className="h-8" disabled={!newSubsectionName.trim()} onClick={() => addSubsection(name)}>Add</Button>
+                                            <Button variant="ghost" size="sm" className="h-8" onClick={() => setAddingSubsectionFor(null)}>Cancel</Button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => { setAddingSubsectionFor(name); setNewSubsectionName("") }}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 mt-1 text-xs text-muted-foreground hover:text-foreground"
+                                        >
+                                            <Plus className="size-3" /> Add subsection
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
                 <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
                     <DialogContent className="sm:max-w-[440px]">
                         <DialogHeader>
@@ -259,6 +505,35 @@ export default function CataloguePage() {
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
                             <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={newSectionOpen} onOpenChange={(open) => {
+                    if (!creatingSection) {
+                        setNewSectionOpen(open)
+                        if (!open) setNewSectionFor(null)
+                    }
+                }}>
+                    <DialogContent className="sm:max-w-[440px]">
+                        <DialogHeader>
+                            <DialogTitle>Create a new section</DialogTitle>
+                            <DialogDescription>
+                                This section will be saved to RPM and available for future catalogue and costing items.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Input
+                            autoFocus
+                            value={newSectionName}
+                            onChange={(e) => setNewSectionName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createSection() } }}
+                            placeholder="Section name"
+                        />
+                        <DialogFooter>
+                            <Button variant="outline" disabled={creatingSection} onClick={() => setNewSectionFor(null)}>Cancel</Button>
+                            <Button disabled={!newSectionName.trim() || creatingSection} onClick={createSection}>
+                                {creatingSection ? "Creating…" : "Create section"}
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

@@ -13,7 +13,7 @@ import type { CostingItem, CostingLine, CostingSection, Material } from "@/types
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
 
-const SECTIONS = ["Materials", "Steel", "Wiring - LED", "Labour", "Pack/Despatch/Freight"] as const
+const DEFAULT_SECTIONS = ["Materials", "Steel", "Wiring - LED", "Labour", "Pack/Despatch/Freight"]
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -113,6 +113,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const [lines, setLines] = useState<CostingLine[]>([])
     const [subOrder, setSubOrder] = useState<Record<string, number>>({})
     const [suppliers, setSuppliers] = useState<string[]>([])
+    const [definedSections, setDefinedSections] = useState<string[]>(DEFAULT_SECTIONS)
     const [loading, setLoading] = useState(true)
     const [pickerSection, setPickerSection] = useState<string | null>(null)
     const [pickerSub, setPickerSub] = useState<string | null>(null)
@@ -202,8 +203,12 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             if (loaded.some(isWeldingTime)) await syncArgonFromWelding(loaded)
             if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
-            ;((secs as CostingSection[]) || []).forEach((s) => { if (s.subsection) order[`${s.section}|${s.subsection}`] = s.sort })
+            const loadedSections = (secs as CostingSection[]) || []
+            loadedSections.forEach((s) => { if (s.subsection) order[`${s.section}|${s.subsection}`] = s.sort })
             setSubOrder(order)
+            if (loadedSections.length > 0) {
+                setDefinedSections(Array.from(new Set(loadedSections.sort((a, b) => a.sort - b.sort).map((s) => s.section))))
+            }
             setSuppliers(((sups as { name: string }[]) || []).map((s) => s.name))
             setLoading(false)
         })()
@@ -393,10 +398,10 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     // Only show sections that have lines (or were added manually). Canonical order first, then any others.
     const withLines = Array.from(new Set(lines.map((l) => l.section)))
     const activeSections = [
-        ...SECTIONS.filter((s) => withLines.includes(s) || extraSections.includes(s)),
-        ...withLines.filter((s) => !(SECTIONS as readonly string[]).includes(s)),
+        ...definedSections.filter((s) => withLines.includes(s) || extraSections.includes(s)),
+        ...withLines.filter((s) => !definedSections.includes(s)),
     ]
-    const addableSections = SECTIONS.filter((s) => !activeSections.includes(s))
+    const addableSections = definedSections.filter((s) => !activeSections.includes(s))
     const visibleColumns = COST_COLUMNS.filter((column) => showWeights || !column.weight)
     const tableWidth = visibleColumns.reduce((total, column) => total + (widths[column.key] ?? column.width), 0) + 64
 
