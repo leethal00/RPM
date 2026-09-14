@@ -1,10 +1,27 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 export interface ColumnLayout {
     order: string[]
     widths: Record<string, number>
+}
+
+const COST_SHEET_WIDTH_BUDGET = 900
+
+function fittedWidths(storageKey: string, widths: Record<string, number>) {
+    // The costing sheet has a lot of useful columns, especially when steel weights
+    // are visible. Keep their relative proportions, but fit the normal desktop view
+    // into the page so users do not have to horizontally scroll just to read a line.
+    // Other tables that use this hook keep their existing behaviour unchanged.
+    if (!storageKey.startsWith("cost-sheet-columns-")) return widths
+
+    const entries = Object.entries(widths)
+    const total = entries.reduce((sum, [, width]) => sum + Number(width || 0), 0)
+    if (total <= COST_SHEET_WIDTH_BUDGET || total <= 0) return widths
+
+    const scale = COST_SHEET_WIDTH_BUDGET / total
+    return Object.fromEntries(entries.map(([key, width]) => [key, Math.max(44, Math.round(width * scale))]))
 }
 
 /**
@@ -76,5 +93,7 @@ export function useColumnLayout(storageKey: string, defaults: ColumnLayout) {
         setWidths(defaults.widths)
     }, [defaults])
 
-    return { order, widths, move, setWidth, reset }
+    const displayWidths = useMemo(() => fittedWidths(storageKey, widths), [storageKey, widths])
+
+    return { order, widths: displayWidths, move, setWidth, reset }
 }
