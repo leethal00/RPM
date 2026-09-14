@@ -191,12 +191,6 @@ export default function CostingJobDetailPage() {
                             </div>
                         </div>
 
-                        {isJobStage && (
-                            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                This quote has been converted to job <strong>{job.job_number || job.xero_invoice_number}</strong>. Quote costing is locked; use Actuals and the Job card for production work.
-                            </div>
-                        )}
-
                         {xeroError && (
                             <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                                 {xeroError}
