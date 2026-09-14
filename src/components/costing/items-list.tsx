@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, ChevronRight, Package2, Search, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Trash2, ChevronRight, Package2, Search, ArrowUp, ArrowDown, GripVertical } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NumCell, TextCell } from "./cells"
@@ -35,6 +35,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [productOpen, setProductOpen] = useState(false)
     const [editingName, setEditingName] = useState<string | null>(null)
     const [nameDraft, setNameDraft] = useState<Record<string, string>>({})
+    const [draggingId, setDraggingId] = useState<string | null>(null)
 
     async function reload() {
         const [{ data: its }, { data: ls }] = await Promise.all([
@@ -104,12 +105,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (error) toast.error(error.message)
     }
 
-    async function moveItem(id: string, direction: -1 | 1) {
-        const current = [...items]
-        const from = current.findIndex(item => item.id === id)
-        const to = from + direction
-        if (from < 0 || to < 0 || to >= current.length) return
-        ;[current[from], current[to]] = [current[to], current[from]]
+    async function saveItemOrder(current: CostingItem[]) {
         const reordered = current.map((item, index) => ({ ...item, sort: (index + 1) * 10 }))
         setItems(reordered)
 
@@ -123,6 +119,28 @@ export function ItemsList({ job }: { job: CostingJob }) {
             return
         }
         toast.success("Line order updated")
+    }
+
+    async function moveItem(id: string, direction: -1 | 1) {
+        const current = [...items]
+        const from = current.findIndex(item => item.id === id)
+        const to = from + direction
+        if (from < 0 || to < 0 || to >= current.length) return
+        ;[current[from], current[to]] = [current[to], current[from]]
+        await saveItemOrder(current)
+    }
+
+    async function reorderItems(sourceId: string, targetId: string) {
+        if (sourceId === targetId) return
+        const current = [...items]
+        const from = current.findIndex(item => item.id === sourceId)
+        const to = current.findIndex(item => item.id === targetId)
+        if (from < 0 || to < 0) return
+
+        const [moved] = current.splice(from, 1)
+        current.splice(to, 0, moved)
+        setDraggingId(null)
+        await saveItemOrder(current)
     }
 
     async function openItemEditor(it: CostingItem) {
@@ -275,7 +293,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     return (
         <div className="mt-6 space-y-5">
             <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Items in this job — use the arrows to change the order sent to Xero.</p>
+                <p className="text-sm text-muted-foreground">Items in this job — drag the handle or use the arrows to change the order sent to Xero.</p>
                 <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button>
@@ -290,7 +308,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40 text-muted-foreground text-xs">
                             <tr className="text-left">
-                                <th className="w-16"></th>
+                                <th className="w-10"></th>
                                 <th className="font-medium px-3 py-2 min-w-[260px]">Item</th>
                                 <th className="font-medium px-2 py-2 w-20">Type</th>
                                 <th className="font-medium px-2 py-2 w-16 text-right">Qty</th>
@@ -307,29 +325,58 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const build = it.mode === "build"
                                 const suggestions = !build && editingName === it.id ? suggestionsFor(it) : []
                                 return (
-                                    <tr key={it.id} className="border-t border-border/60 group">
-                                        <td className="pl-2 pr-0 py-1.5 align-middle">
-                                            <div className="flex items-center gap-0.5">
+                                    <tr
+                                        key={it.id}
+                                        onDragOver={e => {
+                                            if (!draggingId || draggingId === it.id) return
+                                            e.preventDefault()
+                                            e.dataTransfer.dropEffect = "move"
+                                        }}
+                                        onDrop={e => {
+                                            e.preventDefault()
+                                            if (draggingId) void reorderItems(draggingId, it.id)
+                                        }}
+                                        className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}
+                                    >
+                                        <td className="pl-1 pr-0 py-1 align-middle">
+                                            <div className="flex items-center gap-0">
                                                 <button
                                                     type="button"
-                                                    disabled={rowIndex === 0}
-                                                    onClick={() => void moveItem(it.id, -1)}
-                                                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                    title="Move up"
-                                                    aria-label={`Move ${it.name || "item"} up`}
+                                                    draggable
+                                                    onDragStart={e => {
+                                                        setDraggingId(it.id)
+                                                        e.dataTransfer.effectAllowed = "move"
+                                                        e.dataTransfer.setData("text/plain", it.id)
+                                                    }}
+                                                    onDragEnd={() => setDraggingId(null)}
+                                                    className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground"
+                                                    title="Drag to reorder"
+                                                    aria-label={`Drag ${it.name || "item"} to reorder`}
                                                 >
-                                                    <ArrowUp className="size-4" />
+                                                    <GripVertical className="size-3.5" />
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={rowIndex === rows.length - 1}
-                                                    onClick={() => void moveItem(it.id, 1)}
-                                                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                    title="Move down"
-                                                    aria-label={`Move ${it.name || "item"} down`}
-                                                >
-                                                    <ArrowDown className="size-4" />
-                                                </button>
+                                                <div className="flex flex-col">
+                                                    <button
+                                                        type="button"
+                                                        disabled={rowIndex === 0}
+                                                        onClick={() => void moveItem(it.id, -1)}
+                                                        className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                        title="Move up"
+                                                        aria-label={`Move ${it.name || "item"} up`}
+                                                    >
+                                                        <ArrowUp className="size-3" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={rowIndex === rows.length - 1}
+                                                        onClick={() => void moveItem(it.id, 1)}
+                                                        className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                        title="Move down"
+                                                        aria-label={`Move ${it.name || "item"} down`}
+                                                    >
+                                                        <ArrowDown className="size-3" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-3 py-1.5 relative">
