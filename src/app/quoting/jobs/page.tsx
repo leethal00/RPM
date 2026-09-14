@@ -24,6 +24,11 @@ const STATUS = {
     cancelled: { label: "Cancelled", className: "bg-red-500/15 text-red-600 dark:text-red-300" },
 } as const
 
+function formatDate(value?: string | null) {
+    if (!value) return "—"
+    return new Date(`${value}T00:00:00`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
+}
+
 export default function ActiveJobsPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
@@ -90,6 +95,7 @@ export default function ActiveJobsPage() {
                                         <th className="font-medium px-4 py-2.5">Job</th>
                                         <th className="font-medium px-4 py-2.5">Client / Site</th>
                                         <th className="font-medium px-4 py-2.5 w-32">Job #</th>
+                                        <th className="font-medium px-4 py-2.5 w-32">Due</th>
                                         <th className="font-medium px-4 py-2.5 w-32">Status</th>
                                     </tr>
                                 </thead>
@@ -101,6 +107,7 @@ export default function ActiveJobsPage() {
                                                 <td className="px-4 py-3"><div className="font-medium">{job.title}</div>{job.reference && <div className="text-xs text-muted-foreground">{job.reference}</div>}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</td>
                                                 <td className="px-4 py-3 tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</td>
+                                                <td className="px-4 py-3 tabular-nums">{formatDate(job.due_date)}</td>
                                                 <td className="px-4 py-3"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td>
                                             </tr>
                                         )
