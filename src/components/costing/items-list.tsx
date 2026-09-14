@@ -17,6 +17,8 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const lineCost = (l: CostingLine) => Number(l.qty) * Number(l.unit_cost)
 const unitSell = (l: CostingLine) => l.unit_sell_override != null ? Number(l.unit_sell_override) : Number(l.unit_cost) * (1 + Number(l.markup))
 const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
+const isSectionHeading = (item: CostingItem) => item.sign_code === SECTION_HEADING_CODE
 
 type XeroProduct = { id: string; code: string; name: string; description: string; sell: number; cost: number }
 type Suggestion = { key: string; source: "rpm" | "xero"; name: string; detail: string; sell: number; rpm?: CostingItem; xero?: XeroProduct }
@@ -52,7 +54,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
             const { data } = tpl?.id
                 ? await supabase.from("costing_items").select("*").eq("job_id", tpl.id).order("name")
                 : { data: [] }
-            setProducts((data as CostingItem[]) || [])
+            setProducts(((data as CostingItem[]) || []).filter(item => !isSectionHeading(item)))
         }
         if (xeroProducts === null) {
             setXeroError(null)
@@ -79,6 +81,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     }, [job.id])
 
     function unit(it: CostingItem) {
+        if (isSectionHeading(it)) return { cost: 0, sell: 0 }
         if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
         const ls = lines.filter(l => l.item_id === it.id)
         const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
@@ -172,6 +175,27 @@ export function ItemsList({ job }: { job: CostingJob }) {
             setNameDraft(d => ({ ...d, [item.id]: "" }))
             loadLibraries()
         }
+    }
+
+    async function addSectionHeading() {
+        const maxSort = Math.max(0, ...items.map(i => i.sort))
+        const { data, error } = await supabase.from("costing_items")
+            .insert({
+                job_id: job.id,
+                name: "",
+                sign_code: SECTION_HEADING_CODE,
+                mode: "simple",
+                qty: 1,
+                unit_cost: 0,
+                unit_price: 0,
+                sort: maxSort + 1,
+            })
+            .select("*").single()
+        if (error) return toast.error(error.message)
+        const item = data as CostingItem
+        setItems(p => [...p, item])
+        setEditingName(item.id)
+        setNameDraft(d => ({ ...d, [item.id]: "" }))
     }
 
     async function confirmDelete() {
@@ -298,6 +322,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => addItem("simple")}><Plus className="size-3.5" /> Simple item</Button>
+                    <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={addSectionHeading}><Plus className="size-3.5" /> Section heading</Button>
                 </div>
             </div>
 
@@ -321,9 +346,98 @@ export function ItemsList({ job }: { job: CostingJob }) {
                         </thead>
                         <tbody>
                             {rows.map(({ it, unitCost, unitSell: us, totalSell }, rowIndex) => {
+                                const heading = isSectionHeading(it)
+                                const sectionNumber = heading ? items.slice(0, rowIndex + 1).filter(isSectionHeading).length : 0
                                 const m = us > 0 ? 1 - unitCost / us : 0
                                 const build = it.mode === "build"
-                                const suggestions = !build && editingName === it.id ? suggestionsFor(it) : []
+                                const suggestions = !heading && !build && editingName === it.id ? suggestionsFor(it) : []
+
+                                const handleCell = (
+                                    <td className="pl-1 pr-0 py-1 align-middle">
+                                        <div className="flex items-center gap-0">
+                                            <button
+                                                type="button"
+                                                draggable
+                                                onDragStart={e => {
+                                                    setDraggingId(it.id)
+                                                    e.dataTransfer.effectAllowed = "move"
+                                                    e.dataTransfer.setData("text/plain", it.id)
+                                                }}
+                                                onDragEnd={() => setDraggingId(null)}
+                                                className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground"
+                                                title="Drag to reorder"
+                                                aria-label={`Drag ${it.name || (heading ? "section heading" : "item")} to reorder`}
+                                            >
+                                                <GripVertical className="size-3.5" />
+                                            </button>
+                                            <div className="flex flex-col">
+                                                <button
+                                                    type="button"
+                                                    disabled={rowIndex === 0}
+                                                    onClick={() => void moveItem(it.id, -1)}
+                                                    className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                    title="Move up"
+                                                >
+                                                    <ArrowUp className="size-3" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={rowIndex === rows.length - 1}
+                                                    onClick={() => void moveItem(it.id, 1)}
+                                                    className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                    title="Move down"
+                                                >
+                                                    <ArrowDown className="size-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                )
+
+                                if (heading) {
+                                    return (
+                                        <tr
+                                            key={it.id}
+                                            onDragOver={e => {
+                                                if (!draggingId || draggingId === it.id) return
+                                                e.preventDefault()
+                                                e.dataTransfer.dropEffect = "move"
+                                            }}
+                                            onDrop={e => {
+                                                e.preventDefault()
+                                                if (draggingId) void reorderItems(draggingId, it.id)
+                                            }}
+                                            className={`border-t border-border/60 group bg-muted/35 ${draggingId === it.id ? "opacity-50" : ""}`}
+                                        >
+                                            {handleCell}
+                                            <td colSpan={7} className="px-3 py-2">
+                                                <div className="flex items-center gap-2 font-semibold tracking-wide">
+                                                    <span className="shrink-0 tabular-nums">{sectionNumber}.</span>
+                                                    <input
+                                                        autoFocus={editingName === it.id}
+                                                        value={nameDraft[it.id] ?? it.name ?? ""}
+                                                        placeholder="SECTION HEADING"
+                                                        onFocus={() => {
+                                                            setEditingName(it.id)
+                                                            setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" }))
+                                                        }}
+                                                        onChange={e => setNameDraft(d => ({ ...d, [it.id]: e.target.value }))}
+                                                        onKeyDown={e => {
+                                                            if (e.key === "Enter") e.currentTarget.blur()
+                                                            else if (e.key === "Escape") setEditingName(null)
+                                                        }}
+                                                        onBlur={() => void commitName(it)}
+                                                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold uppercase tracking-wide outline-none hover:border-input focus:border-input"
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td className="px-1 py-1.5 text-right">
+                                                <button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100" title="Delete section heading"><Trash2 className="size-3.5" /></button>
+                                            </td>
+                                        </tr>
+                                    )
+                                }
+
                                 return (
                                     <tr
                                         key={it.id}
@@ -338,47 +452,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                         }}
                                         className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}
                                     >
-                                        <td className="pl-1 pr-0 py-1 align-middle">
-                                            <div className="flex items-center gap-0">
-                                                <button
-                                                    type="button"
-                                                    draggable
-                                                    onDragStart={e => {
-                                                        setDraggingId(it.id)
-                                                        e.dataTransfer.effectAllowed = "move"
-                                                        e.dataTransfer.setData("text/plain", it.id)
-                                                    }}
-                                                    onDragEnd={() => setDraggingId(null)}
-                                                    className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground"
-                                                    title="Drag to reorder"
-                                                    aria-label={`Drag ${it.name || "item"} to reorder`}
-                                                >
-                                                    <GripVertical className="size-3.5" />
-                                                </button>
-                                                <div className="flex flex-col">
-                                                    <button
-                                                        type="button"
-                                                        disabled={rowIndex === 0}
-                                                        onClick={() => void moveItem(it.id, -1)}
-                                                        className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                        title="Move up"
-                                                        aria-label={`Move ${it.name || "item"} up`}
-                                                    >
-                                                        <ArrowUp className="size-3" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={rowIndex === rows.length - 1}
-                                                        onClick={() => void moveItem(it.id, 1)}
-                                                        className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                        title="Move down"
-                                                        aria-label={`Move ${it.name || "item"} down`}
-                                                    >
-                                                        <ArrowDown className="size-3" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </td>
+                                        {handleCell}
                                         <td className="px-3 py-1.5 relative">
                                             {build ? (
                                                 <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} />
