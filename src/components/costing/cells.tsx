@@ -12,7 +12,7 @@ const cls = "w-full rounded border border-transparent hover:border-input focus:b
 let sharedSupplierCache: string[] | null = null
 let sharedSupplierRequest: Promise<string[]> | null = null
 
-function loadSharedSuppliers() {
+function loadSharedSuppliers(): Promise<string[]> {
     if (sharedSupplierCache) return Promise.resolve(sharedSupplierCache)
     if (!sharedSupplierRequest) {
         const supabase = createClient()
@@ -24,7 +24,7 @@ function loadSharedSuppliers() {
             })
             .finally(() => { sharedSupplierRequest = null })
     }
-    return sharedSupplierRequest
+    return sharedSupplierRequest!
 }
 
 export function NumCell({ value, onCommit, step, placeholder, align = "right", decimals }: {
