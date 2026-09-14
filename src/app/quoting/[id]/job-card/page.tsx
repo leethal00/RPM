@@ -134,29 +134,17 @@ export default function JobCardPage() {
       </div>
 
       <Sheet>
-        <Header number={number} />
-
-        <div className="mt-[1.5mm] grid grid-cols-[1.37fr_.96fr_32mm] gap-[2mm] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
-          <div className="space-y-[2.2mm]">
-            <Line label="Customer" value={customer} bold />
-            <Line label="Site" value={j.stores?.address || ""} />
-            <div className="h-[2mm]" />
-            <Line label="Job Title" value={job.title} bold />
-            <Line label="Quote No" value={(job as CostingJob & { quote_number?: string | null }).quote_number || ""} />
-          </div>
-          <div className="space-y-[1.8mm]">
-            <Line label="Date Issued" value={fmt(job.created_at)} compact />
-            <Line label="Required By" value={fmt(j.due_date)} compact />
-            <Line label="Contact" value={j.quote_contact || ""} compact />
-            <Line label="Phone" value="" compact />
-            <Line label="Site Contact" value="" compact />
-            <Line label="Phone" value="" compact />
-          </div>
-          <div className="flex flex-col items-center justify-center bg-white px-[1.5mm] py-[1.5mm]">
-            {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[24mm] w-[24mm]" /> : <div className="h-[24mm] w-[24mm] border border-black" />}
-            <div className="mt-[1mm] text-center text-[7.5px]">Scan to view in RPM</div>
-          </div>
-        </div>
+        <JobHeader
+          number={number}
+          customer={customer}
+          site={j.stores?.address || ""}
+          title={job.title}
+          issued={fmt(job.created_at)}
+          due={fmt(j.due_date)}
+          contact={j.quote_contact || ""}
+          phone=""
+          qrUrl={qrUrl}
+        />
 
         <div className="mt-[2.5mm] grid grid-cols-[1.4fr_1fr] gap-[2mm]">
           <Box title="JOB DETAILS / SCOPE OF WORK" className="h-[30mm]">
@@ -263,8 +251,6 @@ export default function JobCardPage() {
             </div>
           </Box>
         </div>
-
-        <div className="mt-[1mm] flex justify-end pr-[1mm] font-serif text-[18px] italic tracking-tight">Built to last.</div>
       </Sheet>
     </div>
   )
@@ -278,19 +264,84 @@ function Sheet({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Header({ number = "", safety = false }: { number?: string; safety?: boolean }) {
+function JobHeader({
+  number,
+  customer,
+  site,
+  title,
+  issued,
+  due,
+  contact,
+  phone,
+  qrUrl,
+}: {
+  number: string
+  customer: string
+  site: string
+  title: string
+  issued: string
+  due: string
+  contact: string
+  phone: string
+  qrUrl: string
+}) {
+  return (
+    <div className="grid h-[38mm] grid-cols-[44mm_1fr_30mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
+      <div className="flex items-center justify-center bg-white">
+        <img src="/R.jpg" alt="Rodier" className="h-[27mm] w-[40mm] object-contain" />
+      </div>
+
+      <div className="grid grid-cols-[1.25fr_.9fr] gap-x-[5mm] gap-y-[1.6mm] self-center">
+        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Customer:</span>
+          <span className="font-bold">{customer}</span>
+        </div>
+        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Site:</span>
+          <span>{site}</span>
+        </div>
+        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Job Title:</span>
+          <span className="font-bold">{title}</span>
+        </div>
+        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Date Issued:</span>
+          <span>{issued}</span>
+        </div>
+        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Required By:</span>
+          <span>{due}</span>
+        </div>
+        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Contact:</span>
+          <span>{contact}</span>
+        </div>
+        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+          <span className="font-semibold">Phone:</span>
+          <span>{phone}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center justify-between bg-white py-[1.5mm]">
+        <div className="w-[26mm] rounded-[1.2mm] border border-[#9baaaa] bg-[#f2f5f4] px-[1.5mm] py-[1mm] text-center">
+          <div className="text-[6.4px] leading-none">Job No / Invoice No</div>
+          <div className="mt-[.5mm] text-[16px] font-black leading-none">{number}</div>
+        </div>
+        {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
+        <div className="text-center text-[6px] leading-none">Scan to view in RPM</div>
+      </div>
+    </div>
+  )
+}
+
+function Header({ safety = false }: { number?: string; safety?: boolean }) {
   return (
     <div className="flex h-[25mm] items-start justify-between">
       <img src="/R.jpg" alt="Rodier - Creators of Unique Things" className="h-[23mm] w-[103mm] object-contain object-left" />
-      {safety ? (
+      {safety && (
         <div className="mt-[1mm] min-w-[58mm] rounded-[1.5mm] border border-[#9baaaa] bg-[#f2f5f4] px-[5mm] py-[2.5mm] text-center">
           <div className="text-[19px] font-black tracking-tight">JOB CARD</div>
           <div className="mt-[1mm] text-[9px] font-bold">SAFETY &amp; PROCESSES</div>
-        </div>
-      ) : (
-        <div className="mt-[1mm] min-w-[47mm] rounded-[1.5mm] border border-[#9baaaa] bg-[#f2f5f4] px-[4mm] py-[2mm] text-center">
-          <div className="text-[9px]">Job No / Invoice No</div>
-          <div className="mt-[.5mm] text-[22px] font-black leading-none">{number}</div>
         </div>
       )}
     </div>
@@ -322,15 +373,6 @@ function Box({
         <span className="font-black">{title}</span>{suffix && <span className="ml-[1.2mm] font-normal">{suffix}</span>}
       </div>
       <div className="box-border p-[2mm]">{children}</div>
-    </div>
-  )
-}
-
-function Line({ label, value, bold = false, compact = false }: { label: string; value: string; bold?: boolean; compact?: boolean }) {
-  return (
-    <div className={`grid ${compact ? "grid-cols-[22mm_1fr]" : "grid-cols-[22mm_1fr]"} gap-[1mm]`}>
-      <span className="font-medium">{label}:</span>
-      <span className={bold ? "font-bold" : "font-normal"}>{value}</span>
     </div>
   )
 }
