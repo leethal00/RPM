@@ -28,6 +28,11 @@ const STATUS_LABEL: Record<CostingStatus, string> = {
     cancelled: "Cancelled",
 }
 
+function formatDate(value?: string | null) {
+    if (!value) return null
+    return new Date(`${value}T00:00:00`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
+}
+
 export default function CostingJobDetailPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
@@ -51,8 +56,11 @@ export default function CostingJobDetailPage() {
     )
 
     const job = data ?? undefined
+    const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
+    const backPath = isJobStage ? "/quoting/jobs" : "/quoting"
+    const backLabel = isJobStage ? "Active Jobs" : "Quotes"
     const xeroQuoteUrl = job?.xero_quote_id
-        ? `https://go.xero.com/Accounts/Receivable/Quotes/Edit/${job.xero_quote_id}`
+        ? `https://go.xero.com/app/quotes/${job.xero_quote_id}`
         : null
 
     async function sendToXero() {
@@ -106,8 +114,8 @@ export default function CostingJobDetailPage() {
     return (
         <DashboardLayout>
             <PageShell>
-                <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground" onClick={() => router.push("/quoting")}>
-                    <ArrowLeft className="size-3.5" /> Jobs & Quotes
+                <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground" onClick={() => router.push(backPath)}>
+                    <ArrowLeft className="size-3.5" /> {backLabel}
                 </Button>
 
                 {isLoading ? (
@@ -121,15 +129,17 @@ export default function CostingJobDetailPage() {
                                 <div className="flex items-center gap-2.5">
                                     <Calculator className="size-5 text-muted-foreground shrink-0" />
                                     <h1 className="text-[1.7rem] font-semibold tracking-tight text-foreground">{job.title}</h1>
-                                    <button onClick={() => setEditOpen(true)} className="text-muted-foreground hover:text-foreground p-1 shrink-0" title="Edit job">
-                                        <Pencil className="size-4" />
-                                    </button>
+                                    {!isJobStage && (
+                                        <button onClick={() => setEditOpen(true)} className="text-muted-foreground hover:text-foreground p-1 shrink-0" title="Edit quote">
+                                            <Pencil className="size-4" />
+                                        </button>
+                                    )}
                                 </div>
                                 {job.reference && <p className="text-sm text-muted-foreground mt-1">{job.reference}</p>}
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}
                                 </p>
-                                {(job.xero_quote_number || job.xero_invoice_number || job.job_number) && (
+                                {(job.xero_quote_number || job.xero_invoice_number || job.job_number || job.due_date) && (
                                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                         {job.xero_quote_number && (
                                             xeroQuoteUrl ? (
@@ -140,6 +150,7 @@ export default function CostingJobDetailPage() {
                                         )}
                                         {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
                                         {job.job_number && <span>Job no: <strong className="text-foreground">{job.job_number}</strong></span>}
+                                        {job.due_date && <span>Due: <strong className="text-foreground">{formatDate(job.due_date)}</strong></span>}
                                     </div>
                                 )}
                             </div>
@@ -149,7 +160,7 @@ export default function CostingJobDetailPage() {
                                         {sendingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                                         {sendingXero ? "Sending..." : "Send to Xero"}
                                     </Button>
-                                ) : (
+                                ) : !isJobStage ? (
                                     <>
                                         {job.status === "quoted" && (
                                             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={updateXero} disabled={updatingXero}>
@@ -162,7 +173,7 @@ export default function CostingJobDetailPage() {
                                             {syncingXero ? "Checking..." : "Check Xero"}
                                         </Button>
                                     </>
-                                )}
+                                ) : null}
                                 {["approved", "in_progress", "complete", "invoiced"].includes(job.status) && (
                                     <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
                                         <Link href={`/quoting/${id}/job-card`} target="_blank">
@@ -180,6 +191,12 @@ export default function CostingJobDetailPage() {
                             </div>
                         </div>
 
+                        {isJobStage && (
+                            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                This quote has been converted to job <strong>{job.job_number || job.xero_invoice_number}</strong>. Quote costing is locked; use Actuals and the Job card for production work.
+                            </div>
+                        )}
+
                         {xeroError && (
                             <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                                 {xeroError}
@@ -189,20 +206,22 @@ export default function CostingJobDetailPage() {
                         <Dialog open={editOpen} onOpenChange={setEditOpen}>
                             <DialogContent className="sm:max-w-[600px]">
                                 <DialogHeader>
-                                    <DialogTitle>Edit job</DialogTitle>
+                                    <DialogTitle>Edit quote</DialogTitle>
                                     <DialogDescription>Update the title, reference, client/site, qty or details.</DialogDescription>
                                 </DialogHeader>
                                 <CostingJobForm job={job} onSuccess={() => { setEditOpen(false); mutate() }} onCancel={() => setEditOpen(false)} />
                             </DialogContent>
                         </Dialog>
 
-                        <Tabs defaultValue="items" className="mt-2">
+                        <Tabs defaultValue={isJobStage ? "actuals" : "items"} className="mt-2">
                             <TabsList>
-                                <TabsTrigger value="items">Items</TabsTrigger>
+                                <TabsTrigger value="items">{isJobStage ? "Quoted Items" : "Items"}</TabsTrigger>
                                 <TabsTrigger value="actuals">Actuals</TabsTrigger>
                                 <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
                             </TabsList>
-                            <TabsContent value="items"><ItemsList job={job} /></TabsContent>
+                            <TabsContent value="items">
+                                <div className={isJobStage ? "pointer-events-none select-none" : ""}><ItemsList job={job} /></div>
+                            </TabsContent>
                             <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>
                             <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>
                         </Tabs>
