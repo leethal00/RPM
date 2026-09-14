@@ -297,37 +297,37 @@ function JobHeader({
   qrUrl: string
 }) {
   return (
-    <div className="grid h-[38mm] grid-cols-[44mm_1fr_30mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
+    <div className="grid h-[40mm] grid-cols-[44mm_1fr_30mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
       <div className="flex items-center justify-center bg-white">
         <img src="/R.jpg" alt="Rodier" className="h-[27mm] w-[40mm] object-contain" />
       </div>
 
-      <div className="grid grid-cols-[1.25fr_.9fr] gap-x-[5mm] gap-y-[1.6mm] self-center">
-        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+      <div className="grid grid-cols-[1.25fr_.9fr] gap-x-[5mm] gap-y-[1.8mm] self-center text-[10px] leading-[1.2]">
+        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Customer:</span>
           <span className="font-bold">{customer}</span>
         </div>
-        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Site:</span>
           <span>{site}</span>
         </div>
-        <div className="col-span-2 grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Job Title:</span>
           <span className="font-bold">{title}</span>
         </div>
-        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Date Issued:</span>
           <span>{issued}</span>
         </div>
-        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Required By:</span>
           <span>{due}</span>
         </div>
-        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Contact:</span>
           <span>{contact}</span>
         </div>
-        <div className="grid grid-cols-[18mm_1fr] gap-[1.5mm]">
+        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
           <span className="font-semibold">Phone:</span>
           <span>{phone}</span>
         </div>
@@ -335,11 +335,11 @@ function JobHeader({
 
       <div className="flex flex-col items-center justify-between bg-white py-[1.5mm]">
         <div className="w-[26mm] rounded-[1.2mm] border border-[#9baaaa] bg-[#f2f5f4] px-[1.5mm] py-[1mm] text-center">
-          <div className="text-[6.4px] leading-none">Job No / Invoice No</div>
+          <div className="text-[6.8px] leading-none">Job No / Invoice No</div>
           <div className="mt-[.5mm] text-[16px] font-black leading-none">{number}</div>
         </div>
         {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-        <div className="text-center text-[6px] leading-none">Scan to view in RPM</div>
+        <div className="text-center text-[6.5px] leading-none">Scan to view in RPM</div>
       </div>
     </div>
   )
