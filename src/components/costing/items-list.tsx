@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, ChevronRight, Package2, Search, ArrowUp, ArrowDown, GripVertical } from "lucide-react"
+import { Plus, Trash2, ChevronRight, Package2, Search, ArrowUp, ArrowDown, GripVertical, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NumCell, TextCell } from "./cells"
@@ -108,7 +108,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (error) toast.error(error.message)
     }
 
-    async function saveItemOrder(current: CostingItem[]) {
+    async function saveItemOrder(current: CostingItem[], showToast = true) {
         const reordered = current.map((item, index) => ({ ...item, sort: (index + 1) * 10 }))
         setItems(reordered)
 
@@ -119,9 +119,10 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (failed?.error) {
             toast.error(`Could not save line order: ${failed.error.message}`)
             await reload()
-            return
+            return false
         }
-        toast.success("Line order updated")
+        if (showToast) toast.success("Line order updated")
+        return true
     }
 
     async function moveItem(id: string, direction: -1 | 1) {
@@ -196,6 +197,42 @@ export function ItemsList({ job }: { job: CostingJob }) {
         setItems(p => [...p, item])
         setEditingName(item.id)
         setNameDraft(d => ({ ...d, [item.id]: "" }))
+    }
+
+    async function duplicateItem(it: CostingItem) {
+        if (isSectionHeading(it)) return
+        const beforeIds = new Set(items.map(item => item.id))
+        const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: job.id })
+        if (error) return toast.error(`Could not copy item: ${error.message}`)
+
+        const { data: refreshed, error: refreshError } = await supabase
+            .from("costing_items")
+            .select("*")
+            .eq("job_id", job.id)
+            .order("sort")
+        if (refreshError) {
+            await reload()
+            return toast.error(`Item copied, but could not position it: ${refreshError.message}`)
+        }
+
+        const allItems = (refreshed as CostingItem[]) || []
+        const newItems = allItems
+            .filter(item => !beforeIds.has(item.id))
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        const copy = newItems[0]
+        if (!copy) {
+            await reload()
+            return toast.success(`Copied "${it.name || "item"}"`)
+        }
+
+        const ordered = allItems.filter(item => item.id !== copy.id)
+        const sourceIndex = ordered.findIndex(item => item.id === it.id)
+        if (sourceIndex >= 0) ordered.splice(sourceIndex + 1, 0, copy)
+        else ordered.push(copy)
+
+        const orderedOk = await saveItemOrder(ordered, false)
+        await reload()
+        if (orderedOk) toast.success(`Copied "${it.name || "item"}" below the original`)
     }
 
     async function confirmDelete() {
@@ -341,7 +378,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 <th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th>
                                 <th className="font-medium px-2 py-2 w-28 text-right">Total</th>
                                 <th className="font-medium px-2 py-2 w-20 text-right">Margin</th>
-                                <th className="w-24"></th>
+                                <th className="w-28"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -521,6 +558,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                             <div className="flex justify-end gap-1">
                                                 {build && <button onClick={() => openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}
                                                 {build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}
+                                                <button onClick={() => void duplicateItem(it)} className="p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100" title="Copy this item"><Copy className="size-3.5" /></button>
                                                 <button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button>
                                             </div>
                                         </td>
