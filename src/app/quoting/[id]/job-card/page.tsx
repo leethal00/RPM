@@ -175,7 +175,7 @@ export default function JobCardPage() {
         <Bar>DEPARTMENTS</Bar>
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
           {DEPARTMENTS.map((d) => (
-            <span key={d} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[8.3px]">
+            <span key={d} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[9.3px]">
               <CheckBox checked={autoDepartments.has(d)} />{d}
             </span>
           ))}
@@ -183,7 +183,7 @@ export default function JobCardPage() {
 
         <Bar>TIME LOG</Bar>
         <JobGrid />
-        <div className="flex h-[9.5mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[9px] font-bold">
+        <div className="flex h-[9.5mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[10px] font-bold">
           <span>Total Hours:</span><span className="h-[8mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
 
@@ -210,10 +210,10 @@ export default function JobCardPage() {
 
         <div className="mt-[3.5mm] grid grid-cols-[1fr_1fr] gap-[2mm]">
           <Box title="OUR SAFETY COMMITMENT" className="h-[56mm]">
-            <p className="pt-[2mm] text-[9.2px] leading-[1.7]">
+            <p className="pt-[2mm] text-[10.2px] leading-[1.6]">
               At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
             </p>
-            <div className="mt-[7mm] text-[10px] font-black tracking-[.05em]" style={{ color: GREEN }}>
+            <div className="mt-[7mm] text-[11px] font-black tracking-[.04em]" style={{ color: GREEN }}>
               THINK SAFE&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;HOME SAFE
             </div>
           </Box>
@@ -228,7 +228,7 @@ export default function JobCardPage() {
                   <div className="grid h-[15mm] w-[15mm] place-items-center rounded-full bg-[#0871b7] text-white">
                     <Icon className="h-[9mm] w-[9mm]" strokeWidth={1.8} />
                   </div>
-                  <div className="mt-[1.2mm] whitespace-pre-line text-[7.3px] font-medium leading-tight">{label}</div>
+                  <div className="mt-[1.2mm] whitespace-pre-line text-[8.5px] font-medium leading-tight">{label}</div>
                 </div>
               ))}
             </div>
@@ -240,7 +240,7 @@ export default function JobCardPage() {
 
         <div className="mt-[2.5mm] grid grid-cols-[1.45fr_1fr] gap-[2mm]">
           <Box title="KEY PROCEDURES" className="h-[68mm]">
-            <ul className="list-disc space-y-[1.6mm] pl-[4.5mm] pt-[1mm] text-[8.3px] leading-tight">
+            <ul className="list-disc space-y-[1.5mm] pl-[4.5mm] pt-[1mm] text-[9.3px] leading-tight">
               {procedures.map((x) => <li key={x}>{x}</li>)}
             </ul>
           </Box>
@@ -269,7 +269,7 @@ export default function JobCardPage() {
 
 function Sheet({ children }: { children: React.ReactNode }) {
   return (
-    <div className="sheet box-border mx-auto my-6 h-[297mm] w-[210mm] overflow-hidden bg-white px-[10mm] py-[6mm] text-[8.4px] leading-[1.25] shadow-2xl">
+    <div className="sheet box-border mx-auto my-6 h-[297mm] w-[210mm] overflow-hidden bg-white px-[10mm] py-[6mm] text-[9.4px] leading-[1.3] shadow-2xl">
       {children}
     </div>
   )
@@ -297,49 +297,49 @@ function JobHeader({
   qrUrl: string
 }) {
   return (
-    <div className="grid h-[40mm] grid-cols-[44mm_1fr_30mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
+    <div className="grid h-[42mm] grid-cols-[34mm_1fr_30mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
       <div className="flex items-center justify-center bg-white">
-        <img src="/R.jpg" alt="Rodier" className="h-[27mm] w-[40mm] object-contain" />
+        <img src="/R.jpg" alt="Rodier" className="h-[22mm] w-[30mm] object-contain" />
       </div>
 
-      <div className="grid grid-cols-[1.25fr_.9fr] gap-x-[5mm] gap-y-[1.8mm] self-center text-[10px] leading-[1.2]">
-        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Customer:</span>
+      <div className="grid grid-cols-[1.25fr_.9fr] gap-x-[5mm] gap-y-[2mm] self-center text-[11px] leading-[1.2]">
+        <div className="col-span-2 grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Customer:</span>
           <span className="font-bold">{customer}</span>
         </div>
-        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Site:</span>
+        <div className="col-span-2 grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Site:</span>
           <span>{site}</span>
         </div>
-        <div className="col-span-2 grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Job Title:</span>
+        <div className="col-span-2 grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Job Title:</span>
           <span className="font-bold">{title}</span>
         </div>
-        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Date Issued:</span>
+        <div className="grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Date Issued:</span>
           <span>{issued}</span>
         </div>
-        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Required By:</span>
+        <div className="grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Required By:</span>
           <span>{due}</span>
         </div>
-        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Contact:</span>
+        <div className="grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Contact:</span>
           <span>{contact}</span>
         </div>
-        <div className="grid grid-cols-[20mm_1fr] gap-[1.8mm]">
-          <span className="font-semibold">Phone:</span>
+        <div className="grid grid-cols-[21mm_1fr] gap-[2mm]">
+          <span className="font-bold">Phone:</span>
           <span>{phone}</span>
         </div>
       </div>
 
       <div className="flex flex-col items-center justify-between bg-white py-[1.5mm]">
         <div className="w-[26mm] rounded-[1.2mm] border border-[#9baaaa] bg-[#f2f5f4] px-[1.5mm] py-[1mm] text-center">
-          <div className="text-[6.8px] leading-none">Job No / Invoice No</div>
-          <div className="mt-[.5mm] text-[16px] font-black leading-none">{number}</div>
+          <div className="text-[7.5px] leading-none">Job No / Invoice No</div>
+          <div className="mt-[.5mm] text-[18px] font-black leading-none">{number}</div>
         </div>
         {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-        <div className="text-center text-[6.5px] leading-none">Scan to view in RPM</div>
+        <div className="text-center text-[7px] leading-none">Scan to view in RPM</div>
       </div>
     </div>
   )
@@ -348,11 +348,11 @@ function JobHeader({
 function Header({ safety = false }: { number?: string; safety?: boolean }) {
   return (
     <div className="flex h-[25mm] items-start justify-between">
-      <img src="/R.jpg" alt="Rodier - Creators of Unique Things" className="h-[23mm] w-[103mm] object-contain object-left" />
+      <img src="/R.jpg" alt="Rodier - Creators of Unique Things" className="h-[20mm] w-[88mm] object-contain object-left" />
       {safety && (
         <div className="mt-[1mm] min-w-[58mm] rounded-[1.5mm] border border-[#9baaaa] bg-[#f2f5f4] px-[5mm] py-[2.5mm] text-center">
           <div className="text-[19px] font-black tracking-tight">JOB CARD</div>
-          <div className="mt-[1mm] text-[9px] font-bold">SAFETY &amp; PROCESSES</div>
+          <div className="mt-[1mm] text-[10px] font-bold">SAFETY &amp; PROCESSES</div>
         </div>
       )}
     </div>
@@ -361,7 +361,7 @@ function Header({ safety = false }: { number?: string; safety?: boolean }) {
 
 function Bar({ children, noTop = false }: { children: React.ReactNode; noTop?: boolean }) {
   return (
-    <div className={`${noTop ? "" : "mt-[2.5mm]"} h-[6mm] px-[2.5mm] py-[1.2mm] text-[9px] font-black text-white`} style={{ background: GREEN }}>
+    <div className={`${noTop ? "" : "mt-[2.5mm]"} h-[6mm] px-[2.5mm] py-[1.1mm] text-[10px] font-black text-white`} style={{ background: GREEN }}>
       {children}
     </div>
   )
@@ -380,7 +380,7 @@ function Box({
 }) {
   return (
     <div className={`box-border overflow-hidden border border-[#b9c5c1] bg-white ${className}`}>
-      <div className="flex h-[6mm] items-center px-[2.5mm] text-[9px] text-white" style={{ background: GREEN }}>
+      <div className="flex h-[6mm] items-center px-[2.5mm] text-[10px] text-white" style={{ background: GREEN }}>
         <span className="font-black">{title}</span>{suffix && <span className="ml-[1.2mm] font-normal">{suffix}</span>}
       </div>
       <div className="box-border p-[2mm]">{children}</div>
@@ -394,7 +394,7 @@ function SignLine({ label }: { label: string }) {
 
 function CheckBox({ checked = false }: { checked?: boolean }) {
   return (
-    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[8px] not-italic leading-none ${checked ? "border-[#155f4c] bg-[#155f4c] font-black text-white" : "border-neutral-500 bg-white"}`}>
+    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${checked ? "border-[#155f4c] bg-[#155f4c] font-black text-white" : "border-neutral-500 bg-white"}`}>
       {checked ? "✓" : ""}
     </i>
   )
@@ -402,11 +402,11 @@ function CheckBox({ checked = false }: { checked?: boolean }) {
 
 function Checks({ items, tight = false }: { items: string[]; tight?: boolean }) {
   return (
-    <div className={tight ? "space-y-[1.5mm]" : "space-y-[2.1mm]"}>
+    <div className={tight ? "space-y-[1.4mm]" : "space-y-[2mm]"}>
       {items.map((x) => (
         <div key={x} className="flex items-start gap-[2mm]">
           <CheckBox />
-          <span className={tight ? "text-[8.1px] leading-none" : "text-[8.2px] leading-tight"}>{x}</span>
+          <span className={tight ? "text-[9.2px] leading-[1.05]" : "text-[9.4px] leading-tight"}>{x}</span>
         </div>
       ))}
     </div>
@@ -419,7 +419,7 @@ function JobGrid() {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[7.3px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[8.2px] font-bold">{h}</th>)}</tr></thead>
       <tbody>{rows(7).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
@@ -431,7 +431,7 @@ function MaterialsGrid() {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[7.3px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[8.2px] font-bold">{h}</th>)}</tr></thead>
       <tbody>{rows(5).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[6.5mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
@@ -448,8 +448,8 @@ function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" 
         {icon === "hospital" && <Hospital className={iconClass} />}
       </div>
       <div>
-        <div className="text-[7.5px]">{title}</div>
-        {value ? <div className={bold ? "text-[17px] font-black leading-none" : "text-[10px] font-bold"}>{value}</div> : <div className="mt-[3mm] border-b border-neutral-500" />}
+        <div className="text-[8.5px]">{title}</div>
+        {value ? <div className={bold ? "text-[18px] font-black leading-none" : "text-[11px] font-bold"}>{value}</div> : <div className="mt-[3mm] border-b border-neutral-500" />}
       </div>
     </div>
   )
