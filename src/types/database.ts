@@ -190,6 +190,7 @@ export interface CostingJob {
   quoted_by: string | null
   qty: number
   status: CostingStatus
+  due_date: string | null
   adjusted_total: number | null
   xero_quote_id: string | null
   xero_quote_number: string | null
