@@ -18,84 +18,190 @@ type ProductionItem = {
   sort: number
 }
 
+type QuotedItemSeed = {
+  id: string
+  name: string | null
+  details: string | null
+  qty: number | string | null
+  sort: number | null
+}
+
 export function ProductionItems({ jobId }: { jobId: string }) {
   const supabase = useMemo(() => createClient(), [])
   const [items, setItems] = useState<ProductionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
 
-  async function load() {
-    setLoading(true)
-    let { data, error } = await supabase.from("production_job_items").select("*").eq("job_id", jobId).order("sort")
-    if (error) { toast.error(error.message); setLoading(false); return }
+  useEffect(() => {
+    let active = true
 
-    if (!data?.length) {
-      const { data: quoted, error: quotedError } = await supabase.from("costing_items").select("id,name,details,qty,sort").eq("job_id", jobId).order("sort")
-      if (quotedError) { toast.error(quotedError.message); setLoading(false); return }
-      if (quoted?.length) {
-        const rows = quoted.map((q) => ({ job_id: jobId, source_item_id: q.id, name: q.name || "", details: q.details || null, qty: Number(q.qty || 1), sort: q.sort || 0 }))
-        const inserted = await supabase.from("production_job_items").insert(rows).select("*").order("sort")
-        if (inserted.error) { toast.error(inserted.error.message); setLoading(false); return }
-        data = inserted.data
+    async function initialise() {
+      const existingResult = await supabase
+        .from("production_job_items")
+        .select("id,job_id,source_item_id,name,details,qty,sort")
+        .eq("job_id", jobId)
+        .order("sort")
+
+      if (!active) return
+      if (existingResult.error) {
+        toast.error(existingResult.error.message)
+        setLoading(false)
+        return
       }
-    }
-    setItems((data as ProductionItem[]) || [])
-    setLoading(false)
-  }
 
-  useEffect(() => { load() }, [jobId])
+      const existing = (existingResult.data ?? []) as ProductionItem[]
+      if (existing.length > 0) {
+        setItems(existing)
+        setLoading(false)
+        return
+      }
+
+      const quotedResult = await supabase
+        .from("costing_items")
+        .select("id,name,details,qty,sort")
+        .eq("job_id", jobId)
+        .order("sort")
+
+      if (!active) return
+      if (quotedResult.error) {
+        toast.error(quotedResult.error.message)
+        setLoading(false)
+        return
+      }
+
+      const quoted = (quotedResult.data ?? []) as QuotedItemSeed[]
+      if (quoted.length === 0) {
+        setItems([])
+        setLoading(false)
+        return
+      }
+
+      const seedRows = quoted.map((item) => ({
+        job_id: jobId,
+        source_item_id: item.id,
+        name: item.name || "",
+        details: item.details || null,
+        qty: Number(item.qty || 1),
+        sort: item.sort || 0,
+      }))
+
+      const insertResult = await supabase
+        .from("production_job_items")
+        .insert(seedRows)
+        .select("id,job_id,source_item_id,name,details,qty,sort")
+
+      if (!active) return
+      if (insertResult.error) {
+        toast.error(insertResult.error.message)
+        setLoading(false)
+        return
+      }
+
+      const inserted = ((insertResult.data ?? []) as ProductionItem[]).sort((a, b) => a.sort - b.sort)
+      setItems(inserted)
+      setLoading(false)
+    }
+
+    void initialise()
+    return () => { active = false }
+  }, [jobId, supabase])
 
   function patch(id: string, changes: Partial<ProductionItem>) {
-    setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...changes } : item))
+    setItems((current) => current.map((item) => item.id === id ? { ...item, ...changes } : item))
   }
 
   async function save(item: ProductionItem) {
     setSaving(item.id)
-    const { error } = await supabase.from("production_job_items").update({
-      name: item.name.trim(), details: item.details?.trim() || null, qty: Number(item.qty || 1), updated_at: new Date().toISOString(),
-    }).eq("id", item.id)
+    const result = await supabase
+      .from("production_job_items")
+      .update({
+        name: item.name.trim(),
+        details: item.details?.trim() || null,
+        qty: Number(item.qty || 1),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", item.id)
     setSaving(null)
-    if (error) toast.error(error.message)
+
+    if (result.error) toast.error(result.error.message)
     else toast.success("Production item saved")
   }
 
   async function addItem() {
-    const sort = items.length ? Math.max(...items.map((i) => i.sort)) + 10 : 0
-    const { data, error } = await supabase.from("production_job_items").insert({ job_id: jobId, name: "New production item", qty: 1, sort }).select("*").single()
-    if (error) toast.error(error.message)
-    else setItems((prev) => [...prev, data as ProductionItem])
+    const nextSort = items.length > 0 ? Math.max(...items.map((item) => item.sort)) + 10 : 0
+    const result = await supabase
+      .from("production_job_items")
+      .insert({ job_id: jobId, name: "New production item", qty: 1, sort: nextSort })
+      .select("id,job_id,source_item_id,name,details,qty,sort")
+      .single()
+
+    if (result.error) {
+      toast.error(result.error.message)
+      return
+    }
+
+    setItems((current) => [...current, result.data as ProductionItem])
   }
 
   async function remove(item: ProductionItem) {
-    if (!window.confirm(`Delete production item “${item.name}”? The original quoted item will remain unchanged.`)) return
-    const { error } = await supabase.from("production_job_items").delete().eq("id", item.id)
-    if (error) toast.error(error.message)
-    else setItems((prev) => prev.filter((x) => x.id !== item.id))
+    if (!window.confirm(`Delete production item "${item.name}"? The approved quote will remain unchanged.`)) return
+    const result = await supabase.from("production_job_items").delete().eq("id", item.id)
+    if (result.error) {
+      toast.error(result.error.message)
+      return
+    }
+    setItems((current) => current.filter((row) => row.id !== item.id))
   }
 
   if (loading) return <div className="py-10 text-sm text-muted-foreground">Preparing production items…</div>
 
-  return <div className="space-y-3">
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <div className="font-medium">Production items</div>
-        <p className="text-sm text-muted-foreground">Working job version. Changes here do not alter the approved quote.</p>
-      </div>
-      <Button size="sm" variant="outline" onClick={addItem} className="gap-1.5"><Plus className="size-3.5"/> Add line</Button>
-    </div>
-
-    <div className="rounded-lg border border-border/60 overflow-hidden">
-      {items.length === 0 ? <div className="p-8 text-sm text-center text-muted-foreground">No production items yet.</div> : items.map((item, index) => (
-        <div key={item.id} className={`grid grid-cols-[minmax(180px,1.1fr)_minmax(260px,2fr)_90px_auto] gap-3 p-3 items-start ${index ? "border-t border-border/60" : ""}`}>
-          <Input value={item.name} onChange={(e) => patch(item.id, { name: e.target.value })} />
-          <Textarea value={item.details || ""} onChange={(e) => patch(item.id, { details: e.target.value })} className="min-h-[60px]" placeholder="Production description / instructions…" />
-          <Input type="number" min="0" step="any" value={item.qty} onChange={(e) => patch(item.id, { qty: Number(e.target.value) })} />
-          <div className="flex gap-1.5 pt-0.5">
-            <Button size="icon-sm" variant="outline" title="Save" onClick={() => save(item)} disabled={saving === item.id}><Save className="size-3.5"/></Button>
-            <Button size="icon-sm" variant="ghost" title="Delete" onClick={() => remove(item)}><Trash2 className="size-3.5 text-destructive"/></Button>
-          </div>
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">Production items</div>
+          <p className="text-sm text-muted-foreground">Working job version. Changes here do not alter the approved quote.</p>
         </div>
-      ))}
+        <Button size="sm" variant="outline" onClick={addItem} className="gap-1.5">
+          <Plus className="size-3.5"/> Add line
+        </Button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border/60">
+        {items.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No production items yet.</div>
+        ) : (
+          items.map((item, index) => (
+            <div
+              key={item.id}
+              className={`grid grid-cols-[minmax(180px,1.1fr)_minmax(260px,2fr)_90px_auto] items-start gap-3 p-3 ${index > 0 ? "border-t border-border/60" : ""}`}
+            >
+              <Input value={item.name} onChange={(event) => patch(item.id, { name: event.target.value })}/>
+              <Textarea
+                value={item.details || ""}
+                onChange={(event) => patch(item.id, { details: event.target.value })}
+                className="min-h-[60px]"
+                placeholder="Production description / instructions…"
+              />
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                value={item.qty}
+                onChange={(event) => patch(item.id, { qty: Number(event.target.value) })}
+              />
+              <div className="flex gap-1.5 pt-0.5">
+                <Button size="icon-sm" variant="outline" title="Save" onClick={() => void save(item)} disabled={saving === item.id}>
+                  <Save className="size-3.5"/>
+                </Button>
+                <Button size="icon-sm" variant="ghost" title="Delete" onClick={() => void remove(item)}>
+                  <Trash2 className="size-3.5 text-destructive"/>
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
-  </div>
+  )
 }
