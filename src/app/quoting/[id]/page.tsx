@@ -52,7 +52,7 @@ export default function CostingJobDetailPage() {
 
     const job = data ?? undefined
     const xeroQuoteUrl = job?.xero_quote_id
-        ? `https://go.xero.com/Accounts/Receivable/Quotes/View/${job.xero_quote_id}`
+        ? `https://go.xero.com/Accounts/Receivable/Quotes/Edit/${job.xero_quote_id}`
         : null
 
     async function sendToXero() {
