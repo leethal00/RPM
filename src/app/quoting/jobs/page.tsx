@@ -27,7 +27,7 @@ type JobRow = CostingJob & {
     production_title?: string | null
 }
 
-type SortKey = "job" | "client" | "job_number" | "completion_date" | "status"
+type SortKey = "job" | "client" | "job_number" | "job_lead" | "completion_date" | "status"
 type SortDirection = "asc" | "desc"
 type JobView = "active" | "completed"
 type ImportPreview = {
@@ -92,7 +92,7 @@ export default function ActiveJobsPage() {
         if (clientId) query = query.eq("client_id", clientId)
         if (search.trim()) {
             const term = search.trim().replace(/[,()*%]/g, "")
-            query = query.or(`title.ilike.%${term}%,production_title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%`)
+            query = query.or(`title.ilike.%${term}%,production_title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%,quoted_by_name.ilike.%${term}%,job_lead_name.ilike.%${term}%`)
         }
 
         query = query.order("created_at", { ascending: false })
@@ -118,6 +118,9 @@ export default function ActiveJobsPage() {
             } else if (sortKey === "job_number") {
                 av = a.job_number || a.xero_invoice_number || ""
                 bv = b.job_number || b.xero_invoice_number || ""
+            } else if (sortKey === "job_lead") {
+                av = a.job_lead_name || ""
+                bv = b.job_lead_name || ""
             } else if (sortKey === "completion_date") {
                 av = a.completion_date || "9999-12-31"
                 bv = b.completion_date || "9999-12-31"
@@ -148,7 +151,7 @@ export default function ActiveJobsPage() {
         }
     }
 
-    function SortHeader({ field, children, className = "" }: { field: SortKey; children: React.ReactNode; className?: string }) {
+    function renderSortHeader(field: SortKey, children: React.ReactNode, className = "") {
         return (
             <th className={`font-medium px-4 py-2.5 ${className}`}>
                 <button type="button" onClick={() => toggleSort(field)} className="inline-flex items-center gap-1.5 hover:text-foreground">
@@ -258,11 +261,12 @@ export default function ActiveJobsPage() {
                             <table className="w-full text-sm">
                                 <thead className="bg-muted/40 text-muted-foreground">
                                     <tr className="text-left">
-                                        <SortHeader field="job">Job</SortHeader>
-                                        <SortHeader field="client">Client / Site</SortHeader>
-                                        <SortHeader field="job_number" className="w-32">Job #</SortHeader>
-                                        <SortHeader field="completion_date" className="w-36">Complete by</SortHeader>
-                                        <SortHeader field="status" className="w-32">Status</SortHeader>
+                                        {renderSortHeader("job", "Job")}
+                                        {renderSortHeader("client", "Client / Site")}
+                                        {renderSortHeader("job_number", "Job #", "w-32")}
+                                        {renderSortHeader("job_lead", "People", "w-36")}
+                                        {renderSortHeader("completion_date", "Complete by", "w-36")}
+                                        {renderSortHeader("status", "Status", "w-32")}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -273,6 +277,7 @@ export default function ActiveJobsPage() {
                                                 <td className="px-4 py-3"><div className="font-medium">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground">{job.reference}</div>}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</td>
                                                 <td className="px-4 py-3 tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</td>
+                                                <td className="px-4 py-3 text-xs"><div className="font-medium">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground">Quoted: {job.quoted_by_name || "—"}</div></td>
                                                 <td className="px-4 py-3 tabular-nums">{formatDate(job.completion_date)}</td>
                                                 <td className="px-4 py-3"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td>
                                             </tr>
