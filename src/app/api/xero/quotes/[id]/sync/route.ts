@@ -12,6 +12,17 @@ async function xeroJson(url: string, accessToken: string, tenantId: string) {
     return body
 }
 
+function xeroDate(value: unknown) {
+    if (!value) return null
+    if (typeof value === "string") {
+        const iso = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+        if (iso) return iso
+        const ms = value.match(/\/Date\((\d+)/)?.[1]
+        if (ms) return new Date(Number(ms)).toISOString().slice(0, 10)
+    }
+    return null
+}
+
 export async function POST(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
     const server = await createServerClient()
     const { data: auth } = await server.auth.getUser()
@@ -21,7 +32,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     const admin = xeroAdmin()
     const { data: job, error } = await admin
         .from("costing_jobs")
-        .select("id,status,xero_quote_id,xero_quote_number,xero_invoice_number,job_number")
+        .select("id,status,xero_quote_id,xero_quote_number,xero_invoice_number,job_number,due_date")
         .eq("id", id)
         .single()
     if (error || !job) return NextResponse.json({ error: "Quote not found" }, { status: 404 })
@@ -46,16 +57,22 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         else updates.status = "quoted"
 
         let invoiceNumber = job.xero_invoice_number as string | null
-        if (xeroStatus === "INVOICED" && !invoiceNumber) {
+        let dueDate = job.due_date as string | null
+
+        if (xeroStatus === "INVOICED") {
             const reference = String(quote.Reference || "").trim()
             if (reference) {
                 const where = encodeURIComponent(`Reference==\"${reference.replaceAll('"', '\\"')}\"`)
                 const invoiceResult = await xeroJson(`${XERO_API}/Invoices?where=${where}&order=Date%20DESC`, xero.accessToken, xero.tenantId)
                 const invoice = invoiceResult?.Invoices?.[0]
-                if (invoice?.InvoiceNumber) {
-                    invoiceNumber = invoice.InvoiceNumber
-                    updates.xero_invoice_number = invoiceNumber
-                    updates.job_number = invoiceNumber
+                if (invoice) {
+                    if (invoice.InvoiceNumber) {
+                        invoiceNumber = invoice.InvoiceNumber
+                        updates.xero_invoice_number = invoiceNumber
+                        updates.job_number = invoiceNumber
+                    }
+                    dueDate = xeroDate(invoice.DueDateString || invoice.DueDate) || dueDate
+                    if (dueDate) updates.due_date = dueDate
                     updates.status = "in_progress"
                 }
             }
@@ -71,6 +88,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
             quoteNumber: updates.xero_quote_number,
             invoiceNumber,
             jobNumber: invoiceNumber || job.job_number || null,
+            dueDate,
         })
     } catch (syncError) {
         console.error("sync xero quote", syncError)
