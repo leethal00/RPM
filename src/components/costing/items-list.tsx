@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, ChevronRight, Package2, Search, GripVertical } from "lucide-react"
+import { Plus, Trash2, ChevronRight, Package2, Search, ArrowUp, ArrowDown } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NumCell, TextCell } from "./cells"
@@ -35,7 +35,6 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const [productOpen, setProductOpen] = useState(false)
     const [editingName, setEditingName] = useState<string | null>(null)
     const [nameDraft, setNameDraft] = useState<Record<string, string>>({})
-    const [draggingId, setDraggingId] = useState<string | null>(null)
 
     async function reload() {
         const [{ data: its }, { data: ls }] = await Promise.all([
@@ -105,18 +104,14 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (error) toast.error(error.message)
     }
 
-    async function reorderItems(sourceId: string, targetId: string) {
-        if (sourceId === targetId) return
+    async function moveItem(id: string, direction: -1 | 1) {
         const current = [...items]
-        const from = current.findIndex(item => item.id === sourceId)
-        const to = current.findIndex(item => item.id === targetId)
-        if (from < 0 || to < 0) return
-
-        const [moved] = current.splice(from, 1)
-        current.splice(to, 0, moved)
+        const from = current.findIndex(item => item.id === id)
+        const to = from + direction
+        if (from < 0 || to < 0 || to >= current.length) return
+        ;[current[from], current[to]] = [current[to], current[from]]
         const reordered = current.map((item, index) => ({ ...item, sort: (index + 1) * 10 }))
         setItems(reordered)
-        setDraggingId(null)
 
         const results = await Promise.all(
             reordered.map(item => supabase.from("costing_items").update({ sort: item.sort }).eq("id", item.id))
@@ -280,7 +275,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     return (
         <div className="mt-6 space-y-5">
             <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Items in this job — signs with their own BOM (build), or simple cost lines (travel, freight…). Drag the handle to reorder lines.</p>
+                <p className="text-sm text-muted-foreground">Items in this job — use the arrows to change the order sent to Xero.</p>
                 <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button>
@@ -295,7 +290,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40 text-muted-foreground text-xs">
                             <tr className="text-left">
-                                <th className="w-8"></th>
+                                <th className="w-16"></th>
                                 <th className="font-medium px-3 py-2 min-w-[260px]">Item</th>
                                 <th className="font-medium px-2 py-2 w-20">Type</th>
                                 <th className="font-medium px-2 py-2 w-16 text-right">Qty</th>
@@ -307,40 +302,35 @@ export function ItemsList({ job }: { job: CostingJob }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {rows.map(({ it, unitCost, unitSell: us, totalSell }) => {
+                            {rows.map(({ it, unitCost, unitSell: us, totalSell }, rowIndex) => {
                                 const m = us > 0 ? 1 - unitCost / us : 0
                                 const build = it.mode === "build"
                                 const suggestions = !build && editingName === it.id ? suggestionsFor(it) : []
                                 return (
-                                    <tr
-                                        key={it.id}
-                                        onDragOver={e => {
-                                            if (!draggingId || draggingId === it.id) return
-                                            e.preventDefault()
-                                            e.dataTransfer.dropEffect = "move"
-                                        }}
-                                        onDrop={e => {
-                                            e.preventDefault()
-                                            if (draggingId) void reorderItems(draggingId, it.id)
-                                        }}
-                                        className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}
-                                    >
+                                    <tr key={it.id} className="border-t border-border/60 group">
                                         <td className="pl-2 pr-0 py-1.5 align-middle">
-                                            <button
-                                                type="button"
-                                                draggable
-                                                onDragStart={e => {
-                                                    setDraggingId(it.id)
-                                                    e.dataTransfer.effectAllowed = "move"
-                                                    e.dataTransfer.setData("text/plain", it.id)
-                                                }}
-                                                onDragEnd={() => setDraggingId(null)}
-                                                className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground/60 hover:text-foreground"
-                                                title="Drag to reorder"
-                                                aria-label={`Reorder ${it.name || "item"}`}
-                                            >
-                                                <GripVertical className="size-4" />
-                                            </button>
+                                            <div className="flex items-center gap-0.5">
+                                                <button
+                                                    type="button"
+                                                    disabled={rowIndex === 0}
+                                                    onClick={() => void moveItem(it.id, -1)}
+                                                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                    title="Move up"
+                                                    aria-label={`Move ${it.name || "item"} up`}
+                                                >
+                                                    <ArrowUp className="size-4" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={rowIndex === rows.length - 1}
+                                                    onClick={() => void moveItem(it.id, 1)}
+                                                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
+                                                    title="Move down"
+                                                    aria-label={`Move ${it.name || "item"} down`}
+                                                >
+                                                    <ArrowDown className="size-4" />
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="px-3 py-1.5 relative">
                                             {build ? (
