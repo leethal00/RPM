@@ -19,8 +19,6 @@ import type { Material } from "@/types/database"
 const SUPPLIER_LIST_ID = "catalogue-suppliers-dl"
 const today = () => new Date().toISOString().slice(0, 10)
 
-// Column definitions for the catalogue grid. Order + widths are user-adjustable
-// (drag the header to reorder, drag its right edge to resize) and persisted.
 interface ColMeta { key: string; label: string; width: number; min: number; align?: "right"; title?: string }
 const COLUMNS: ColMeta[] = [
     { key: "code", label: "Code", width: 110, min: 70 },
@@ -39,7 +37,6 @@ const DEFAULT_LAYOUT = {
     widths: Object.fromEntries(COLUMNS.map((c) => [c.key, c.width])),
 }
 
-// Reorderable + resizable header cell.
 function ColHeader({ col, width, onMove, onResize }: {
     col: ColMeta
     width: number
@@ -120,7 +117,6 @@ export default function CataloguePage() {
     const filtered = materials.filter((m) => {
         if (supplier !== "all" && (m.supplier ?? "") !== supplier) return false
         if (tokens.length) {
-            // Order-independent: every typed word must appear in the description or code.
             const hay = `${m.description} ${m.code ?? ""}`.toLowerCase()
             return tokens.every((t) => hay.includes(t))
         }
@@ -128,7 +124,6 @@ export default function CataloguePage() {
     })
 
     async function patch(id: string, p: Partial<Material>) {
-        // editing a price stamps "last checked" to today
         if ("unit_cost" in p) p = { ...p, date_last_checked: today() }
         setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, ...p } : m)))
         const { error } = await supabase.from("materials").update(p).eq("id", id)
@@ -140,7 +135,7 @@ export default function CataloguePage() {
             case "code": return <TextCell value={m.code ?? ""} placeholder="—" onCommit={(v) => patch(m.id, { code: v || null })} />
             case "description": return <TextCell value={m.description} placeholder="Description" onCommit={(v) => patch(m.id, { description: v })} />
             case "supplier": return <SupplierCell value={m.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => patch(m.id, { supplier: v || null })} />
-            case "section": return <div className="text-xs text-muted-foreground truncate">{m.section}{m.subsection ? ` · ${m.subsection}` : ""}</div>
+            case "section": return <TextCell value={m.section ?? ""} placeholder="Section" onCommit={(v) => patch(m.id, { section: v || "Materials" })} />
             case "unit_cost": return <NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} />
             case "default_markup": return <NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
             case "watts": return m.section === "Wiring - LED"
@@ -154,7 +149,7 @@ export default function CataloguePage() {
         }
     }
 
-    const tableWidth = order.reduce((s, k) => s + (widths[k] ?? 100), 0) + 44 // + actions col
+    const tableWidth = order.reduce((s, k) => s + (widths[k] ?? 100), 0) + 44
 
     async function addMaterial() {
         const payload = { description: "", section: "Materials", default_markup: 0.5, unit_cost: 0, active: true,
