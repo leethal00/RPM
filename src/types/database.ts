@@ -4,7 +4,6 @@ export type JobType = 'fault' | 'maintenance' | 'project'
 export type JobStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type CostingStatus = 'quote' | 'quoted' | 'approved' | 'in_progress' | 'complete' | 'invoiced' | 'cancelled'
-
 export interface Client { id: string; name: string; logo_url: string | null; primary_color: string | null; contact_email: string | null; active: boolean; created_at: string; updated_at: string }
 export interface UserProfile { id: string; email: string; name: string | null; role: UserRole; client_id: string | null; store_ids: string[]; avatar_url: string | null; developer_mode: boolean; created_at: string; updated_at: string }
 export interface Store { id: string; client_id: string; name: string; region: string | null; address: string | null; lat: number | null; lng: number | null; location_approximate: boolean; manager_name: string | null; manager_phone: string | null; rodier_account_manager_id: string | null; status: StoreStatus; site_type: string | null; site_category: string | null; maintenance_score: number | null; hours_of_operation: string | null; has_drive_thru: boolean; created_at: string; updated_at: string; assets?: Asset[]; jobs?: Job[]; projects?: Project[]; clients?: Client; site_photos?: SitePhoto[]; store_brands?: { brand_id: string; client_brands?: ClientBrand }[]; site_construction_drawings?: SiteConstructionDrawing[] }
@@ -16,35 +15,7 @@ export interface Project { id: string; name: string; description: string | null;
 export interface Material { id: string; code: string | null; description: string; supplier: string | null; unit: string | null; unit_cost: number; default_markup: number; section: string; subsection: string | null; date_last_checked: string | null; check_note: string | null; is_labour: boolean; watts: number | null; mtr_weight: number | null; active: boolean; created_at: string; updated_at: string }
 export interface CostingSection { id: number; section: string; subsection: string | null; sort: number }
 export interface CostingSupplier { id: string; name: string; created_at: string }
-
-export interface CostingJob {
-  id: string
-  job_number: string | null
-  title: string
-  client_id: string | null
-  store_id: string | null
-  reference: string | null
-  details: string | null
-  contact_name: string | null
-  quoted_by: string | null
-  qty: number
-  status: CostingStatus
-  completion_date: string | null
-  adjusted_total: number | null
-  xero_quote_id: string | null
-  xero_quote_number: string | null
-  xero_invoice_number: string | null
-  folder_ref: string | null
-  notes: string | null
-  is_template: boolean
-  created_by: string | null
-  created_at: string
-  updated_at: string
-  clients?: Client | null
-  stores?: Store | null
-  costing_lines?: CostingLine[]
-}
-
+export interface CostingJob { id: string; job_number: string | null; title: string; client_id: string | null; store_id: string | null; reference: string | null; details: string | null; contact_name: string | null; quoted_by: string | null; qty: number; status: CostingStatus; completion_date: string | null; due_date?: string | null; adjusted_total: number | null; xero_quote_id: string | null; xero_quote_number: string | null; xero_invoice_number: string | null; folder_ref: string | null; notes: string | null; is_template: boolean; created_by: string | null; created_at: string; updated_at: string; clients?: Client | null; stores?: Store | null; costing_lines?: CostingLine[] }
 export interface CostingLine { id: string; job_id: string; item_id: string | null; section: string; subsection: string | null; sort: number; material_id: string | null; description: string; supplier: string | null; qty: number; unit_cost: number; markup: number; unit_sell_override: number | null; internal_note: string | null; weight_kg: number | null; wt_factor: number | null; wt_size: number | null; wt_qty: number | null; watts: number | null; line_cost: number; line_sell: number; created_at: string; updated_at: string }
 export type CostingItemMode = "simple" | "build"
 export interface CostingItem { id: string; job_id: string; name: string; sign_code: string | null; size: string | null; details: string | null; delivery: string | null; mode: CostingItemMode; qty: number; unit_cost: number; unit_price: number; sort: number; created_at: string; updated_at: string; costing_lines?: CostingLine[] }
