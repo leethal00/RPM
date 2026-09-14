@@ -178,6 +178,9 @@ export function ItemsList({ job }: { job: CostingJob }) {
     }
 
     async function saveAsProduct(it: CostingItem) {
+        const confirmed = window.confirm(`Save "${it.name || "this item"}" to Products?`)
+        if (!confirmed) return
+
         const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
         if (!tpl?.id) return toast.error("Product library not found")
         const { error } = await supabase.rpc("clone_costing_item", { src_item: it.id, target_job: tpl.id })
