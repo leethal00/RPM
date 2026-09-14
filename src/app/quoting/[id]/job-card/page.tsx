@@ -86,7 +86,7 @@ export default function JobCardPage() {
     ;(async () => {
       const { data } = await supabase
         .from("costing_jobs")
-        .select(`*, clients ( name ), stores ( name, address )`)
+        .select(`*, clients ( name ), stores ( name, address, manager_name, manager_phone )`)
         .eq("id", id)
         .single()
       if (live) {
@@ -103,10 +103,21 @@ export default function JobCardPage() {
   const j = job as CostingJob & {
     quote_contact?: string | null
     due_date?: string | null
-    stores?: { name?: string | null; address?: string | null } | null
+    stores?: {
+      name?: string | null
+      address?: string | null
+      manager_name?: string | null
+      manager_phone?: string | null
+    } | null
   }
   const customer = [job.clients?.name, j.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
   const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
+  const contact = j.quote_contact || job.contact_name || j.stores?.manager_name || ""
+  const phone = j.stores?.manager_phone || ""
+  const routingText = `${job.title || ""} ${job.details || ""}`.toLowerCase()
+  const autoDepartments = new Set<string>()
+  if (/illumin|electrical|\bled\b|light|wiring|power/.test(routingText)) autoDepartments.add("Electrical")
+  if (/servic|repair|site|install|maintenance/.test(routingText)) autoDepartments.add("Install")
   const qrUrl = typeof window !== "undefined"
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
     : ""
@@ -141,8 +152,8 @@ export default function JobCardPage() {
           title={job.title}
           issued={fmt(job.created_at)}
           due={fmt(j.due_date)}
-          contact={j.quote_contact || ""}
-          phone=""
+          contact={contact}
+          phone={phone}
           qrUrl={qrUrl}
         />
 
@@ -165,7 +176,7 @@ export default function JobCardPage() {
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
           {DEPARTMENTS.map((d) => (
             <span key={d} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[8.3px]">
-              <CheckBox />{d}
+              <CheckBox checked={autoDepartments.has(d)} />{d}
             </span>
           ))}
         </div>
@@ -176,7 +187,7 @@ export default function JobCardPage() {
           <span>Total Hours:</span><span className="h-[8mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
 
-        <Bar noTop>MATERIALS USED</Bar>
+        <Bar noTop>MATERIALS / PARTS USED</Bar>
         <MaterialsGrid />
 
         <div className="mt-[6mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
@@ -381,8 +392,12 @@ function SignLine({ label }: { label: string }) {
   return <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">{label}:</span><span className="flex-1 border-b border-neutral-700" /></div>
 }
 
-function CheckBox() {
-  return <i className="inline-block h-[4mm] w-[4mm] shrink-0 border border-neutral-500 bg-white" />
+function CheckBox({ checked = false }: { checked?: boolean }) {
+  return (
+    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[8px] not-italic leading-none ${checked ? "border-[#155f4c] bg-[#155f4c] font-black text-white" : "border-neutral-500 bg-white"}`}>
+      {checked ? "✓" : ""}
+    </i>
+  )
 }
 
 function Checks({ items, tight = false }: { items: string[]; tight?: boolean }) {
