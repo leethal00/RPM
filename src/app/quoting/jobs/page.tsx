@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowUpDown, Briefcase, Search } from "lucide-react"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
@@ -19,10 +20,12 @@ const PAGE_SIZE = 20
 type JobRow = CostingJob & {
     clients?: { name: string } | null
     stores?: { name: string } | null
+    production_title?: string | null
 }
 
 type SortKey = "job" | "client" | "job_number" | "completion_date" | "status"
 type SortDirection = "asc" | "desc"
+type JobView = "active" | "completed"
 
 const STATUS = {
     in_progress: { label: "In progress", className: "bg-amber-500/15 text-amber-600 dark:text-amber-300" },
@@ -40,23 +43,26 @@ export default function ActiveJobsPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
     const { clientId } = useCustomerFilter()
+    const [view, setView] = useState<JobView>("active")
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [sortKey, setSortKey] = useState<SortKey>("completion_date")
     const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
 
-    const key = `active-costing-jobs-${page}-${clientId ?? "all"}-${search}`
+    const statuses = view === "active" ? ["in_progress"] : ["complete", "invoiced", "cancelled"]
+    const key = `costing-jobs-${view}-${page}-${clientId ?? "all"}-${search}`
+
     const { data: result, isLoading } = useSupabaseQuery<{ items: JobRow[]; count: number }>(key, async () => {
         let query = supabase
             .from("costing_jobs")
             .select(`*, clients ( name ), stores ( name )`, { count: "exact" })
             .eq("is_template", false)
-            .in("status", ["in_progress", "complete", "invoiced", "cancelled"])
+            .in("status", statuses)
 
         if (clientId) query = query.eq("client_id", clientId)
         if (search.trim()) {
             const term = search.trim().replace(/[,()*%]/g, "")
-            query = query.or(`title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%`)
+            query = query.or(`title.ilike.%${term}%,production_title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%`)
         }
 
         query = query.order("created_at", { ascending: false })
@@ -74,8 +80,8 @@ export default function ActiveJobsPage() {
             let av = ""
             let bv = ""
             if (sortKey === "job") {
-                av = a.title || ""
-                bv = b.title || ""
+                av = a.production_title || a.title || ""
+                bv = b.production_title || b.title || ""
             } else if (sortKey === "client") {
                 av = `${a.clients?.name || ""} ${a.stores?.name || ""}`
                 bv = `${b.clients?.name || ""} ${b.stores?.name || ""}`
@@ -95,6 +101,13 @@ export default function ActiveJobsPage() {
     }, [result?.items, sortKey, sortDirection])
 
     const totalCount = result?.count ?? 0
+
+    function changeView(next: JobView) {
+        setView(next)
+        setPage(1)
+        setSortKey(next === "active" ? "completion_date" : "job")
+        setSortDirection("asc")
+    }
 
     function toggleSort(key: SortKey) {
         if (sortKey === key) setSortDirection((d) => d === "asc" ? "desc" : "asc")
@@ -118,11 +131,19 @@ export default function ActiveJobsPage() {
     return (
         <DashboardLayout>
             <PageShell>
-                <PageHeader icon={Briefcase} kicker="Job & Project Management" title="Active Jobs" description="Live production jobs, job cards, actual labour and materials, and invoicing progress." />
+                <PageHeader icon={Briefcase} kicker="Job & Project Management" title="Jobs" description="Manage live production work and keep completed jobs available as history." />
+
+                <Tabs value={view} onValueChange={(value) => changeView(value as JobView)} className="mb-5">
+                    <TabsList>
+                        <TabsTrigger value="active">Active Jobs</TabsTrigger>
+                        <TabsTrigger value="completed">Completed Jobs</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+
                 <div className="flex items-center gap-2 mb-4">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <Input placeholder="Search job, reference or invoice #…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-9" />
+                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-9" />
                     </div>
                     <span className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "job" : "jobs"}</span>
                 </div>
@@ -147,7 +168,7 @@ export default function ActiveJobsPage() {
                                         const meta = STATUS[job.status as keyof typeof STATUS] || STATUS.in_progress
                                         return (
                                             <tr key={job.id} onClick={() => router.push(`/quoting/jobs/${job.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30">
-                                                <td className="px-4 py-3"><div className="font-medium">{job.title}</div>{job.reference && <div className="text-xs text-muted-foreground">{job.reference}</div>}</td>
+                                                <td className="px-4 py-3"><div className="font-medium">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground">{job.reference}</div>}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</td>
                                                 <td className="px-4 py-3 tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</td>
                                                 <td className="px-4 py-3 tabular-nums">{formatDate(job.completion_date)}</td>
@@ -161,7 +182,9 @@ export default function ActiveJobsPage() {
                         <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />
                     </>
                 ) : (
-                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">No active jobs yet.</div>
+                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
+                        {view === "active" ? "No active jobs." : "No completed jobs yet."}
+                    </div>
                 )}
             </PageShell>
         </DashboardLayout>
