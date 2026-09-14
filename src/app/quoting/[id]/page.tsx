@@ -139,8 +139,10 @@ export default function CostingJobDetailPage() {
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}
                                 </p>
-                                {(job.xero_quote_number || job.xero_invoice_number || job.job_number || job.due_date) && (
+                                {(job.quoted_by_name || job.job_lead_name || job.xero_quote_number || job.xero_invoice_number || job.job_number || job.due_date) && (
                                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
+                                        <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
                                         {job.xero_quote_number && (
                                             xeroQuoteUrl ? (
                                                 <a href={xeroQuoteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground hover:underline">
