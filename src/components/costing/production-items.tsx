@@ -124,14 +124,14 @@ export function ProductionItems({ jobId }: { jobId: string }) {
     setSaving(null)
 
     if (result.error) toast.error(result.error.message)
-    else toast.success("Production item saved")
+    else toast.success("Job item saved")
   }
 
   async function addItem() {
     const nextSort = items.length > 0 ? Math.max(...items.map((item) => item.sort)) + 10 : 0
     const result = await supabase
       .from("production_job_items")
-      .insert({ job_id: jobId, name: "New production item", qty: 1, sort: nextSort })
+      .insert({ job_id: jobId, name: "New item", qty: 1, sort: nextSort })
       .select("id,job_id,source_item_id,name,details,qty,sort")
       .single()
 
@@ -144,7 +144,7 @@ export function ProductionItems({ jobId }: { jobId: string }) {
   }
 
   async function remove(item: ProductionItem) {
-    if (!window.confirm(`Delete production item "${item.name}"? The approved quote will remain unchanged.`)) return
+    if (!window.confirm(`Delete job item "${item.name}"? The completed quote history will remain unchanged.`)) return
     const result = await supabase.from("production_job_items").delete().eq("id", item.id)
     if (result.error) {
       toast.error(result.error.message)
@@ -153,14 +153,14 @@ export function ProductionItems({ jobId }: { jobId: string }) {
     setItems((current) => current.filter((row) => row.id !== item.id))
   }
 
-  if (loading) return <div className="py-10 text-sm text-muted-foreground">Preparing production items…</div>
+  if (loading) return <div className="py-10 text-sm text-muted-foreground">Preparing job items…</div>
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="font-medium">Production items</div>
-          <p className="text-sm text-muted-foreground">Working job version. Changes here do not alter the approved quote.</p>
+          <div className="font-medium">Job items</div>
+          <p className="text-sm text-muted-foreground">Edit the working job lines here. The completed quote remains available in quote history.</p>
         </div>
         <Button size="sm" variant="outline" onClick={addItem} className="gap-1.5">
           <Plus className="size-3.5"/> Add line
@@ -169,7 +169,7 @@ export function ProductionItems({ jobId }: { jobId: string }) {
 
       <div className="overflow-hidden rounded-lg border border-border/60">
         {items.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">No production items yet.</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">No job items yet.</div>
         ) : (
           items.map((item, index) => (
             <div
@@ -181,7 +181,7 @@ export function ProductionItems({ jobId }: { jobId: string }) {
                 value={item.details || ""}
                 onChange={(event) => patch(item.id, { details: event.target.value })}
                 className="min-h-[60px]"
-                placeholder="Production description / instructions…"
+                placeholder="Description / instructions…"
               />
               <Input
                 type="number"
