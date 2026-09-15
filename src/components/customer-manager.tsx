@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Loader2, Plus, Trash2, Users, Palette, ContactRound, RefreshCw, Mail, Phone, MapPin } from "lucide-react"
+import { Loader2, Plus, Trash2, Users, Palette, ContactRound, RefreshCw, Mail, Phone, MapPin, Pencil } from "lucide-react"
 import type { Client } from "@/types/database"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { BrandManager } from "@/components/brand-manager"
@@ -21,6 +21,9 @@ export function CustomerManager() {
     const [detailsFor, setDetailsFor] = useState<Client | null>(null)
     const [xeroContacts, setXeroContacts] = useState<any[]>([])
     const [xeroLoading, setXeroLoading] = useState(false)
+    const [syncingCustomers, setSyncingCustomers] = useState(false)
+    const [editCustomer, setEditCustomer] = useState<Client | null>(null)
+    const [editName, setEditName] = useState("")
 
     const fetchCustomers = async () => {
         setLoading(true)
@@ -79,6 +82,38 @@ export function CustomerManager() {
 
     const matchingXeroContact = detailsFor ? xeroContacts.find((c) => c.name?.toLowerCase() === detailsFor.name.toLowerCase()) : null
 
+    const importXeroCustomers = async () => {
+        setSyncingCustomers(true)
+        try {
+            const response = await fetch("/api/xero/contacts", { cache: "no-store" })
+            const body = await response.json()
+            if (!response.ok) throw new Error(body.error || "Could not load Xero customers")
+            const contacts = body.contacts || []
+            const existing = new Map(customers.map(c => [c.name.trim().toLowerCase(), c]))
+            const missing = contacts.filter((c: any) => c.name?.trim() && !existing.has(c.name.trim().toLowerCase()))
+            if (missing.length) {
+                const { error } = await supabase.from('clients').insert(missing.map((c: any) => ({ name: c.name.trim(), contact_email: c.email || null, active: true })))
+                if (error) throw error
+            }
+            const exactMatches = contacts.filter((c: any) => existing.has((c.name || '').trim().toLowerCase()) && c.email)
+            await Promise.all(exactMatches.map((c: any) => supabase.from('clients').update({ contact_email: c.email }).eq('id', existing.get(c.name.trim().toLowerCase())!.id)))
+            toast.success(missing.length ? `Imported ${missing.length} customer${missing.length === 1 ? "" : "s"} from Xero` : "Customer list already matches Xero")
+            await fetchCustomers()
+            setXeroContacts(contacts)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not import Xero customers")
+        } finally { setSyncingCustomers(false) }
+    }
+
+    const saveCustomerName = async () => {
+        if (!editCustomer || !editName.trim()) return
+        const { error } = await supabase.from('clients').update({ name: editName.trim() }).eq('id', editCustomer.id)
+        if (error) return toast.error(error.message)
+        toast.success("Customer name updated")
+        setEditCustomer(null)
+        await fetchCustomers()
+    }
+
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this customer? This may affect sites linked to them.")) return
 
@@ -97,7 +132,7 @@ export function CustomerManager() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
                 <div>
                     <h3 className="text-lg font-bold flex items-center gap-2">
                         <Users className="size-5 text-primary" />
@@ -105,6 +140,10 @@ export function CustomerManager() {
                     </h3>
                     <p className="text-sm text-muted-foreground">Manage customers and clients for site categorization.</p>
                 </div>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={importXeroCustomers} disabled={syncingCustomers}>
+                    <RefreshCw className={`size-3.5 ${syncingCustomers ? "animate-spin" : ""}`} />
+                    {syncingCustomers ? "Syncing…" : "Import customers from Xero"}
+                </Button>
             </div>
 
             <form onSubmit={handleAdd} className="flex gap-2 max-w-md">
@@ -151,6 +190,9 @@ export function CustomerManager() {
                                     <TableCell className="font-medium group-hover:text-primary transition-colors">{customer.name}</TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-1">
+                                            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Rename customer" onClick={(e) => { e.stopPropagation(); setEditCustomer(customer); setEditName(customer.name) }}>
+                                                <Pencil className="size-3.5" />
+                                            </Button>
                                             <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setDetailsFor(customer); if (!xeroContacts.length) loadXeroContacts() }}>
                                                 <ContactRound className="size-3.5" /> Details
                                             </Button>
@@ -180,6 +222,15 @@ export function CustomerManager() {
                 </Table>
             </div>
 
+
+
+            <Dialog open={!!editCustomer} onOpenChange={(open) => !open && setEditCustomer(null)}>
+                <DialogContent className="sm:max-w-[460px]">
+                    <DialogHeader><DialogTitle>Edit customer name</DialogTitle><DialogDescription>Use the same customer name as Xero so contact details match automatically.</DialogDescription></DialogHeader>
+                    <Input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveCustomerName() }} />
+                    <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditCustomer(null)}>Cancel</Button><Button onClick={saveCustomerName} disabled={!editName.trim()}>Save</Button></div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={!!detailsFor} onOpenChange={(open) => !open && setDetailsFor(null)}>
                 <DialogContent className="sm:max-w-[680px] max-h-[80vh] overflow-y-auto">
