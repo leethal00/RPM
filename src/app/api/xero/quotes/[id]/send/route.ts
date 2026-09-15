@@ -154,10 +154,13 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const standardTerms = await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId)
         const lines = costingLines || []
         let sectionNumber = 0
-        const pricedLineItems = items.map((item) => {
+        const pricedLineItems = items.flatMap((item) => {
             if (item.sign_code === SECTION_HEADING_CODE) {
                 sectionNumber += 1
-                return { Description: `${sectionNumber}. ${(item.name || "SECTION").trim().toUpperCase()}` }
+                return [
+                    { Description: "--" },
+                    { Description: `${sectionNumber}. ${(item.name || "SECTION").trim().toUpperCase()}` },
+                ]
             }
 
             let unitAmount = Number(item.unit_price || 0)
@@ -191,7 +194,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         const lineItems = [
             { Description: introDescription },
-            { Description: "--" },
             ...pricedLineItems,
         ]
 
