@@ -28,6 +28,18 @@ function cleanItemDetails(name: string, details?: string | null) {
     return raw.replace(new RegExp(`^${escaped}\\s*[:—-]?\\s*`, "i"), "").trim()
 }
 
+
+function quoteItemDescription(item: { name: string; qty: number; size?: string | null; details?: string | null; delivery?: string | null }) {
+    const details = cleanItemDetails(item.name, item.details)
+    return [
+        item.name,
+        `Qty: ${Number(item.qty || 1)}`,
+        item.size?.trim() ? `Size: ${item.size.trim()}` : null,
+        details ? `Details: ${details}` : null,
+        item.delivery?.trim() || null,
+    ].filter(Boolean).join("\n")
+}
+
 function accountCodeForItem(name: string) {
     const n = normalise(name)
     if (n.includes("travel") || n.includes("mileage")) return "250"
@@ -105,7 +117,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
-        admin.from("costing_items").select("id,name,details,sign_code,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
         admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
     ])
 
@@ -144,9 +156,8 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 const override = Number(item.unit_price || 0)
                 unitAmount = override > 0 ? override : calculated
             }
-            const details = cleanItemDetails(item.name, item.details)
             return {
-                Description: details ? `${item.name}:\n${details}` : item.name,
+                Description: quoteItemDescription(item),
                 Quantity: Number(item.qty || 1),
                 UnitAmount: Number(unitAmount.toFixed(2)),
                 AccountCode: accountCodeForItem(item.name),
