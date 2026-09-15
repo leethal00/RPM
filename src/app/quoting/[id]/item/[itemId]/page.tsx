@@ -26,7 +26,6 @@ export default function ItemCostSheetPage() {
     const [job, setJob] = useState<CostingJob | null>(null)
     const [item, setItem] = useState<CostingItem | null>(null)
     const [loading, setLoading] = useState(true)
-
     const [copyOpen, setCopyOpen] = useState(false)
     const [jobs, setJobs] = useState<{ id: string; title: string }[] | null>(null)
     const [jobSearch, setJobSearch] = useState("")
@@ -100,10 +99,10 @@ export default function ItemCostSheetPage() {
                 </div>
 
                 {loading || !item ? (
-                    <div className="h-20 rounded-lg bg-muted/40 animate-pulse mt-2" />
+                    <div className="h-20 rounded-lg bg-muted/40 animate-pulse mt-1" />
                 ) : (
                     <>
-                        <div className="mt-1 flex items-end justify-between gap-4 pb-3 border-b border-border/60">
+                        <div className="flex items-end justify-between gap-4 pb-2 border-b border-border/60">
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 text-muted-foreground mb-0.5">
                                     <Layers className="size-3" />
@@ -122,25 +121,20 @@ export default function ItemCostSheetPage() {
                             </div>
                         </div>
 
-                        {/* Compact quote description — feeds the customer quote line */}
-                        <div className="mt-3 rounded-lg border border-border/60 p-3 space-y-2.5">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
-                                <div className="hidden lg:block text-[11px] text-muted-foreground truncate max-w-[48%]">
-                                    {[item.size, item.delivery].filter(Boolean).join(" · ")}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2.5">
-                                <div>
-                                    <label className="mb-1 block text-[11px] text-muted-foreground">Size</label>
+                        {/* Keep the quote fields at their original comfortable size; only reduce the surrounding whitespace. */}
+                        <div className="mt-2 rounded-lg border border-border/60 p-4 space-y-3">
+                            <div className="text-xs font-medium text-muted-foreground">Quote description — shows on the customer quote</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="grid gap-1.5">
+                                    <label className="text-xs text-muted-foreground">Size</label>
                                     <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
                                         onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring" />
+                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
                                 </div>
-                                <div>
-                                    <label className="mb-1 block text-[11px] text-muted-foreground">Delivery</label>
+                                <div className="grid gap-1.5">
+                                    <label className="text-xs text-muted-foreground">Delivery</label>
                                     <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring">
+                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring">
                                         <option value="">—</option>
                                         <option value="Ex-factory">Ex-factory</option>
                                         <option value="Freight to site">Freight to site</option>
@@ -148,36 +142,38 @@ export default function ItemCostSheetPage() {
                                     </select>
                                 </div>
                             </div>
-                            <div>
-                                <label className="mb-1 block text-[11px] text-muted-foreground">Details</label>
+                            <div className="grid gap-1.5">
+                                <label className="text-xs text-muted-foreground">Details</label>
                                 <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
                                     onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
-                                    className="min-h-[52px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
+                                    className="min-h-[80px] rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
                             </div>
-                            <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-[11px] leading-4 text-muted-foreground">
-                                <span className="font-medium text-foreground/80">Quote line:</span>{" "}
-                                {[item.name || "Item", `Qty ${Number(item.qty)}`, item.size || null, item.details || null, item.delivery || null].filter(Boolean).join(" · ")}
+                            <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground whitespace-pre-line">
+                                {[item.name || "Item", `Qty: ${Number(item.qty)}`,
+                                  item.size ? `Size: ${item.size}` : null,
+                                  item.details ? `Details: ${item.details}` : null,
+                                  item.delivery || null].filter(Boolean).join("\n")}
                             </div>
                         </div>
 
                         <CostSheet jobId={jobId} item={item} />
 
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-4 mt-1 border-t border-border/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 mt-1 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Check className="size-3.5 text-emerald-500" /> Changes save automatically.
+                                <Check className="size-3.5 text-emerald-500" /> Changes save automatically as you edit.
                             </p>
                             <div className="flex items-center gap-2">
                                 {!isTemplate && item.mode === "build" && (
-                                    <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={saveAsProduct}>
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={saveAsProduct}>
                                         <Package2 className="size-3.5" /> Save as product
                                     </Button>
                                 )}
                                 {!isTemplate && (
-                                    <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openCopy}>
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={openCopy}>
                                         <Copy className="size-3.5" /> Copy to job…
                                     </Button>
                                 )}
-                                <Button size="sm" className="h-8 gap-1.5"
+                                <Button size="sm" className="gap-1.5"
                                     onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
                                     <Check className="size-3.5" /> {isTemplate ? "Done — back to Products" : "Done — back to job"}
                                 </Button>
