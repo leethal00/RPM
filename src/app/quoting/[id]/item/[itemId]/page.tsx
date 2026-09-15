@@ -79,7 +79,7 @@ export default function ItemCostSheetPage() {
         if (error) return toast.error(error.message)
         setCopyOpen(false)
         toast.success(`Copied to "${target.title}"`)
-        router.push(`/quoting/${target.id}/item/${newId}`) // open the new copy to tweak
+        router.push(`/quoting/${target.id}/item/${newId}`)
     }
 
     const filteredJobs = (jobs ?? []).filter((j) => j.title.toLowerCase().includes(jobSearch.trim().toLowerCase()))
@@ -87,59 +87,60 @@ export default function ItemCostSheetPage() {
     return (
         <DashboardLayout>
             <PageShell>
-                <div className="flex items-center justify-between">
-                    <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground"
+                <div className="flex items-center justify-between gap-3">
+                    <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
                         onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
                         <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
                     </Button>
                     {!isTemplate && !loading && item && item.mode === "build" && (
-                        <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={saveAsProduct}>
-                            <Package2 className="size-3.5" /> Save as product
+                        <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
+                            <Package2 className="size-3" /> Save as product
                         </Button>
                     )}
                 </div>
 
                 {loading || !item ? (
-                    <div className="h-24 rounded-lg bg-muted/40 animate-pulse" />
+                    <div className="h-20 rounded-lg bg-muted/40 animate-pulse mt-2" />
                 ) : (
                     <>
-                        <div className="flex items-end justify-between gap-4 pb-5 border-b border-border/60">
-                            <div className="space-y-1.5 flex-1">
-                                <div className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Layers className="size-3.5" />
-                                    <span className="text-xs font-medium">Item — build</span>
+                        <div className="mt-1 flex items-end justify-between gap-4 pb-3 border-b border-border/60">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground mb-0.5">
+                                    <Layers className="size-3" />
+                                    <span className="text-[11px] font-medium">Item — build</span>
                                 </div>
-                                <div className="flex items-center gap-2.5">
-                                    <input
-                                        defaultValue={item.name}
-                                        onBlur={(e) => { if (e.target.value !== item.name) patchItem({ name: e.target.value }) }}
-                                        className="text-[1.7rem] font-semibold tracking-tight bg-transparent outline-none border-b border-transparent focus:border-input w-full"
-                                        placeholder="Item name"
-                                    />
-                                </div>
+                                <input
+                                    defaultValue={item.name}
+                                    onBlur={(e) => { if (e.target.value !== item.name) patchItem({ name: e.target.value }) }}
+                                    className="text-[1.35rem] leading-tight font-semibold tracking-tight bg-transparent outline-none border-b border-transparent focus:border-input w-full"
+                                    placeholder="Item name"
+                                />
                             </div>
-                            <div className="shrink-0">
-                                <label className="text-xs text-muted-foreground">Qty</label>
-                                <div className="w-20">
-                                    <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
-                                </div>
+                            <div className="shrink-0 w-16">
+                                <label className="text-[11px] text-muted-foreground">Qty</label>
+                                <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
                             </div>
                         </div>
 
-                        {/* Quote description — feeds the customer quote line */}
-                        <div className="mt-5 rounded-lg border border-border/60 p-4 space-y-3">
-                            <div className="text-xs font-medium text-muted-foreground">Quote description — shows on the customer quote</div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="grid gap-1.5">
-                                    <label className="text-xs text-muted-foreground">Size</label>
+                        {/* Compact quote description — feeds the customer quote line */}
+                        <div className="mt-3 rounded-lg border border-border/60 p-3 space-y-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
+                                <div className="hidden lg:block text-[11px] text-muted-foreground truncate max-w-[48%]">
+                                    {[item.size, item.delivery].filter(Boolean).join(" · ")}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2.5">
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-muted-foreground">Size</label>
                                     <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
                                         onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
-                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
+                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring" />
                                 </div>
-                                <div className="grid gap-1.5">
-                                    <label className="text-xs text-muted-foreground">Delivery</label>
+                                <div>
+                                    <label className="mb-1 block text-[11px] text-muted-foreground">Delivery</label>
                                     <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
-                                        className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring">
+                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring">
                                         <option value="">—</option>
                                         <option value="Ex-factory">Ex-factory</option>
                                         <option value="Freight to site">Freight to site</option>
@@ -147,39 +148,36 @@ export default function ItemCostSheetPage() {
                                     </select>
                                 </div>
                             </div>
-                            <div className="grid gap-1.5">
-                                <label className="text-xs text-muted-foreground">Details</label>
+                            <div>
+                                <label className="mb-1 block text-[11px] text-muted-foreground">Details</label>
                                 <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
                                     onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
-                                    className="min-h-[80px] rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus:border-ring" />
+                                    className="min-h-[52px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
                             </div>
-                            <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground whitespace-pre-line">
-                                {[item.name || "Item", `Qty: ${Number(item.qty)}`,
-                                  item.size ? `Size: ${item.size}` : null,
-                                  item.details ? `Details: ${item.details}` : null,
-                                  item.delivery || null].filter(Boolean).join("\n")}
+                            <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-[11px] leading-4 text-muted-foreground">
+                                <span className="font-medium text-foreground/80">Quote line:</span>{" "}
+                                {[item.name || "Item", `Qty ${Number(item.qty)}`, item.size || null, item.details || null, item.delivery || null].filter(Boolean).join(" · ")}
                             </div>
                         </div>
 
                         <CostSheet jobId={jobId} item={item} />
 
-                        {/* Finish bar — everything auto-saves; this is a clear "done" + copy/reuse */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 mt-2 border-t border-border/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-4 mt-1 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Check className="size-3.5 text-emerald-500" /> Changes save automatically as you edit.
+                                <Check className="size-3.5 text-emerald-500" /> Changes save automatically.
                             </p>
                             <div className="flex items-center gap-2">
                                 {!isTemplate && item.mode === "build" && (
-                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={saveAsProduct}>
+                                    <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={saveAsProduct}>
                                         <Package2 className="size-3.5" /> Save as product
                                     </Button>
                                 )}
                                 {!isTemplate && (
-                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={openCopy}>
+                                    <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openCopy}>
                                         <Copy className="size-3.5" /> Copy to job…
                                     </Button>
                                 )}
-                                <Button size="sm" className="gap-1.5"
+                                <Button size="sm" className="h-8 gap-1.5"
                                     onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
                                     <Check className="size-3.5" /> {isTemplate ? "Done — back to Products" : "Done — back to job"}
                                 </Button>
@@ -193,8 +191,7 @@ export default function ItemCostSheetPage() {
                         <DialogHeader>
                             <DialogTitle>Copy this BOM to another job</DialogTitle>
                             <DialogDescription>
-                                Drops a full copy of <strong>{item?.name || "this item"}</strong> (with its whole BOM) into the job you
-                                pick, then opens it there so you can tweak it for that project.
+                                Drops a full copy of <strong>{item?.name || "this item"}</strong> (with its whole BOM) into the job you pick, then opens it there so you can tweak it for that project.
                             </DialogDescription>
                         </DialogHeader>
                         <Input placeholder="Search jobs…" value={jobSearch} onChange={(e) => setJobSearch(e.target.value)} />
