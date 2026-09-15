@@ -1,0 +1,52 @@
+name: Add catalogue subsection column
+on:
+  push:
+    branches: [stu-dev]
+    paths: ['.github/workflows/add-catalogue-subsection-column.yml']
+permissions:
+  contents: write
+jobs:
+  change:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stu-dev
+      - name: Add subsection dropdown to catalogue items
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/app/quoting/catalogue/page.tsx')
+          s = p.read_text()
+
+          s = s.replace(
+              '{ key: "section", label: "Section", width: 170, min: 100 },\n    { key: "unit_cost",',
+              '{ key: "section", label: "Section", width: 150, min: 100 },\n    { key: "subsection", label: "Subsection", width: 150, min: 100 },\n    { key: "unit_cost",'
+          )
+
+          s = s.replace(
+              'if (value !== material.section) patch(material.id, { section: value })',
+              'if (value !== material.section) patch(material.id, { section: value, subsection: null })'
+          )
+
+          section_block = '''            case "section": return (\n                <select\n                    value={m.section ?? "Materials"}\n                    onChange={(e) => chooseSection(m, e.target.value)}\n                    className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"\n                    aria-label={`Section for ${m.description || "catalogue item"}`}\n                >\n                    {sectionNames.map((section) => <option key={section} value={section}>{section}</option>)}\n                    <option disabled>──────────</option>\n                    <option value="__create__">+ Create new section…</option>\n                </select>\n            )\n'''
+          subsection_block = section_block + '''            case "subsection": {\n                const options = sections\n                    .filter((section) => section.section === (m.section ?? "Materials") && section.subsection)\n                    .sort((a, b) => a.sort - b.sort)\n                return (\n                    <select\n                        value={m.subsection ?? ""}\n                        onChange={(e) => patch(m.id, { subsection: e.target.value || null })}\n                        className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"\n                        aria-label={`Subsection for ${m.description || "catalogue item"}`}\n                    >\n                        <option value="">—</option>\n                        {options.map((section) => (\n                            <option key={section.id} value={section.subsection ?? ""}>{section.subsection}</option>\n                        ))}\n                    </select>\n                )\n            }\n'''
+          if section_block not in s:
+              raise SystemExit('section render block not found')
+          s = s.replace(section_block, subsection_block, 1)
+
+          p.write_text(s)
+          PY
+      - name: Verify
+        run: |
+          grep -q 'key: "subsection", label: "Subsection"' src/app/quoting/catalogue/page.tsx
+          grep -q 'case "subsection"' src/app/quoting/catalogue/page.tsx
+          grep -q 'section: value, subsection: null' src/app/quoting/catalogue/page.tsx
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/add-catalogue-subsection-column.yml
+          git add src/app/quoting/catalogue/page.tsx .github/workflows/add-catalogue-subsection-column.yml
+          git commit -m "Add subsection dropdown to catalogue items"
+          git push origin HEAD:stu-dev
