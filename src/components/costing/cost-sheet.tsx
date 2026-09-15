@@ -137,12 +137,14 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
     const syncingArgon = useRef(false)
 
+    // Keep one catalogue Argon/Filler line equal to the combined welding hours.
     async function syncArgonFromWelding(sourceLines: CostingLine[]) {
         if (syncingArgon.current) return
         syncingArgon.current = true
         try {
             const weldingHours = sourceLines.filter(isWeldingTime).reduce((total, line) => total + Number(line.qty || 0), 0)
             const existing = sourceLines.find(isAutoArgon)
+
             if (existing) {
                 if (Math.abs(Number(existing.qty) - weldingHours) < 0.0001) return
                 const { error } = await supabase.from("costing_lines").update({ qty: weldingHours }).eq("id", existing.id)
@@ -150,27 +152,52 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                 setLines((current) => current.map((line) => line.id === existing.id ? { ...line, qty: weldingHours } : line))
                 return
             }
+
             if (weldingHours <= 0) return
-            const { data: material, error: materialError } = await supabase.from("materials").select("*").ilike("description", "Argon/Filler%").eq("active", true).limit(1).maybeSingle()
+            const { data: material, error: materialError } = await supabase.from("materials")
+                .select("*")
+                .ilike("description", "Argon/Filler%")
+                .eq("active", true)
+                .limit(1)
+                .maybeSingle()
             if (materialError) return toast.error(`Could not find Argon/Filler: ${materialError.message}`)
             if (!material) return toast.error("Add an active Argon/Filler catalogue item to enable automatic welding consumables")
+
             const catalogueItem = material as Material
             const section = catalogueItem.section || "Materials"
             const sort = Math.max(0, ...sourceLines.filter((line) => line.section === section).map((line) => line.sort)) + 1
-            const { data: added, error } = await supabase.from("costing_lines").insert({ job_id: jobId, item_id: item.id, section, subsection: catalogueItem.subsection ?? null, material_id: catalogueItem.id, description: catalogueItem.description, supplier: catalogueItem.supplier, qty: weldingHours, unit_cost: catalogueItem.unit_cost, markup: catalogueItem.default_markup, watts: catalogueItem.watts ?? null, wt_factor: catalogueItem.mtr_weight ?? null, sort }).select("*").single()
+            const { data: added, error } = await supabase.from("costing_lines").insert({
+                job_id: jobId,
+                item_id: item.id,
+                section,
+                subsection: catalogueItem.subsection ?? null,
+                material_id: catalogueItem.id,
+                description: catalogueItem.description,
+                supplier: catalogueItem.supplier,
+                qty: weldingHours,
+                unit_cost: catalogueItem.unit_cost,
+                markup: catalogueItem.default_markup,
+                watts: catalogueItem.watts ?? null,
+                wt_factor: catalogueItem.mtr_weight ?? null,
+                sort,
+            }).select("*").single()
             if (error) return toast.error(`Could not add Argon/Filler: ${error.message}`)
             setLines((current) => current.some((line) => line.id === (added as CostingLine).id) ? current : [...current, added as CostingLine])
             toast.success(`Added Argon/Filler for ${weldingHours} welding hour${weldingHours === 1 ? "" : "s"}`)
-        } finally { syncingArgon.current = false }
+        } finally {
+            syncingArgon.current = false
+        }
     }
 
+    // Staged add: pick a material, set its qty, then commit. Works from the top box
+    // or from an "add line" row inside any subsection, so you don't scroll to set qty.
     const [staged, setStaged] = useState<{ m: Material; section: string; sub: string | null } | null>(null)
     const [stagedQty, setStagedQty] = useState("1")
-    const [stagedAt, setStagedAt] = useState<string | null>(null)
-    const [autoFocusAt, setAutoFocusAt] = useState<string | null>(null)
+    const [stagedAt, setStagedAt] = useState<string | null>(null)       // key of the active add-row
+    const [autoFocusAt, setAutoFocusAt] = useState<string | null>(null) // refocus this add-row after commit
     const qtyRef = useRef<HTMLInputElement | null>(null)
     const TOP_KEY = "__top__"
-    const subKey = (section: string, sub: string | null) => `${section}\u0000${sub ?? ""}`
+    const subKey = (section: string, sub: string | null) => `${section} ${sub ?? ""}`
 
     useEffect(() => {
         let active = true
@@ -185,12 +212,14 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             const loaded = (ls as CostingLine[]) || []
             setLines(loaded)
             if (loaded.some(isWeldingTime)) await syncArgonFromWelding(loaded)
-            if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)
+            if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
             const loadedSections = (secs as CostingSection[]) || []
             loadedSections.forEach((s) => { if (s.subsection) order[`${s.section}|${s.subsection}`] = s.sort })
             setSubOrder(order)
-            if (loadedSections.length > 0) setDefinedSections(Array.from(new Set(loadedSections.sort((a, b) => a.sort - b.sort).map((s) => s.section))))
+            if (loadedSections.length > 0) {
+                setDefinedSections(Array.from(new Set(loadedSections.sort((a, b) => a.sort - b.sort).map((s) => s.section))))
+            }
             setSuppliers(((sups as { name: string }[]) || []).map((s) => s.name))
             setLoading(false)
         })()
@@ -198,72 +227,540 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase, item.id])
 
-    function openPicker(section: string, sub: string | null = null) { setPickerSection(section); setPickerSub(sub); setPickerNonce((n) => n + 1) }
+    function openPicker(section: string, sub: string | null = null) {
+        setPickerSection(section); setPickerSub(sub); setPickerNonce((n) => n + 1)
+    }
 
+    // ── mutations ───────────────────────────────────────────────
+    // subOverride: force the line into a specific subsection (used by group buttons
+    // and "+ Subsection"); undefined keeps the catalogue item's own subsection.
     async function addLine(section: string, m?: Material, subOverride?: string | null, qty?: number) {
         const sec = m?.section || section
         const subsection = subOverride !== undefined ? subOverride : (m?.subsection ?? null)
         const maxSort = Math.max(0, ...lines.filter((l) => l.section === sec).map((l) => l.sort))
-        const payload = { job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null, description: m?.description ?? "", supplier: m?.supplier ?? null, qty: qty != null ? qty : (m ? 1 : 0), unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1, wt_factor: m?.mtr_weight ?? null }
+        const payload = {
+            job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
+            description: m?.description ?? "", supplier: m?.supplier ?? null,
+            qty: qty != null ? qty : (m ? 1 : 0), unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
+            // Steel carries a per-unit weight (kg/m or kg/sheet) — seed the galvanising weight calc.
+            wt_factor: m?.mtr_weight ?? null,
+        }
         const { data, error } = await supabase.from("costing_lines").insert(payload).select("*").single()
         if (error) return toast.error(error.message)
         const added = data as CostingLine
         const next = [...lines, added]
         setLines((prev) => [...prev, added])
         if (isWeldingTime(added)) await syncArgonFromWelding(next)
-        if (m?.mtr_weight != null) setShowWeights(true)
+        if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
     }
 
-    function stageAt(key: string, m: Material, section: string, sub: string | null) { setStaged({ m, section, sub }); setStagedQty("1"); setStagedAt(key); setTimeout(() => qtyRef.current?.select(), 0) }
-    async function commitStaged() { if (!staged) return; const qty = Number(stagedQty); if (!Number.isFinite(qty) || qty <= 0) { toast.error("Enter a quantity greater than zero"); return } const focusKey = stagedAt; await addLine(staged.section, staged.m, staged.sub, qty); setStaged(null); setStagedAt(null); setAutoFocusAt(focusKey); setTimeout(() => setAutoFocusAt(null), 100) }
-    function cancelStaged() { const focusKey = stagedAt; setStaged(null); setStagedAt(null); setAutoFocusAt(focusKey); setTimeout(() => setAutoFocusAt(null), 100) }
+    // Stage a picked material (from the top box or an in-section add row).
+    function stageAt(key: string, m: Material, section: string, sub: string | null) {
+        setStaged({ m, section, sub })
+        setStagedQty("1")
+        setStagedAt(key)
+        setAutoFocusAt(key)
+        setTimeout(() => qtyRef.current?.select(), 0) // focus + select so typing replaces "1"
+    }
 
-    async function addBlank(section: string, subsection: string | null = null) { await addLine(section, undefined, subsection) }
-    async function updateLine(id: string, patch: Partial<CostingLine>) { setLines((prev) => prev.map((l) => l.id === id ? { ...l, ...patch } : l)); const { error } = await supabase.from("costing_lines").update(patch).eq("id", id); if (error) toast.error(error.message); if ("qty" in patch) { const updated = lines.map((line) => line.id === id ? { ...line, ...patch } : line); if (updated.some(isWeldingTime)) await syncArgonFromWelding(updated) } }
-    async function removeLine(id: string) { const { error } = await supabase.from("costing_lines").delete().eq("id", id); if (error) return toast.error(error.message); const next = lines.filter((l) => l.id !== id); setLines(next); if (lines.find((l) => l.id === id && isWeldingTime(l))) await syncArgonFromWelding(next) }
-    async function moveLineToSection(lineId: string, section: string) { const line = lines.find((candidate) => candidate.id === lineId); if (!line || line.section === section) return; const maxSort = Math.max(0, ...lines.filter((candidate) => candidate.section === section).map((candidate) => candidate.sort)); await updateLine(lineId, { section, subsection: null, sort: maxSort + 1 }); setDragOverSection(null); setDraggingLineId(null) }
-    async function moveLine(id: string, dir: -1 | 1) { const line = lines.find((l) => l.id === id)!; const group = lines.filter((l) => l.section === line.section && l.subsection === line.subsection).sort((a, b) => a.sort - b.sort); const idx = group.findIndex((l) => l.id === id); const other = group[idx + dir]; if (!other) return; await Promise.all([supabase.from("costing_lines").update({ sort: other.sort }).eq("id", line.id), supabase.from("costing_lines").update({ sort: line.sort }).eq("id", other.id)]); setLines((prev) => prev.map((l) => l.id === line.id ? { ...l, sort: other.sort } : l.id === other.id ? { ...l, sort: line.sort } : l)) }
-    async function moveSubsection(section: string, sub: string, dir: -1 | 1) { const subs = Array.from(new Set(lines.filter((l) => l.section === section && l.subsection).map((l) => l.subsection!))).sort((a, b) => (subOrder[`${section}|${a}`] ?? 999) - (subOrder[`${section}|${b}`] ?? 999)); const idx = subs.indexOf(sub); const other = subs[idx + dir]; if (!other) return; const aKey = `${section}|${sub}`, bKey = `${section}|${other}`; const aSort = subOrder[aKey] ?? idx, bSort = subOrder[bKey] ?? idx + dir; await Promise.all([supabase.from("costing_sections").update({ sort: bSort }).eq("section", section).eq("subsection", sub), supabase.from("costing_sections").update({ sort: aSort }).eq("section", section).eq("subsection", other)]); setSubOrder((p) => ({ ...p, [aKey]: bSort, [bKey]: aSort })) }
-    async function addSubsection(section: string) { const name = prompt("Subsection name"); if (!name?.trim()) return; const trimmed = name.trim(); const maxSort = Math.max(0, ...Object.entries(subOrder).filter(([k]) => k.startsWith(`${section}|`)).map(([, v]) => v)); const { error } = await supabase.from("costing_sections").insert({ section, subsection: trimmed, sort: maxSort + 1 }); if (error) return toast.error(error.message); setSubOrder((p) => ({ ...p, [`${section}|${trimmed}`]: maxSort + 1 })); setAddingSubFor(null); await addBlank(section, trimmed) }
-    async function addSection() { const name = prompt("Section name"); if (!name?.trim()) return; const trimmed = name.trim(); if (allSections.includes(trimmed)) return toast.error("That section already exists"); setExtraSections((p) => [...p, trimmed]); await addBlank(trimmed) }
-    async function addNewMaterial(section: string, sub: string | null, m: Material) { await addLine(section, m, sub) }
-    function replaceLineFromMaterial(line: CostingLine, m: Material) { void updateLine(line.id, { material_id: m.id, description: m.description, supplier: m.supplier, unit_cost: m.unit_cost, markup: m.default_markup, watts: m.watts ?? null, wt_factor: m.mtr_weight ?? null }); if (m.mtr_weight != null) setShowWeights(true) }
+    async function commitStaged() {
+        if (!staged) return
+        const q = Number(stagedQty)
+        await addLine(staged.section, staged.m, staged.sub, isNaN(q) ? 0 : q)
+        setStaged(null)
+        setStagedAt(null)
+        setStagedQty("1")
+    }
 
-    const allSections = useMemo(() => Array.from(new Set([...definedSections, ...extraSections, ...lines.map((l) => l.section)])), [definedSections, extraSections, lines])
-    const totals = useMemo(() => ({ cost: lines.reduce((s, l) => s + lineCost(l), 0), sell: lines.reduce((s, l) => s + lineSell(l), 0) }), [lines])
-    const totalMargin = totals.sell > 0 ? 1 - totals.cost / totals.sell : 0
-    const visibleColumns = COST_COLUMNS.filter((column) => !column.weight || showWeights)
-    const visibleWidth = visibleColumns.reduce((sum, column) => sum + (widths[column.key] ?? column.width), 0) + 40
+    function cancelStaged() {
+        setStaged(null)
+        setStagedAt(null)
+        setStagedQty("1")
+    }
 
-    function SectionRows({ section }: { section: string }) {
+    // Create a custom subsection (e.g. "Galvanising") by seeding a blank line in it.
+    async function createSubsection(section: string, name: string) {
+        const n = name.trim()
+        setAddingSubFor(null)
+        if (n) await addLine(section, undefined, n)
+    }
+
+    // Rename a subsection: update every line in the group.
+    async function renameSubsection(section: string, oldSub: string, newName: string) {
+        const name = newName.trim()
+        if (!name || name === oldSub) return
+        setLines((prev) => prev.map((l) => (l.section === section && (l.subsection ?? "") === oldSub ? { ...l, subsection: name } : l)))
+        const { error } = await supabase.from("costing_lines").update({ subsection: name })
+            .eq("item_id", item.id).eq("section", section).eq("subsection", oldSub)
+        if (error) toast.error(error.message)
+    }
+
+    async function patchLine(id: string, patch: Partial<CostingLine>) {
+        const original = lines.find((line) => line.id === id)
+        const next = lines.map((line) => line.id === id ? { ...line, ...patch } : line)
+        setLines(next)
+        const { error } = await supabase.from("costing_lines").update(patch).eq("id", id)
+        if (error) {
+            toast.error(error.message)
+            return
+        }
+        const updated = next.find((line) => line.id === id)
+        if ((original && isWeldingTime(original)) || (updated && isWeldingTime(updated))) await syncArgonFromWelding(next)
+    }
+
+    // Type-ahead pick on a line: fill it from a catalogue material (keep its section/subsection).
+    function fillLineFromMaterial(line: CostingLine, m: Material) {
+        patchLine(line.id, { description: m.description, supplier: m.supplier, unit_cost: m.unit_cost, markup: m.default_markup, material_id: m.id })
+    }
+
+    async function removeLine(id: string) {
+        const removed = lines.find((line) => line.id === id)
+        const next = lines.filter((line) => line.id !== id)
+        setLines(next)
+        const { error } = await supabase.from("costing_lines").delete().eq("id", id)
+        if (error) {
+            toast.error(error.message)
+            return
+        }
+        if (removed && isWeldingTime(removed)) await syncArgonFromWelding(next)
+    }
+
+    // Set a line's supplier and remember any new supplier name for reuse.
+    async function commitSupplier(line: CostingLine, value: string) {
+        const name = value.trim()
+        patchLine(line.id, { supplier: name || null })
+        if (name && !suppliers.includes(name)) {
+            setSuppliers((p) => [...p, name].sort((a, b) => a.localeCompare(b)))
+            await supabase.from("costing_suppliers").insert({ name })   // unique conflict is harmless
+        }
+    }
+
+    // Save a manual (non-catalogue) line into the materials catalogue for reuse.
+    async function saveToCatalogue(line: CostingLine) {
+        if (!line.description.trim()) return toast.error("Add a description before saving to the catalogue")
+        const { data, error } = await supabase.from("materials").insert({
+            description: line.description, supplier: line.supplier, unit_cost: line.unit_cost,
+            default_markup: line.markup, section: line.section, subsection: line.subsection,
+            is_labour: line.section === "Labour",
+        }).select("id").single()
+        if (error) return toast.error(error.message)
+        await patchLine(line.id, { material_id: (data as { id: string }).id })
+        toast.success("Saved to catalogue")
+    }
+
+    // Reorder within a subsection group: swap, then persist sequential sort.
+    async function reorder(group: CostingLine[], idx: number, dir: -1 | 1) {
+        const j = idx + dir
+        if (j < 0 || j >= group.length) return
+        const arr = [...group]
+        ;[arr[idx], arr[j]] = [arr[j], arr[idx]]
+        const updates = arr.map((l, i) => ({ id: l.id, sort: i }))
+        setLines((prev) => prev.map((l) => { const u = updates.find((x) => x.id === l.id); return u ? { ...l, sort: u.sort } : l }))
+        const res = await Promise.all(updates.map((u) => supabase.from("costing_lines").update({ sort: u.sort }).eq("id", u.id)))
+        const err = res.find((r) => r.error)?.error
+        if (err) toast.error(err.message)
+    }
+
+    // Move a line between top-level sections. Its subsection is deliberately
+    // retained, so e.g. Materials > Misc becomes Steel > Misc.
+    async function moveLineToSection(lineId: string, section: string) {
+        const line = lines.find((candidate) => candidate.id === lineId)
+        setDraggingLineId(null)
+        setDragOverSection(null)
+        if (!line || line.section === section) return
+
+        const previous = lines
+        const sort = Math.max(0, ...lines.filter((candidate) => candidate.section === section).map((candidate) => candidate.sort)) + 1
+        setLines((current) => current.map((candidate) => candidate.id === lineId ? { ...candidate, section, sort } : candidate))
+
+        const { error } = await supabase.from("costing_lines").update({ section, sort }).eq("id", lineId)
+        if (error) {
+            setLines(previous)
+            toast.error(`Could not move line: ${error.message}`)
+            return
+        }
+        toast.success(`Moved to ${section}`)
+    }
+
+    // ── totals (per one of this item) ───────────────────────────
+    const cost = lines.reduce((s, l) => s + lineCost(l), 0)
+    const sell = lines.reduce((s, l) => s + lineSell(l), 0)
+    const margin = sell > 0 ? 1 - cost / sell : 0
+    const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
+    const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
+    const itemQty = Number(item.qty) || 1
+
+    // Order a section's lines by subsection (seed order, then name), then by sort.
+    function groupsFor(section: string) {
         const secLines = lines.filter((l) => l.section === section)
-        const subs = Array.from(new Set(secLines.filter((l) => l.subsection).map((l) => l.subsection!))).sort((a, b) => (subOrder[`${section}|${a}`] ?? 999) - (subOrder[`${section}|${b}`] ?? 999))
-        const noSub = secLines.filter((l) => !l.subsection).sort((a, b) => a.sort - b.sort)
-        const renderLines = (ls: CostingLine[], sub: string | null) => ls.map((line, idx) => {
-            const unitSellValue = unitSell(line); const key = subKey(section, sub)
-            return <tr key={line.id} draggable onDragStart={(event) => { setDraggingLineId(line.id); event.dataTransfer.effectAllowed = "move" }} onDragEnd={() => { setDraggingLineId(null); setDragOverSection(null) }} className={`border-b border-border/30 group ${draggingLineId === line.id ? "opacity-40" : ""}`}>
-                <td className="w-10 pl-1 pr-0"><div className="flex items-center"><button type="button" title="Drag to another section" className="p-0.5 cursor-grab text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"><GripVertical className="size-3" /></button><div className="flex flex-col opacity-0 group-hover:opacity-100"><button onClick={() => moveLine(line.id, -1)} className="h-2.5 px-0.5 text-muted-foreground hover:text-foreground"><ChevronUp className="size-2.5" /></button><button onClick={() => moveLine(line.id, 1)} className="h-2.5 px-0.5 text-muted-foreground hover:text-foreground"><ChevronDown className="size-2.5" /></button></div></div></td>
-                <td className="px-1 py-0.5"><MaterialCombobox key={`${line.id}-${line.material_id ?? "blank"}`} value={line.description} onSelect={(m) => replaceLineFromMaterial(line, m)} onTextCommit={(v) => updateLine(line.id, { description: v, material_id: null })} /></td>
-                <td className="px-1 py-0.5"><SupplierCell value={line.supplier} onCommit={(v) => updateLine(line.id, { supplier: v })} suppliers={suppliers} /></td>
-                <td className="px-1 py-0.5"><NumCell value={Number(line.qty)} onCommit={(v) => updateLine(line.id, { qty: v })} /></td>
-                <td className="px-1 py-0.5"><NumCell value={Number(line.unit_cost)} onCommit={(v) => updateLine(line.id, { unit_cost: v })} /></td>
-                <td className="px-1 py-0.5"><NumCell value={Number(line.markup)} onCommit={(v) => updateLine(line.id, { markup: v })} /></td>
-                <td className="px-2 py-1 text-right text-xs text-muted-foreground">{nz(unitSellValue)}</td><td className="px-2 py-1 text-right text-xs font-medium">{nz(lineSell(line))}</td><td className="px-2 py-1 text-right text-xs text-muted-foreground">{pct(lineMargin(line))}</td>
-                {showWeights && <><td className="px-1 py-0.5"><NumCell value={line.wt_factor == null ? null : Number(line.wt_factor)} onCommit={(v) => updateLine(line.id, { wt_factor: v })} placeholder="—" /></td><td className="px-1 py-0.5"><NumCell value={line.wt_size == null ? null : Number(line.wt_size)} onCommit={(v) => updateLine(line.id, { wt_size: v })} placeholder="—" /></td><td className="px-1 py-0.5"><NumCell value={line.wt_qty == null ? null : Number(line.wt_qty)} onCommit={(v) => updateLine(line.id, { wt_qty: v })} placeholder="—" /></td><td className="px-2 py-1 text-right text-xs font-medium">{lineWeight(line) > 0 ? `${lineWeight(line).toFixed(1)} kg` : "—"}</td></>}
-                <td className="w-8 pr-1"><button onClick={() => removeLine(line.id)} className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive"><Trash2 className="size-3" /></button></td>
-            </tr>
+        const subs = Array.from(new Set(secLines.map((l) => l.subsection ?? "")))
+        subs.sort((a, b) => {
+            const oa = subOrder[`${section}|${a}`] ?? 9999, ob = subOrder[`${section}|${b}`] ?? 9999
+            return oa - ob || a.localeCompare(b)
         })
-        const addRow = (sub: string | null) => { const key = subKey(section, sub); return <tr key={`add-${key}`} className="border-b border-border/30"><td className="w-10" /><td className="px-1 py-0.5" colSpan={2}>{staged && stagedAt === key ? <div className="flex items-center gap-1.5"><span className="min-w-0 flex-1 truncate text-xs">{staged.m.description}</span><span className="text-xs text-muted-foreground">Qty:</span><input ref={qtyRef} value={stagedQty} onChange={(e) => setStagedQty(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commitStaged(); if (e.key === "Escape") cancelStaged() }} className="h-6 w-16 rounded border px-1.5 text-xs text-right outline-none focus:border-primary" /><button onClick={commitStaged} className="text-green-700"><Check className="size-3.5" /></button><button onClick={cancelStaged} className="text-muted-foreground"><X className="size-3.5" /></button></div> : <MaterialCombobox key={`${key}-${autoFocusAt === key ? "focus" : "idle"}`} autoFocus={autoFocusAt === key} clearOnSelect placeholder="Search catalogue to add…" onSelect={(m) => stageAt(key, m, section, sub)} />}</td><td colSpan={Math.max(1, visibleColumns.length - 2)} /></tr> }
-        return <Fragment><tr onDragOver={(event) => { if (!draggingLineId) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDragOverSection(section) }} onDrop={(event) => { event.preventDefault(); if (draggingLineId) void moveLineToSection(draggingLineId, section) }} className={dragOverSection === section ? "bg-primary/10" : ""}><td colSpan={visibleColumns.length + 2} className="px-3 py-2 bg-muted/50 text-xs font-semibold">{section}{dragOverSection === section && <span className="ml-2 text-[10px] font-normal text-primary">Drop here</span>}</td></tr>{renderLines(noSub, null)}{addRow(null)}{subs.map((sub, si) => <Fragment key={sub}><tr><td className="w-10" /><td colSpan={visibleColumns.length + 1} className="px-2 py-1.5 bg-muted/25"><div className="flex items-center gap-1 text-xs font-medium"><span>{sub}</span><div className="flex ml-1"><button disabled={si === 0} onClick={() => moveSubsection(section, sub, -1)} className="p-0.5 disabled:opacity-20"><ChevronUp className="size-3" /></button><button disabled={si === subs.length - 1} onClick={() => moveSubsection(section, sub, 1)} className="p-0.5 disabled:opacity-20"><ChevronDown className="size-3" /></button></div></div></td></tr>{renderLines(secLines.filter((l) => l.subsection === sub).sort((a, b) => a.sort - b.sort), sub)}{addRow(sub)}</Fragment>)}</Fragment>
+        return subs.map((sub) => ({
+            sub,
+            rows: secLines.filter((l) => (l.subsection ?? "") === sub).sort((a, b) => a.sort - b.sort),
+        }))
     }
 
-    if (loading) return <div className="py-6 text-sm text-muted-foreground">Loading costing…</div>
+    if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
 
-    return <div className="space-y-3">
-        <datalist id={SUPPLIER_LIST_ID}>{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
-        <div className="flex items-center gap-2"><div className="flex-1">{staged && stagedAt === TOP_KEY ? <div className="flex h-9 items-center gap-2 rounded-md border px-2"><span className="min-w-0 flex-1 truncate text-sm">{staged.m.description}</span><span className="text-xs text-muted-foreground">Qty</span><input ref={qtyRef} value={stagedQty} onChange={(e) => setStagedQty(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commitStaged(); if (e.key === "Escape") cancelStaged() }} className="h-7 w-20 rounded border px-2 text-right text-sm" /><Button size="sm" className="h-7 px-2" onClick={commitStaged}><Check className="size-3.5" /></Button><Button variant="ghost" size="sm" className="h-7 px-2" onClick={cancelStaged}><X className="size-3.5" /></Button></div> : <MaterialCombobox key={autoFocusAt === TOP_KEY ? "top-focus" : "top"} autoFocus={autoFocusAt === TOP_KEY} clearOnSelect placeholder="Add an item — type to search, then set its qty…" onSelect={(m) => stageAt(TOP_KEY, m, m.section || "Materials", m.subsection ?? null)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring" />}</div><select className="h-9 rounded-md border bg-background px-3 text-sm" value="" onChange={(e) => { if (e.target.value === "__new__") addSection(); else if (e.target.value) addBlank(e.target.value) }}><option value="">+ Add section</option>{definedSections.map((s) => <option key={s} value={s}>{s}</option>)}<option value="__new__">+ New section…</option></select><Button variant={showWeights ? "secondary" : "ghost"} size="sm" className="h-9 gap-1.5 text-xs" onClick={() => setShowWeights((v) => !v)}><Scale className="size-3.5" /> Weights (steel)</Button><Button variant="ghost" size="icon" className="size-9" onClick={resetColumns} title="Reset column widths"><RotateCcw className="size-3.5" /></Button></div>
-        <div className="rounded-lg border border-border/60 bg-card overflow-x-auto"><table className="text-sm table-fixed" style={{ width: visibleWidth, minWidth: "100%" }}><colgroup><col style={{ width: 40 }} />{visibleColumns.map((column) => <col key={column.key} style={{ width: widths[column.key] ?? column.width }} />)}<col style={{ width: 32 }} /></colgroup><thead><tr><th className="w-10 border-b border-border/60" />{visibleColumns.map((column) => <CostColumnHeader key={column.key} column={column} width={widths[column.key] ?? column.width} onResize={setWidth} />)}<th className="w-8 border-b border-border/60" /></tr></thead><tbody>{allSections.map((section) => <SectionRows key={section} section={section} />)}</tbody><tfoot><tr className="border-t border-border/60"><td colSpan={Math.max(1, visibleColumns.length - 4)} className="px-3 py-2 text-xs font-medium">Subtotal</td><td className="px-2 py-2 text-right text-xs text-muted-foreground">{nz(totals.cost)}</td><td /><td /><td className="px-2 py-2 text-right text-xs font-semibold">{nz(totals.sell)}</td><td className="px-2 py-2 text-right text-xs">{pct(totalMargin)}</td>{showWeights && <td colSpan={4} />}<td /></tr></tfoot></table></div>
-        <div className="flex gap-2 justify-end"><Button variant="outline" size="sm" onClick={() => openPicker("Materials")}><Package className="size-3.5 mr-1" /> Catalogue</Button><Button variant="outline" size="sm" onClick={() => addBlank("Materials")}><Plus className="size-3.5 mr-1" /> Blank</Button><Button variant="outline" size="sm" onClick={() => addSubsection("Materials")}><Plus className="size-3.5 mr-1" /> Subsection</Button></div>
-        <MaterialPicker key={pickerNonce} open={!!pickerSection} onOpenChange={(o) => { if (!o) setPickerSection(null) }} onSelect={(m) => { if (pickerSection) addNewMaterial(pickerSection, pickerSub, m); setPickerSection(null) }} />
-    </div>
+    // Only show sections that have lines (or were added manually). Canonical order first, then any others.
+    const withLines = Array.from(new Set(lines.map((l) => l.section)))
+    const activeSections = [
+        ...definedSections.filter((s) => withLines.includes(s) || extraSections.includes(s)),
+        ...withLines.filter((s) => !definedSections.includes(s)),
+    ]
+    const addableSections = definedSections.filter((s) => !activeSections.includes(s))
+    const visibleColumns = COST_COLUMNS.filter((column) => showWeights || !column.weight)
+    const tableWidth = visibleColumns.reduce((total, column) => total + (widths[column.key] ?? column.width), 0) + 64
+
+    // Shared "set the qty then add" panel — rendered wherever an add-row is staging.
+    const qtyPanel = staged ? (
+        <div className="flex items-center gap-2 rounded-md border border-ring bg-background pl-2 pr-1.5 py-1">
+            <span className="min-w-0 flex-1 truncate text-sm" title={staged.m.description}>{staged.m.description}</span>
+            <label className="text-xs text-muted-foreground shrink-0">Qty</label>
+            <input
+                ref={qtyRef}
+                type="number" step="any" value={stagedQty} autoFocus
+                onChange={(e) => setStagedQty(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); commitStaged() }
+                    else if (e.key === "Escape") { e.preventDefault(); cancelStaged() }
+                }}
+                className="w-20 rounded border border-input bg-background px-2 py-1 text-sm tabular-nums text-right outline-none focus:border-ring shrink-0"
+            />
+            <Button size="sm" className="h-7 gap-1 shrink-0" onClick={commitStaged}>
+                <Check className="size-3.5" /> Add
+            </Button>
+            <button onClick={cancelStaged} className="text-muted-foreground hover:text-foreground shrink-0 p-1" title="Cancel (Esc)">
+                <X className="size-3.5" />
+            </button>
+        </div>
+    ) : null
+
+    return (
+        <div className="mt-6 space-y-6">
+            <datalist id={SUPPLIER_LIST_ID}>
+                {suppliers.map((s) => <option key={s} value={s} />)}
+            </datalist>
+
+            {/* Add-item type-ahead — builds sections/subsections from what you pick */}
+            <div className="flex items-center gap-2">
+                <div className="flex-1 max-w-2xl relative">
+                    {stagedAt === TOP_KEY ? qtyPanel : (
+                        <MaterialCombobox
+                            clearOnSelect
+                            autoFocus={autoFocusAt === TOP_KEY}
+                            placeholder="Add an item — type to search, then set its qty…"
+                            onSelect={(m) => stageAt(TOP_KEY, m, m.section, m.subsection)}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                        />
+                    )}
+                </div>
+                {addableSections.length > 0 && (
+                    <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) setExtraSections((p) => [...new Set([...p, e.target.value])]) }}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm text-muted-foreground outline-none focus:border-ring"
+                    >
+                        <option value="">+ Add section</option>
+                        {addableSections.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                )}
+                <Button size="sm" variant={showWeights ? "secondary" : "ghost"} className="h-9 gap-1.5 text-xs shrink-0"
+                    onClick={() => setShowWeights((v) => !v)}>
+                    <Scale className="size-3" /> {showWeights ? "Hide weights" : "Weights (steel)"}
+                </Button>
+                <Button size="icon" variant="ghost" className="size-9 shrink-0" onClick={resetColumns} title="Reset column widths">
+                    <RotateCcw className="size-3.5" />
+                    <span className="sr-only">Reset column widths</span>
+                </Button>
+            </div>
+
+            {activeSections.length === 0 && (
+                <div className="py-10 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
+                    Start typing an item above to build this BOM — the section &amp; subsection appear automatically.
+                </div>
+            )}
+
+            {activeSections.map((section) => {
+                const secLines = lines.filter((l) => l.section === section)
+                const secCost = secLines.reduce((s, l) => s + lineCost(l), 0)
+                const secSell = secLines.reduce((s, l) => s + lineSell(l), 0)
+                const groups = groupsFor(section)
+                // LED sizing calc (Wiring - LED only)
+                const isWiring = section === "Wiring - LED"
+                const modLines = isWiring ? secLines.filter(isLedModule) : []
+                const ledRequired = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
+                const driverCap = isWiring ? secLines.filter(isLedDriver).reduce((s, l) => s + Number(l.qty) * driverRatedWatts(l), 0) : 0
+                const moduleCount = modLines.reduce((s, l) => s + Number(l.qty), 0)
+                const wiringHrs = moduleCount / MODULES_PER_HOUR
+                return (
+                    <section
+                        key={section}
+                        onDragOver={(e) => {
+                            if (!draggingLineId) return
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = "move"
+                            setDragOverSection(section)
+                        }}
+                        onDragLeave={(e) => {
+                            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverSection((current) => current === section ? null : current)
+                        }}
+                        onDrop={(e) => {
+                            e.preventDefault()
+                            const lineId = draggingLineId || e.dataTransfer.getData("text/plain")
+                            if (lineId) void moveLineToSection(lineId, section)
+                        }}
+                        className={`rounded-lg border overflow-hidden transition-colors ${dragOverSection === section ? "border-primary ring-2 ring-primary/20" : "border-border/60"}`}
+                    >
+                        <div className="flex items-center justify-between bg-muted/40 px-4 py-2.5">
+                            <h3 className="text-sm font-semibold">{section}</h3>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground tabular-nums">{nz(secCost)} → {nz(secSell)}</span>
+                                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => openPicker(section)}>
+                                    <Package className="size-3" /> Catalogue
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => addLine(section)}>
+                                    <Plus className="size-3" /> Blank
+                                </Button>
+                                {addingSubFor === section ? (
+                                    <input
+                                        autoFocus placeholder="Subsection name…"
+                                        className="h-7 w-40 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ring"
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") createSubsection(section, e.currentTarget.value)
+                                            else if (e.key === "Escape") setAddingSubFor(null)
+                                        }}
+                                        onBlur={() => setAddingSubFor(null)}
+                                    />
+                                ) : (
+                                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => setAddingSubFor(section)}>
+                                        <Plus className="size-3" /> Subsection
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {isWiring && (ledRequired > 0 || moduleCount > 0) && (
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border/60 bg-amber-500/5 px-4 py-2 text-xs">
+                                <span>LED load <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>
+                                <span className={driverCap >= ledRequired ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                                    Drivers selected <span className="font-semibold tabular-nums">{driverCap.toFixed(0)}w</span>{" "}
+                                    {ledRequired === 0 ? "" : driverCap >= ledRequired ? "✓ covered" : `⚠ short ${(ledRequired - driverCap).toFixed(0)}w`}
+                                </span>
+                                <span className="text-muted-foreground tabular-nums">{moduleCount} modules ≈ {wiringHrs.toFixed(2)} hr wiring labour</span>
+                            </div>
+                        )}
+
+                        {secLines.length > 0 && (
+                            <div className="overflow-x-auto">
+                                <table className="table-fixed min-w-full text-sm" style={{ width: tableWidth }}>
+                                    <colgroup>
+                                        {visibleColumns.map((column) => (
+                                            <col key={column.key} style={{ width: widths[column.key] ?? column.width }} />
+                                        ))}
+                                        <col style={{ width: 64 }} />
+                                    </colgroup>
+                                    <thead className="text-muted-foreground text-xs">
+                                        <tr className="text-left border-b border-border/60">
+                                            {visibleColumns.map((column) => (
+                                                <CostColumnHeader
+                                                    key={column.key}
+                                                    column={column}
+                                                    width={widths[column.key] ?? column.width}
+                                                    onResize={setWidth}
+                                                />
+                                            ))}
+                                            <th className="border-b border-border/60"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {groups.map(({ sub, rows }) => (
+                                            <Fragment key={`g-${section}-${sub || "none"}`}>
+                                                {sub && (
+                                                    <tr className="group/sub">
+                                                        <td colSpan={showWeights ? 13 : 9} className="bg-muted/20 px-3 py-1.5">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="text-xs font-medium text-muted-foreground w-48" title="Click to rename subsection">
+                                                                    <TextCell value={sub} onCommit={(v) => renameSubsection(section, sub, v)} />
+                                                                </div>
+                                                                <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+                                                                    <button onClick={() => openPicker(section, sub)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                                                        <Package className="size-3" /> Catalogue
+                                                                    </button>
+                                                                    <button onClick={() => addLine(section, undefined, sub)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                                                        <Plus className="size-3" /> Blank
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                {rows.map((l, i) => (
+                                                    <tr key={l.id} className="border-b border-border/40 last:border-0 group">
+                                                        <td className="px-1 py-1">
+                                                            <div className="flex min-w-0 items-center gap-0.5">
+                                                                <button
+                                                                    type="button"
+                                                                    draggable
+                                                                    onDragStart={(e) => {
+                                                                        setDraggingLineId(l.id)
+                                                                        e.dataTransfer.effectAllowed = "move"
+                                                                        e.dataTransfer.setData("text/plain", l.id)
+                                                                    }}
+                                                                    onDragEnd={() => {
+                                                                        setDraggingLineId(null)
+                                                                        setDragOverSection(null)
+                                                                    }}
+                                                                    className="shrink-0 cursor-grab p-0.5 text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
+                                                                    title="Drag to another section"
+                                                                    aria-label={`Drag ${l.description || "line"} to another section`}
+                                                                >
+                                                                    <GripVertical className="size-3.5" />
+                                                                </button>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <MaterialCombobox key={l.description} value={l.description} placeholder="Description / type to search…"
+                                                                        onSelect={(m) => fillLineFromMaterial(l, m)}
+                                                                        onTextCommit={(v) => patchLine(l.id, { description: v })} />
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-2 py-1">
+                                                            <SupplierCell value={l.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => commitSupplier(l, v)} />
+                                                        </td>
+                                                        <td className="px-2 py-1">
+                                                            <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />
+                                                            {showWeights && isGalvPerKg(l) && totalWeight > 0 && Math.abs(Number(l.qty) - totalWeight) > 0.01 && (
+                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(totalWeight * 100) / 100 })}
+                                                                    className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
+                                                                    title="Set qty to the total steel weight">
+                                                                    = {totalWeight.toFixed(1)} kg
+                                                                </button>
+                                                            )}
+                                                            {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
+                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(wiringHrs * 100) / 100 })}
+                                                                    className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
+                                                                    title="Set wiring labour to modules ÷ 20">
+                                                                    = {wiringHrs.toFixed(2)} hr
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-2 py-1"><NumCell value={l.unit_cost} onCommit={(v) => patchLine(l.id, { unit_cost: v ?? 0 })} /></td>
+                                                        <td className="px-2 py-1"><NumCell value={l.markup} step="0.05" onCommit={(v) => patchLine(l.id, { markup: v ?? 0 })} /></td>
+                                                        <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
+                                                        <td className="px-2 py-1 text-right tabular-nums">{nz(lineSell(l))}</td>
+                                                        <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{pct(lineMargin(l))}</td>
+                                                        {showWeights && <>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_factor} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_factor: v })} /></td>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_size} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_size: v })} /></td>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_qty} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_qty: v })} /></td>
+                                                            <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{lineWeight(l) > 0 ? `${lineWeight(l).toFixed(1)}` : "—"}</td>
+                                                        </>}
+                                                        <td className="px-1 py-1">
+                                                            <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                {l.material_id == null && (
+                                                                    <button onClick={() => saveToCatalogue(l)}
+                                                                        className="text-muted-foreground hover:text-primary transition-colors p-0.5" title="Save to catalogue">
+                                                                        <BookmarkPlus className="size-3.5" />
+                                                                    </button>
+                                                                )}
+                                                                <button disabled={i === 0} onClick={() => reorder(rows, i, -1)}
+                                                                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground p-0.5" title="Move up">
+                                                                    <ChevronUp className="size-3.5" />
+                                                                </button>
+                                                                <button disabled={i === rows.length - 1} onClick={() => reorder(rows, i, 1)}
+                                                                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground p-0.5" title="Move down">
+                                                                    <ChevronDown className="size-3.5" />
+                                                                </button>
+                                                                <button onClick={() => removeLine(l.id)}
+                                                                    className="text-muted-foreground hover:text-destructive transition-colors p-0.5" title="Delete">
+                                                                    <Trash2 className="size-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {/* In-section add row — stay here to add lines without scrolling up */}
+                                                <tr>
+                                                    <td colSpan={showWeights ? 13 : 9} className="px-3 py-1.5">
+                                                        <div className="max-w-xl">
+                                                            {stagedAt === subKey(section, sub) ? qtyPanel : (
+                                                                <MaterialCombobox
+                                                                    clearOnSelect
+                                                                    autoFocus={autoFocusAt === subKey(section, sub)}
+                                                                    placeholder={`+ Add to ${sub || section}…`}
+                                                                    onSelect={(m) => stageAt(subKey(section, sub), m, section, sub || null)}
+                                                                    className="w-full rounded-md border border-dashed border-input/70 bg-transparent px-2.5 py-1.5 text-sm outline-none hover:border-input focus:border-ring"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </Fragment>
+                                        ))}
+                                        <tr className="border-t-2 border-border/70">
+                                            <td className="px-3 py-1.5 font-medium text-muted-foreground">Subtotal</td>
+                                            <td></td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{secLines.reduce((s, l) => s + Number(l.qty), 0) || ""}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{nz(secCost)}</td>
+                                            <td></td>
+                                            <td></td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{nz(secSell)}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{secSell > 0 ? pct(1 - secCost / secSell) : ""}</td>
+                                            {showWeights && <>
+                                                <td></td><td></td><td></td>
+                                                <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{(() => { const w = secLines.reduce((s, l) => s + lineWeight(l), 0); return w > 0 ? w.toFixed(1) : "" })()}</td>
+                                            </>}
+                                            <td></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
+                )
+            })}
+
+            {/* Item totals (per one of this item) */}
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Tile label="Cost" value={nz(cost)} />
+                    <Tile label="Sell" value={nz(sell)} />
+                    <Tile label="Margin" value={pct(margin)} />
+                    <Tile label="Total hours" value={totalHours.toFixed(2)} />
+                </div>
+                {(itemQty !== 1 || showWeights) && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border/60">
+                        {itemQty !== 1 && <Tile label={`Line total (× ${itemQty})`} value={nz(sell * itemQty)} />}
+                        {showWeights && <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />}
+                    </div>
+                )}
+                {showWeights && (
+                    <div className="mt-3 text-xs text-muted-foreground">
+                        Total weight feeds the galvanising calc — set a galvanising line&apos;s qty to it via its &quot;= kg&quot; link.
+                    </div>
+                )}
+            </div>
+
+            <MaterialPicker
+                key={pickerNonce}
+                open={pickerSection != null}
+                section={pickerSection ?? undefined}
+                onOpenChange={(o) => { if (!o) setPickerSection(null) }}
+                onPick={(m) => { if (pickerSection) addLine(pickerSection, m, pickerSub ?? undefined) }}
+            />
+        </div>
+    )
+}
+
+function Tile({ label, value, className = "" }: { label: string; value: string; className?: string }) {
+    return (
+        <div>
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className={`text-lg font-semibold tabular-nums mt-0.5 ${className}`}>{value}</div>
+        </div>
+    )
 }
