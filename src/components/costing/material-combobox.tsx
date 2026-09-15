@@ -35,21 +35,12 @@ export function MaterialCombobox({
 
     const inputRef = useRef<HTMLInputElement | null>(null)
     const listRef = useRef<HTMLUListElement | null>(null)
-    const [dropUp, setDropUp] = useState(false)
 
     // Keep the keyboard-highlighted row scrolled into view.
     useEffect(() => {
         const el = listRef.current?.children[active] as HTMLElement | undefined
         el?.scrollIntoView({ block: "nearest" })
     }, [active])
-
-    // Open upward when the input sits low in the viewport (long BOMs push it down).
-    function decideDirection() {
-        const r = inputRef.current?.getBoundingClientRect()
-        if (!r) return
-        const below = window.innerHeight - r.bottom
-        setDropUp(below < 340 && r.top > below)
-    }
 
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     function search(text: string) {
@@ -62,7 +53,6 @@ export function MaterialCombobox({
             setResults(rows)
             setCapped(rows.length === RESULT_LIMIT)
             setActive(0)
-            decideDirection()
             setOpen(true)
         }, 160)
     }
@@ -80,7 +70,7 @@ export function MaterialCombobox({
                 autoFocus={autoFocus}
                 type="text" value={q} placeholder={placeholder}
                 onChange={(e) => { setQ(e.target.value); search(e.target.value) }}
-                onFocus={() => { if (results.length) { decideDirection(); setOpen(true) } }}
+                onFocus={() => { if (results.length) setOpen(true) }}
                 onBlur={() => { setTimeout(() => setOpen(false), 120); if (onTextCommit && q !== value) onTextCommit(q) }}
                 onKeyDown={(e) => {
                     if (!open) { if (e.key === "Enter" && onTextCommit) e.currentTarget.blur(); return }
@@ -92,14 +82,14 @@ export function MaterialCombobox({
                 className={className || "w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"}
             />
             {open && results.length > 0 && (
-                <div className={`absolute z-30 left-0 right-0 rounded-md border border-border bg-popover shadow-md text-sm ${dropUp ? "bottom-full mb-1" : "top-full mt-1"}`}>
-                    <ul ref={listRef} className="max-h-80 overflow-y-auto overscroll-contain">
+                <div className="absolute z-50 left-0 top-full mt-1 min-w-full w-max max-w-[min(56rem,90vw)] rounded-md border border-border bg-popover shadow-lg text-sm">
+                    <ul ref={listRef} className="max-h-[28rem] min-w-[36rem] overflow-y-auto overscroll-contain">
                         {results.map((m, i) => (
                             <li key={m.id}>
                                 <button type="button"
                                     onMouseDown={(e) => { e.preventDefault(); pick(m) }}
                                     onMouseEnter={() => setActive(i)}
-                                    className={`w-full text-left px-2.5 py-1.5 flex items-center gap-2 ${i === active ? "bg-muted" : "hover:bg-muted/60"}`}>
+                                    className={`w-full text-left px-2.5 py-1.5 flex items-center gap-3 ${i === active ? "bg-muted" : "hover:bg-muted/60"}`}>
                                     <Search className="size-3 text-muted-foreground shrink-0" />
                                     <span className="min-w-0 flex-1 truncate">{m.description}</span>
                                     <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
