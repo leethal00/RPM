@@ -60,7 +60,7 @@ export default function CostingJobDetailPage() {
     const backPath = isJobStage ? "/quoting/jobs" : "/quoting"
     const backLabel = isJobStage ? "Active Jobs" : "Quotes"
     const xeroQuoteUrl = job?.xero_quote_id
-        ? `https://go.xero.com/app/quotes/${job.xero_quote_id}`
+        ? `https://go.xero.com/Accounts/Receivable/Quotes/View/${job.xero_quote_id}`
         : null
 
     async function sendToXero() {
