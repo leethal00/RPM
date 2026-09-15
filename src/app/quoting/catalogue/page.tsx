@@ -25,7 +25,8 @@ const COLUMNS: ColMeta[] = [
     { key: "code", label: "Code", width: 110, min: 70 },
     { key: "description", label: "Description", width: 300, min: 150 },
     { key: "supplier", label: "Supplier", width: 140, min: 90 },
-    { key: "section", label: "Section", width: 170, min: 100 },
+    { key: "section", label: "Section", width: 150, min: 100 },
+    { key: "subsection", label: "Subsection", width: 150, min: 100 },
     { key: "unit_cost", label: "Unit cost", width: 100, min: 70, align: "right" },
     { key: "default_markup", label: "Markup", width: 90, min: 60, align: "right", title: "Markup on cost (0.5 = 50%)" },
     { key: "watts", label: "Watts", width: 84, min: 60, align: "right", title: "LED module watts, or transformer capacity" },
@@ -162,7 +163,7 @@ export default function CataloguePage() {
             setNewSectionOpen(true)
             return
         }
-        if (value !== material.section) patch(material.id, { section: value })
+        if (value !== material.section) patch(material.id, { section: value, subsection: null })
     }
 
     function openCreateSection() {
@@ -310,6 +311,24 @@ export default function CataloguePage() {
                     <option value="__create__">+ Create new section…</option>
                 </select>
             )
+            case "subsection": {
+                const options = sections
+                    .filter((section) => section.section === (m.section ?? "Materials") && section.subsection)
+                    .sort((a, b) => a.sort - b.sort)
+                return (
+                    <select
+                        value={m.subsection ?? ""}
+                        onChange={(e) => patch(m.id, { subsection: e.target.value || null })}
+                        className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
+                        aria-label={`Subsection for ${m.description || "catalogue item"}`}
+                    >
+                        <option value="">—</option>
+                        {options.map((section) => (
+                            <option key={section.id} value={section.subsection ?? ""}>{section.subsection}</option>
+                        ))}
+                    </select>
+                )
+            }
             case "unit_cost": return <NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} />
             case "default_markup": return <NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
             case "watts": return m.section === "Wiring - LED"
