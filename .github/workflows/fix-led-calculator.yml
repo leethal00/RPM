@@ -17,30 +17,44 @@ jobs:
         with:
           ref: stu-dev
       - name: Correct LED sizing logic
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
           p = Path('src/components/costing/cost-sheet.tsx')
           s = p.read_text()
-          s = s.replace('const LED_LOADING = 1.2          // fixed 20% "fuck factor" — keeps drivers ≤ 80% load\nconst MODULES_PER_HOUR = 25\nconst isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")', '''const MODULES_PER_HOUR = 20
-const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
-const isLedDriver = (l: CostingLine) => {
-    const description = l.description.toLowerCase()
-    return /hlg-\\d+h/.test(description) || description.includes("driver") || description.includes("transformer") || description.includes("t/x")
-}
-const isLedModule = (l: CostingLine) => {
-    const description = l.description.toLowerCase()
-    return !isLedDriver(l) && !isWiringLabour(l) && description.includes("module")
-}
-const driverRatedWatts = (l: CostingLine) => {
-    const modelRating = l.description.match(/HLG-(\\d+)H/i)?.[1]
-    return modelRating ? Number(modelRating) : Number(l.watts ?? 0)
-}''')
-          s = s.replace('const modLines = isWiring ? secLines.filter((l) => l.subsection === "Modules") : []\n                const ledLoad = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)\n                const ledRequired = ledLoad * LED_LOADING\n                const driverCap = isWiring ? secLines.filter((l) => l.subsection === "Transformers").reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0) : 0', 'const modLines = isWiring ? secLines.filter(isLedModule) : []\n                const ledRequired = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)\n                const driverCap = isWiring ? secLines.filter(isLedDriver).reduce((s, l) => s + Number(l.qty) * driverRatedWatts(l), 0) : 0')
+          old = '''const LED_LOADING = 1.2          // fixed 20% "fuck factor" — keeps drivers ≤ 80% load
+          const MODULES_PER_HOUR = 25
+          const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")'''.replace('          const', 'const')
+          new = '''const MODULES_PER_HOUR = 20
+          const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
+          const isLedDriver = (l: CostingLine) => {
+              const description = l.description.toLowerCase()
+              return /hlg-\\d+h/.test(description) || description.includes("driver") || description.includes("transformer") || description.includes("t/x")
+          }
+          const isLedModule = (l: CostingLine) => {
+              const description = l.description.toLowerCase()
+              return !isLedDriver(l) && !isWiringLabour(l) && description.includes("module")
+          }
+          const driverRatedWatts = (l: CostingLine) => {
+              const modelRating = l.description.match(/HLG-(\\d+)H/i)?.[1]
+              return modelRating ? Number(modelRating) : Number(l.watts ?? 0)
+          }'''.replace('          const', 'const').replace('          }', '}').replace('              ', '    ')
+          assert old in s, 'LED constants block not found'
+          s = s.replace(old, new)
+          old_calc = '''const modLines = isWiring ? secLines.filter((l) => l.subsection === "Modules") : []
+                          const ledLoad = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
+                          const ledRequired = ledLoad * LED_LOADING
+                          const driverCap = isWiring ? secLines.filter((l) => l.subsection === "Transformers").reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0) : 0'''.replace('                          const', '                const')
+          new_calc = '''const modLines = isWiring ? secLines.filter(isLedModule) : []
+                          const ledRequired = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
+                          const driverCap = isWiring ? secLines.filter(isLedDriver).reduce((s, l) => s + Number(l.qty) * driverRatedWatts(l), 0) : 0'''.replace('                          const', '                const')
+          assert old_calc in s, 'LED calculation block not found'
+          s = s.replace(old_calc, new_calc)
           s = s.replace('{isWiring && (ledLoad > 0 || moduleCount > 0) && (', '{isWiring && (ledRequired > 0 || moduleCount > 0) && (')
           s = s.replace('<span>LED load <span className="font-semibold tabular-nums">{ledLoad.toFixed(1)}w</span> × 1.2 = <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>', '<span>LED load <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>')
           s = s.replace('title="Set wiring labour to modules ÷ 25"', 'title="Set wiring labour to modules ÷ 20"')
           p.write_text(s)
+          PY
       - name: Verify changes
         run: |
           grep -q 'const MODULES_PER_HOUR = 20' src/components/costing/cost-sheet.tsx
