@@ -1,0 +1,53 @@
+name: Fix Xero quote description formatting
+
+on:
+  push:
+    branches: [stu-dev]
+    paths:
+      - '.github/workflows/fix-xero-quote-description.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stu-dev
+      - name: Match Xero line descriptions to RPM preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('src/app/api/xero/quotes/[id]/send/route.ts'),
+              Path('src/app/api/xero/quotes/[id]/update/route.ts'),
+          ]
+
+          helper = '''\nfunction quoteItemDescription(item: { name: string; qty: number; size?: string | null; details?: string | null; delivery?: string | null }) {\n    const details = cleanItemDetails(item.name, item.details)\n    return [\n        item.name,\n        `Qty: ${Number(item.qty || 1)}`,\n        item.size?.trim() ? `Size: ${item.size.trim()}` : null,\n        details ? `Details: ${details}` : null,\n        item.delivery?.trim() || null,\n    ].filter(Boolean).join("\\n")\n}\n'''
+
+          for p in files:
+              s = p.read_text()
+              if 'function quoteItemDescription' not in s:
+                  marker = 'function accountCodeForItem(name: string) {'
+                  s = s.replace(marker, helper + '\n' + marker)
+              s = s.replace('select("id,name,details,sign_code,mode,qty,unit_price,sort")', 'select("id,name,size,details,delivery,sign_code,mode,qty,unit_price,sort")')
+              s = s.replace('''            const details = cleanItemDetails(item.name, item.details)\n            return {\n                Description: details ? `${item.name}:\\n${details}` : item.name,''', '''            return {\n                Description: quoteItemDescription(item),''')
+              p.write_text(s)
+          PY
+      - name: Verify changes
+        run: |
+          grep -q 'function quoteItemDescription' 'src/app/api/xero/quotes/[id]/send/route.ts'
+          grep -q 'id,name,size,details,delivery' 'src/app/api/xero/quotes/[id]/send/route.ts'
+          grep -q 'Description: quoteItemDescription(item)' 'src/app/api/xero/quotes/[id]/send/route.ts'
+          grep -q 'Description: quoteItemDescription(item)' 'src/app/api/xero/quotes/[id]/update/route.ts'
+      - name: Commit fix and remove workflow
+        run: |
+          git config user.name "WSTSTU"
+          git config user.email "311196036+WSTSTU@users.noreply.github.com"
+          rm .github/workflows/fix-xero-quote-description.yml
+          git add 'src/app/api/xero/quotes/[id]/send/route.ts' 'src/app/api/xero/quotes/[id]/update/route.ts' .github/workflows/fix-xero-quote-description.yml
+          git commit -m "Match Xero quote descriptions to RPM"
+          git push origin HEAD:stu-dev
