@@ -53,6 +53,22 @@ async function xeroJson(url: string, init: RequestInit, accessToken: string, ten
     return body
 }
 
+
+async function getXeroStandardQuoteTerms(accessToken: string, tenantId: string, excludeQuoteId?: string) {
+    // Xero exposes Terms on quotes, but not the organisation's default quote-terms setting.
+    // Use the most recently updated Xero quote carrying Terms as Xero's source of truth,
+    // rather than maintaining a duplicate copy in RPM.
+    const result = await xeroJson(
+        `${XERO_API}/Quotes?page=1&pageSize=100&order=${encodeURIComponent("UpdatedDateUTC DESC")}`,
+        { method: "GET" },
+        accessToken,
+        tenantId
+    )
+    const quotes = (result?.Quotes || []) as Array<{ QuoteID?: string; Terms?: string | null }>
+    const source = quotes.find((quote) => quote.QuoteID !== excludeQuoteId && quote.Terms?.trim())
+    return source?.Terms?.trim() || ""
+}
+
 async function findContactId(clientName: string, storeName: string | undefined, email: string | undefined, accessToken: string, tenantId: string) {
     const siteShort = storeName ? shortSiteName(storeName) : ""
     if (siteShort) {
@@ -121,6 +137,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const contactId = await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
+        const standardTerms = existing.Terms?.trim() || await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId, job.xero_quote_id)
         const lines = costingLines || []
         let sectionNumber = 0
         const pricedLineItems = (items || []).map((item) => {
@@ -168,6 +185,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
                 Reference: visibleReference,
+                ...(standardTerms ? { Terms: standardTerms } : {}),
                 LineItems: lineItems,
             }] }),
         }, xero.accessToken, xero.tenantId)
