@@ -1,0 +1,50 @@
+name: Xero customer import and rename
+on:
+  push:
+    branches: [stu-dev]
+    paths: ['.github/workflows/xero-customer-import-and-rename.yml']
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stu-dev
+      - name: Add import and rename controls
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/customer-manager.tsx')
+          s=p.read_text()
+          s=s.replace('ContactRound, RefreshCw, Mail, Phone, MapPin','ContactRound, RefreshCw, Mail, Phone, MapPin, Pencil')
+          s=s.replace('const [xeroLoading, setXeroLoading] = useState(false)','''const [xeroLoading, setXeroLoading] = useState(false)\n    const [syncingCustomers, setSyncingCustomers] = useState(false)\n    const [editCustomer, setEditCustomer] = useState<Client | null>(null)\n    const [editName, setEditName] = useState("")''')
+          marker='''    const handleDelete = async (id: string) => {'''
+          helper='''    const importXeroCustomers = async () => {\n        setSyncingCustomers(true)\n        try {\n            const response = await fetch("/api/xero/contacts", { cache: "no-store" })\n            const body = await response.json()\n            if (!response.ok) throw new Error(body.error || "Could not load Xero customers")\n            const contacts = body.contacts || []\n            const existing = new Map(customers.map(c => [c.name.trim().toLowerCase(), c]))\n            const missing = contacts.filter((c: any) => c.name?.trim() && !existing.has(c.name.trim().toLowerCase()))\n            if (missing.length) {\n                const { error } = await supabase.from('clients').insert(missing.map((c: any) => ({ name: c.name.trim(), contact_email: c.email || null, active: true })))\n                if (error) throw error\n            }\n            const exactMatches = contacts.filter((c: any) => existing.has((c.name || '').trim().toLowerCase()) && c.email)\n            await Promise.all(exactMatches.map((c: any) => supabase.from('clients').update({ contact_email: c.email }).eq('id', existing.get(c.name.trim().toLowerCase())!.id)))\n            toast.success(missing.length ? `Imported ${missing.length} customer${missing.length === 1 ? "" : "s"} from Xero` : "Customer list already matches Xero")\n            await fetchCustomers()\n            setXeroContacts(contacts)\n        } catch (error) {\n            toast.error(error instanceof Error ? error.message : "Could not import Xero customers")\n        } finally { setSyncingCustomers(false) }\n    }\n\n    const saveCustomerName = async () => {\n        if (!editCustomer || !editName.trim()) return\n        const { error } = await supabase.from('clients').update({ name: editName.trim() }).eq('id', editCustomer.id)\n        if (error) return toast.error(error.message)\n        toast.success("Customer name updated")\n        setEditCustomer(null)\n        await fetchCustomers()\n    }\n\n'''
+          s=s.replace(marker,helper+marker,1)
+          old='''            <div className="flex items-center justify-between">\n                <div>\n                    <h3 className="text-lg font-bold flex items-center gap-2">'''
+          new='''            <div className="flex items-center justify-between gap-3">\n                <div>\n                    <h3 className="text-lg font-bold flex items-center gap-2">'''
+          s=s.replace(old,new,1)
+          old='''                    <p className="text-sm text-muted-foreground">Manage customers and clients for site categorization.</p>\n                </div>\n            </div>'''
+          new='''                    <p className="text-sm text-muted-foreground">Manage customers and clients for site categorization.</p>\n                </div>\n                <Button variant="outline" size="sm" className="gap-1.5" onClick={importXeroCustomers} disabled={syncingCustomers}>\n                    <RefreshCw className={`size-3.5 ${syncingCustomers ? "animate-spin" : ""}`} />\n                    {syncingCustomers ? "Syncing…" : "Import customers from Xero"}\n                </Button>\n            </div>'''
+          s=s.replace(old,new,1)
+          needle='''                                            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setDetailsFor(customer); if (!xeroContacts.length) loadXeroContacts() }}>'''
+          repl='''                                            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Rename customer" onClick={(e) => { e.stopPropagation(); setEditCustomer(customer); setEditName(customer.name) }}>\n                                                <Pencil className="size-3.5" />\n                                            </Button>\n                                            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setDetailsFor(customer); if (!xeroContacts.length) loadXeroContacts() }}>'''
+          s=s.replace(needle,repl,1)
+          dialog='''\n            <Dialog open={!!editCustomer} onOpenChange={(open) => !open && setEditCustomer(null)}>\n                <DialogContent className="sm:max-w-[460px]">\n                    <DialogHeader><DialogTitle>Edit customer name</DialogTitle><DialogDescription>Use the same customer name as Xero so contact details match automatically.</DialogDescription></DialogHeader>\n                    <Input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveCustomerName() }} />\n                    <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditCustomer(null)}>Cancel</Button><Button onClick={saveCustomerName} disabled={!editName.trim()}>Save</Button></div>\n                </DialogContent>\n            </Dialog>\n'''
+          s=s.replace('''            <Dialog open={!!detailsFor}''',dialog+'\n            <Dialog open={!!detailsFor}',1)
+          p.write_text(s)
+          PY
+      - name: Verify
+        run: |
+          grep -q 'Import customers from Xero' src/components/customer-manager.tsx
+          grep -q 'Edit customer name' src/components/customer-manager.tsx
+      - name: Commit
+        run: |
+          git config user.name "WSTSTU"
+          git config user.email "311196036+WSTSTU@users.noreply.github.com"
+          rm .github/workflows/xero-customer-import-and-rename.yml
+          git add src/components/customer-manager.tsx .github/workflows/xero-customer-import-and-rename.yml
+          git commit -m "Add Xero customer import and rename"
+          git push origin HEAD:stu-dev
