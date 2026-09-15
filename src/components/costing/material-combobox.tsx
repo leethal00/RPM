@@ -8,12 +8,13 @@ import type { Material } from "@/types/database"
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const RESULT_LIMIT = 40
+const ROW_HEIGHT = 36
+const VISIBLE_ROWS = 8
 
 /**
  * Inline type-ahead over the materials catalogue.
- * - "add" use (clearOnSelect): top-of-BOM "add item" box — onSelect adds a line, input clears.
- * - "edit" use: a line's Description — onSelect fills the line; onTextCommit keeps free text.
- *   Parent should pass key={committedValue} so it re-seeds when the value changes externally.
+ * The suggestion list is positioned fixed against the input so it floats above the BOM/quote,
+ * does not create scrolling on the BOM itself, and has its own scroll area.
  */
 export function MaterialCombobox({
     value = "", placeholder, onSelect, onTextCommit, clearOnSelect = false, className = "", autoFocus = false,
@@ -32,11 +33,31 @@ export function MaterialCombobox({
     const [results, setResults] = useState<Material[]>([])
     const [capped, setCapped] = useState(false)
     const [active, setActive] = useState(0)
+    const [popup, setPopup] = useState({ left: 0, top: 0, width: 640 })
 
     const inputRef = useRef<HTMLInputElement | null>(null)
     const listRef = useRef<HTMLUListElement | null>(null)
 
-    // Keep the keyboard-highlighted row scrolled into view.
+    function positionPopup() {
+        const r = inputRef.current?.getBoundingClientRect()
+        if (!r) return
+        const width = Math.min(Math.max(r.width, 640), Math.max(320, window.innerWidth - 24))
+        const left = Math.min(r.left, Math.max(12, window.innerWidth - width - 12))
+        setPopup({ left: Math.max(12, left), top: r.bottom + 4, width })
+    }
+
+    useEffect(() => {
+        if (!open) return
+        positionPopup()
+        const reposition = () => positionPopup()
+        window.addEventListener("resize", reposition)
+        window.addEventListener("scroll", reposition, true)
+        return () => {
+            window.removeEventListener("resize", reposition)
+            window.removeEventListener("scroll", reposition, true)
+        }
+    }, [open])
+
     useEffect(() => {
         const el = listRef.current?.children[active] as HTMLElement | undefined
         el?.scrollIntoView({ block: "nearest" })
@@ -53,6 +74,7 @@ export function MaterialCombobox({
             setResults(rows)
             setCapped(rows.length === RESULT_LIMIT)
             setActive(0)
+            positionPopup()
             setOpen(true)
         }, 160)
     }
@@ -70,7 +92,7 @@ export function MaterialCombobox({
                 autoFocus={autoFocus}
                 type="text" value={q} placeholder={placeholder}
                 onChange={(e) => { setQ(e.target.value); search(e.target.value) }}
-                onFocus={() => { if (results.length) setOpen(true) }}
+                onFocus={() => { if (results.length) { positionPopup(); setOpen(true) } }}
                 onBlur={() => { setTimeout(() => setOpen(false), 120); if (onTextCommit && q !== value) onTextCommit(q) }}
                 onKeyDown={(e) => {
                     if (!open) { if (e.key === "Enter" && onTextCommit) e.currentTarget.blur(); return }
@@ -82,14 +104,21 @@ export function MaterialCombobox({
                 className={className || "w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"}
             />
             {open && results.length > 0 && (
-                <div className="absolute z-50 left-0 top-full mt-1 min-w-full w-max max-w-[min(56rem,90vw)] rounded-md border border-border bg-popover shadow-lg text-sm">
-                    <ul ref={listRef} className="max-h-[28rem] min-w-[36rem] overflow-y-auto overscroll-contain">
+                <div
+                    className="fixed z-[100] rounded-md border border-border bg-popover shadow-xl text-sm"
+                    style={{ left: popup.left, top: popup.top, width: popup.width }}
+                >
+                    <ul
+                        ref={listRef}
+                        className="overflow-y-auto overscroll-contain"
+                        style={{ maxHeight: ROW_HEIGHT * VISIBLE_ROWS }}
+                    >
                         {results.map((m, i) => (
                             <li key={m.id}>
                                 <button type="button"
                                     onMouseDown={(e) => { e.preventDefault(); pick(m) }}
                                     onMouseEnter={() => setActive(i)}
-                                    className={`w-full text-left px-2.5 py-1.5 flex items-center gap-3 ${i === active ? "bg-muted" : "hover:bg-muted/60"}`}>
+                                    className={`w-full min-h-9 text-left px-2.5 py-1.5 flex items-center gap-3 ${i === active ? "bg-muted" : "hover:bg-muted/60"}`}>
                                     <Search className="size-3 text-muted-foreground shrink-0" />
                                     <span className="min-w-0 flex-1 truncate">{m.description}</span>
                                     <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
