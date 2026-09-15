@@ -33,9 +33,20 @@ const isAutoArgon = (l: CostingLine) => {
 }
 // Weight (kg) for galvanising = factor × size × qty (manual; independent of cost qty).
 const lineWeight = (l: CostingLine) => Number(l.wt_factor ?? 0) * Number(l.wt_size ?? 0) * Number(l.wt_qty ?? 0)
-const LED_LOADING = 1.2          // fixed 20% "fuck factor" — keeps drivers ≤ 80% load
-const MODULES_PER_HOUR = 25
+const MODULES_PER_HOUR = 20
 const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
+const isLedDriver = (l: CostingLine) => {
+    const description = l.description.toLowerCase()
+    return /hlg-\d+h/.test(description) || description.includes("driver") || description.includes("transformer") || description.includes("t/x")
+}
+const isLedModule = (l: CostingLine) => {
+    const description = l.description.toLowerCase()
+    return !isLedDriver(l) && !isWiringLabour(l) && description.includes("module")
+}
+const driverRatedWatts = (l: CostingLine) => {
+    const modelRating = l.description.match(/HLG-(\d+)H/i)?.[1]
+    return modelRating ? Number(modelRating) : Number(l.watts ?? 0)
+}
 
 interface CostColumn {
     key: string
@@ -481,10 +492,9 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                 const groups = groupsFor(section)
                 // LED sizing calc (Wiring - LED only)
                 const isWiring = section === "Wiring - LED"
-                const modLines = isWiring ? secLines.filter((l) => l.subsection === "Modules") : []
-                const ledLoad = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
-                const ledRequired = ledLoad * LED_LOADING
-                const driverCap = isWiring ? secLines.filter((l) => l.subsection === "Transformers").reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0) : 0
+                const modLines = isWiring ? secLines.filter(isLedModule) : []
+                const ledRequired = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
+                const driverCap = isWiring ? secLines.filter(isLedDriver).reduce((s, l) => s + Number(l.qty) * driverRatedWatts(l), 0) : 0
                 const moduleCount = modLines.reduce((s, l) => s + Number(l.qty), 0)
                 const wiringHrs = moduleCount / MODULES_PER_HOUR
                 return (
@@ -534,9 +544,9 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                             </div>
                         </div>
 
-                        {isWiring && (ledLoad > 0 || moduleCount > 0) && (
+                        {isWiring && (ledRequired > 0 || moduleCount > 0) && (
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border/60 bg-amber-500/5 px-4 py-2 text-xs">
-                                <span>LED load <span className="font-semibold tabular-nums">{ledLoad.toFixed(1)}w</span> × 1.2 = <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>
+                                <span>LED load <span className="font-semibold text-foreground tabular-nums">{ledRequired.toFixed(1)}w required</span></span>
                                 <span className={driverCap >= ledRequired ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
                                     Drivers selected <span className="font-semibold tabular-nums">{driverCap.toFixed(0)}w</span>{" "}
                                     {ledRequired === 0 ? "" : driverCap >= ledRequired ? "✓ covered" : `⚠ short ${(ledRequired - driverCap).toFixed(0)}w`}
@@ -633,7 +643,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                             {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(wiringHrs * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
-                                                                    title="Set wiring labour to modules ÷ 25">
+                                                                    title="Set wiring labour to modules ÷ 20">
                                                                     = {wiringHrs.toFixed(2)} hr
                                                                 </button>
                                                             )}
