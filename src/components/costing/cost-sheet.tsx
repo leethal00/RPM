@@ -388,6 +388,8 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const margin = sell > 0 ? 1 - cost / sell : 0
     const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
+    // Galvanising must only use items in the Steel section, even when other materials carry weights.
+    const totalSteelWeight = lines.filter((l) => l.section === "Steel").reduce((s, l) => s + lineWeight(l), 0)
     const itemQty = Number(item.qty) || 1
 
     // Order a section's lines by subsection (seed order, then name), then by sort.
@@ -633,11 +635,11 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />
-                                                            {showWeights && isGalvPerKg(l) && totalWeight > 0 && Math.abs(Number(l.qty) - totalWeight) > 0.01 && (
-                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(totalWeight * 100) / 100 })}
+                                                            {showWeights && isGalvPerKg(l) && totalSteelWeight > 0 && Math.abs(Number(l.qty) - totalSteelWeight) > 0.01 && (
+                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(totalSteelWeight * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
                                                                     title="Set qty to the total steel weight">
-                                                                    = {totalWeight.toFixed(1)} kg
+                                                                    = {totalSteelWeight.toFixed(1)} kg
                                                                 </button>
                                                             )}
                                                             {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
@@ -740,7 +742,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                 )}
                 {showWeights && (
                     <div className="mt-3 text-xs text-muted-foreground">
-                        Total weight feeds the galvanising calc — set a galvanising line&apos;s qty to it via its &quot;= kg&quot; link.
+                        Total weight includes all weighted materials. Galvanising uses Steel-section weight only via the &quot;= kg&quot; link.
                     </div>
                 )}
             </div>
