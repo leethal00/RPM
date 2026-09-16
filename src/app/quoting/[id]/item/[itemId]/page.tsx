@@ -165,11 +165,15 @@ export default function ItemCostSheetPage() {
                                 <label className="mb-1 block text-[11px] text-muted-foreground">Details</label>
                                 <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
                                     onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
-                                    className="min-h-[52px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
+                                    className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
                             </div>
-                            <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-[11px] leading-4 text-muted-foreground">
-                                <span className="font-medium text-foreground/80">Quote line:</span>{" "}
-                                {[item.name || "Item", `Qty ${Number(item.qty)}`, item.size || null, item.details || null, item.delivery || null].filter(Boolean).join(" · ")}
+                            <div className="rounded-md bg-muted/25 px-2.5 py-2 text-xs leading-5 text-foreground/80">
+                                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Customer quote preview</div>
+                                <div><span className="font-medium">Item:</span> {item.name || "Item"}</div>
+                                <div><span className="font-medium">Qty:</span> {Number(item.qty)}</div>
+                                {item.size?.trim() && <div><span className="font-medium">Size:</span> {item.size.trim()}</div>}
+                                <div className="whitespace-pre-wrap"><span className="font-medium">Details:</span>{item.details?.trim() ? ` ${item.details.trim()}` : " —"}</div>
+                                {item.delivery?.trim() && <div>{item.delivery.trim()}</div>}
                             </div>
                         </div>
 
