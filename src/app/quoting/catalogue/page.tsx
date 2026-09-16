@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -415,9 +416,14 @@ export default function CataloguePage() {
                     title="Catalogue & Sections"
                     description="Manage priced materials, labour, and the sections used throughout quoting and costing."
                     actions={activeTab === "catalogue" ? (
-                        <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>
-                            <Plus className="size-3.5" /> Add material
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="gap-1.5 h-9" asChild>
+                                <Link href="/quoting/catalogue/price-imports">Price imports</Link>
+                            </Button>
+                            <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>
+                                <Plus className="size-3.5" /> Add material
+                            </Button>
+                        </div>
                     ) : undefined}
                 />
 
