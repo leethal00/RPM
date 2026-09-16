@@ -111,6 +111,9 @@ export default function CataloguePage() {
     const [activeTab, setActiveTab] = useState("catalogue")
     const [draggingSubsectionId, setDraggingSubsectionId] = useState<number | null>(null)
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
+    const [deleteSectionTarget, setDeleteSectionTarget] = useState<string | null>(null)
+    const [deleteSubsectionTarget, setDeleteSubsectionTarget] = useState<CostingSection | null>(null)
+    const [deletingStructure, setDeletingStructure] = useState(false)
     const { order, widths, move, setWidth, reset } = useColumnLayout("catalogue-columns-v1", DEFAULT_LAYOUT)
 
     useEffect(() => {
@@ -311,6 +314,44 @@ export default function CataloguePage() {
         setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === subsection
             ? { ...material, section: targetSection } : material))
         toast.success(`Moved “${subsection}” to ${targetSection}`)
+    }
+
+    async function deleteSubsection(record: CostingSection) {
+        const subsection = record.subsection
+        if (!subsection) return
+        setDeletingStructure(true)
+        const results = await Promise.all([
+            supabase.from("materials").update({ subsection: null }).eq("section", record.section).eq("subsection", subsection),
+            supabase.from("costing_lines").update({ subsection: null }).eq("section", record.section).eq("subsection", subsection),
+            supabase.from("costing_sections").delete().eq("id", record.id),
+        ])
+        setDeletingStructure(false)
+        const error = results.find((result) => result.error)?.error
+        if (error) return toast.error(error.message)
+        setSections((prev) => prev.filter((section) => section.id !== record.id))
+        setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === subsection
+            ? { ...material, subsection: null } : material))
+        setDeleteSubsectionTarget(null)
+        toast.success(`Deleted subsection “${subsection}”`)
+    }
+
+    async function deleteSection(name: string) {
+        const [{ count: materialCount, error: materialError }, { count: lineCount, error: lineError }] = await Promise.all([
+            supabase.from("materials").select("id", { count: "exact", head: true }).eq("section", name),
+            supabase.from("costing_lines").select("id", { count: "exact", head: true }).eq("section", name),
+        ])
+        if (materialError || lineError) return toast.error(materialError?.message || lineError?.message || "Could not check section usage")
+        if ((materialCount ?? 0) > 0 || (lineCount ?? 0) > 0) {
+            setDeleteSectionTarget(null)
+            return toast.error(`“${name}” is still in use. Move its catalogue/costing items to another section before deleting it.`)
+        }
+        setDeletingStructure(true)
+        const { error } = await supabase.from("costing_sections").delete().eq("section", name)
+        setDeletingStructure(false)
+        if (error) return toast.error(error.message)
+        setSections((prev) => prev.filter((section) => section.section !== name))
+        setDeleteSectionTarget(null)
+        toast.success(`Deleted section “${name}”`)
     }
 
     function renderCell(key: string, m: Material) {
@@ -617,6 +658,15 @@ export default function CataloguePage() {
                                     <span className="text-xs text-muted-foreground shrink-0">
                                         {subsections.length} subsection{subsections.length === 1 ? "" : "s"}
                                     </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDeleteSectionTarget(name)}
+                                        className="p-1 text-muted-foreground hover:text-destructive shrink-0"
+                                        title={`Delete section ${name}`}
+                                        aria-label={`Delete section ${name}`}
+                                    >
+                                        <Trash2 className="size-3.5" />
+                                    </button>
                                 </div>
                                 <div className="p-2">
                                     {subsections.length === 0 ? (
@@ -648,6 +698,15 @@ export default function CataloguePage() {
                                                         className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
                                                         aria-label={`Rename subsection ${subsection.subsection}`}
                                                     />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDeleteSubsectionTarget(subsection)}
+                                                        className="p-1 text-muted-foreground hover:text-destructive shrink-0"
+                                                        title={`Delete subsection ${subsection.subsection}`}
+                                                        aria-label={`Delete subsection ${subsection.subsection}`}
+                                                    >
+                                                        <Trash2 className="size-3.5" />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -685,6 +744,40 @@ export default function CataloguePage() {
                 </section>
                     </TabsContent>
                 </Tabs>
+
+                <Dialog open={deleteSectionTarget != null} onOpenChange={(open) => { if (!deletingStructure && !open) setDeleteSectionTarget(null) }}>
+                    <DialogContent className="sm:max-w-[480px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete section “{deleteSectionTarget}”?</DialogTitle>
+                            <DialogDescription>
+                                RPM will only delete an empty section. If catalogue or costing items still use it, deletion will be stopped so nothing is reassigned or lost accidentally.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" disabled={deletingStructure} onClick={() => setDeleteSectionTarget(null)}>Cancel</Button>
+                            <Button variant="destructive" disabled={deletingStructure || !deleteSectionTarget} onClick={() => deleteSectionTarget && deleteSection(deleteSectionTarget)}>
+                                <Trash2 className="mr-1.5 size-4" /> {deletingStructure ? "Deleting…" : "Delete section"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={deleteSubsectionTarget != null} onOpenChange={(open) => { if (!deletingStructure && !open) setDeleteSubsectionTarget(null) }}>
+                    <DialogContent className="sm:max-w-[480px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete subsection “{deleteSubsectionTarget?.subsection}”?</DialogTitle>
+                            <DialogDescription>
+                                Materials and costing lines in this subsection will stay in “{deleteSubsectionTarget?.section}” but their subsection will be cleared. No catalogue items or costing lines are deleted.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" disabled={deletingStructure} onClick={() => setDeleteSubsectionTarget(null)}>Cancel</Button>
+                            <Button variant="destructive" disabled={deletingStructure || !deleteSubsectionTarget} onClick={() => deleteSubsectionTarget && deleteSubsection(deleteSubsectionTarget)}>
+                                <Trash2 className="mr-1.5 size-4" /> {deletingStructure ? "Deleting…" : "Delete subsection"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!bulkDeleting) setBulkDeleteOpen(open) }}>
                     <DialogContent className="sm:max-w-[460px]">
