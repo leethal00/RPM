@@ -146,6 +146,65 @@
   }
 }
 
+/* Dense Job & Project Management workspace.
+   The Catalogue page is the visual reference and is intentionally excluded from
+   this scope in DashboardLayout because it already has the desired density. */
+.rpm-compact-workspace > * {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.rpm-compact-workspace > .flex.flex-col {
+  padding: 1rem 1.5rem !important;
+  gap: 1rem !important;
+}
+
+.rpm-compact-workspace .max-w-7xl,
+.rpm-compact-workspace .max-w-6xl,
+.rpm-compact-workspace .max-w-5xl,
+.rpm-compact-workspace .max-w-4xl,
+.rpm-compact-workspace .max-w-3xl {
+  max-width: none !important;
+}
+
+.rpm-compact-workspace .gap-8 { gap: 1.25rem !important; }
+.rpm-compact-workspace .gap-6 { gap: 1rem !important; }
+.rpm-compact-workspace .gap-5 { gap: 0.875rem !important; }
+.rpm-compact-workspace .gap-4 { gap: 0.75rem !important; }
+
+.rpm-compact-workspace .space-y-8 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.25rem !important; }
+.rpm-compact-workspace .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem !important; }
+.rpm-compact-workspace .space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.875rem !important; }
+.rpm-compact-workspace .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem !important; }
+
+.rpm-compact-workspace .p-8 { padding: 1.25rem !important; }
+.rpm-compact-workspace .p-6 { padding: 1rem !important; }
+.rpm-compact-workspace .p-5 { padding: 0.875rem !important; }
+.rpm-compact-workspace .p-4 { padding: 0.75rem !important; }
+.rpm-compact-workspace .py-8 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
+.rpm-compact-workspace .py-6 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+.rpm-compact-workspace .py-5 { padding-top: 0.875rem !important; padding-bottom: 0.875rem !important; }
+.rpm-compact-workspace .py-4 { padding-top: 0.625rem !important; padding-bottom: 0.625rem !important; }
+.rpm-compact-workspace .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+.rpm-compact-workspace .px-5 { padding-left: 0.875rem !important; padding-right: 0.875rem !important; }
+.rpm-compact-workspace .px-4 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+
+.rpm-compact-workspace .mt-8 { margin-top: 1.25rem !important; }
+.rpm-compact-workspace .mt-6 { margin-top: 1rem !important; }
+.rpm-compact-workspace .mt-5 { margin-top: 0.875rem !important; }
+.rpm-compact-workspace .mt-4 { margin-top: 0.75rem !important; }
+.rpm-compact-workspace .mb-6 { margin-bottom: 1rem !important; }
+.rpm-compact-workspace .mb-5 { margin-bottom: 0.875rem !important; }
+.rpm-compact-workspace .mb-4 { margin-bottom: 0.75rem !important; }
+.rpm-compact-workspace .pb-6 { padding-bottom: 1rem !important; }
+.rpm-compact-workspace .pb-5 { padding-bottom: 0.875rem !important; }
+.rpm-compact-workspace .pb-4 { padding-bottom: 0.75rem !important; }
+
+/* Keep tables/list rows information-dense without touching already-tight py-1/py-2 rows. */
+.rpm-compact-workspace table .py-5 { padding-top: 0.625rem !important; padding-bottom: 0.625rem !important; }
+.rpm-compact-workspace table .py-4 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+.rpm-compact-workspace table .py-3 { padding-top: 0.375rem !important; padding-bottom: 0.375rem !important; }
+
 /* Leaflet attribution — required by OSM/CARTO TOS, styled down to stay out of the way */
 .leaflet-control-attribution {
   font-size: 9px !important;
