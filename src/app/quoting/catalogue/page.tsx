@@ -31,7 +31,7 @@ const COLUMNS: ColMeta[] = [
     { key: "unit_cost", label: "Unit cost", width: 100, min: 70, align: "right" },
     { key: "default_markup", label: "Markup", width: 90, min: 60, align: "right", title: "Markup on cost (0.5 = 50%)" },
     { key: "watts", label: "Watts", width: 84, min: 60, align: "right", title: "LED module watts, or transformer capacity" },
-    { key: "mtr_weight", label: "kg/unit", width: 92, min: 60, align: "right", title: "Steel: kg per metre (per sheet for plate)" },
+    { key: "mtr_weight", label: "kg/unit", width: 92, min: 60, align: "right", title: "Weight factor: kg per metre, kg per m², or kg per unit as appropriate" },
     { key: "date_last_checked", label: "Last checked", width: 120, min: 80 },
 ]
 const COL_BY_KEY: Record<string, ColMeta> = Object.fromEntries(COLUMNS.map((c) => [c.key, c]))
@@ -394,9 +394,7 @@ export default function CataloguePage() {
             case "watts": return m.section === "Wiring - LED"
                 ? <NumCell value={m.watts} placeholder="—" onCommit={(v) => patch(m.id, { watts: v })} />
                 : <span className="text-muted-foreground/40 pl-1.5">—</span>
-            case "mtr_weight": return m.section === "Steel"
-                ? <NumCell value={m.mtr_weight} placeholder="—" onCommit={(v) => patch(m.id, { mtr_weight: v })} />
-                : <span className="text-muted-foreground/40 pl-1.5">—</span>
+            case "mtr_weight": return <NumCell value={m.mtr_weight} placeholder="—" onCommit={(v) => patch(m.id, { mtr_weight: v })} />
             case "date_last_checked": return <div className="text-xs text-muted-foreground tabular-nums truncate">{m.date_last_checked ?? m.check_note ?? "—"}</div>
             default: return null
         }
