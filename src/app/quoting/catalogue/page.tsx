@@ -95,6 +95,9 @@ export default function CataloguePage() {
     const [search, setSearch] = useState("")
     const [supplier, setSupplier] = useState("all")
     const [deleteTarget, setDeleteTarget] = useState<Material | null>(null)
+    const [selectedIds, setSelectedIds] = useState<string[]>([])
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+    const [bulkDeleting, setBulkDeleting] = useState(false)
     const [sections, setSections] = useState<CostingSection[]>([])
     const [newSectionFor, setNewSectionFor] = useState<Material | null>(null)
     const [newSectionOpen, setNewSectionOpen] = useState(false)
@@ -148,6 +151,8 @@ export default function CataloguePage() {
         }
         return true
     })
+    const filteredIds = filtered.map((m) => m.id)
+    const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id))
 
     async function patch(id: string, p: Partial<Material>) {
         if ("unit_cost" in p) p = { ...p, date_last_checked: today() }
@@ -342,7 +347,7 @@ export default function CataloguePage() {
         }
     }
 
-    const tableWidth = order.reduce((s, k) => s + (widths[k] ?? 100), 0) + 44
+    const tableWidth = order.reduce((s, k) => s + (widths[k] ?? 100), 0) + 84
 
     async function addMaterial() {
         setSearch("")
@@ -353,18 +358,44 @@ export default function CataloguePage() {
         setMaterials((prev) => [data as Material, ...prev])
     }
 
+    function toggleSelected(id: string) {
+        setSelectedIds((prev) => prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id])
+    }
+
+    function toggleAllFiltered() {
+        if (allFilteredSelected) {
+            setSelectedIds((prev) => prev.filter((id) => !filteredIds.includes(id)))
+        } else {
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredIds])))
+        }
+    }
+
     async function confirmDelete() {
         if (!deleteTarget) return
         const id = deleteTarget.id
         setMaterials((prev) => prev.filter((m) => m.id !== id))
+        setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id))
         setDeleteTarget(null)
         const { error } = await supabase.from("materials").delete().eq("id", id)
         if (error) toast.error(error.message)
     }
 
+    async function confirmBulkDelete() {
+        if (selectedIds.length === 0) return
+        setBulkDeleting(true)
+        const ids = [...selectedIds]
+        const { error } = await supabase.from("materials").delete().in("id", ids)
+        setBulkDeleting(false)
+        if (error) return toast.error(error.message)
+        setMaterials((prev) => prev.filter((m) => !ids.includes(m.id)))
+        setSelectedIds([])
+        setBulkDeleteOpen(false)
+        toast.success(`Deleted ${ids.length} catalogue item${ids.length === 1 ? "" : "s"}`)
+    }
+
     return (
         <DashboardLayout>
-            <PageShell>
+            <PageShell width="full" className="px-4 xl:px-6">
                 <PageHeader
                     icon={Layers}
                     kicker="Quoting & Costing"
@@ -390,8 +421,8 @@ export default function CataloguePage() {
                     <TabsContent value="catalogue" className="mt-2">
                         <datalist id={SUPPLIER_LIST_ID}>{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
 
-                <div className="flex items-center gap-2 mt-2">
-                    <div className="relative flex-1 max-w-sm">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <div className="relative flex-1 min-w-[260px] max-w-md">
                         <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                         <Input
                             placeholder="Search code or description…"
@@ -420,6 +451,15 @@ export default function CataloguePage() {
                         <option value="all">All suppliers</option>
                         {suppliers.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    {selectedIds.length > 0 && (
+                        <>
+                            <span className="text-xs font-medium tabular-nums">{selectedIds.length} selected</span>
+                            <Button variant="destructive" size="sm" className="h-9 gap-1.5" onClick={() => setBulkDeleteOpen(true)}>
+                                <Trash2 className="size-3.5" /> Delete selected
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => setSelectedIds([])}>Clear</Button>
+                        </>
+                    )}
                     <span className="text-xs text-muted-foreground tabular-nums ml-auto">{filtered.length} item{filtered.length === 1 ? "" : "s"}</span>
                     <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-xs text-muted-foreground" onClick={reset} title="Reset column order and widths">
                         <RotateCcw className="size-3.5" /> Reset columns
@@ -429,25 +469,43 @@ export default function CataloguePage() {
                 {loading ? (
                     <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-4" />
                 ) : (
-                    <div className="border border-border/60 rounded-lg max-h-[46vh] overflow-auto mt-3">
+                    <div className="border border-border/60 rounded-lg max-h-[56vh] overflow-auto mt-3">
                         <table className="text-sm table-fixed min-w-full" style={{ width: tableWidth }}>
                             <colgroup>
+                                <col style={{ width: 40 }} />
                                 {order.map((k) => <col key={k} style={{ width: widths[k] }} />)}
                                 <col style={{ width: 44 }} />
-                                <col />
                             </colgroup>
                             <thead className="bg-muted text-muted-foreground sticky top-0 z-10">
                                 <tr className="text-left">
+                                    <th className="border-b border-border/60 px-2 text-center">
+                                        <input
+                                            type="checkbox"
+                                            className="size-4 align-middle"
+                                            checked={allFilteredSelected}
+                                            onChange={toggleAllFiltered}
+                                            aria-label="Select all visible catalogue items"
+                                            title="Select all visible items"
+                                        />
+                                    </th>
                                     {order.map((k) => (
                                         <ColHeader key={k} col={COL_BY_KEY[k]} width={widths[k] ?? COL_BY_KEY[k].width} onMove={move} onResize={setWidth} />
                                     ))}
-                                    <th className="border-b border-border/60" />
                                     <th className="border-b border-border/60" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {filtered.map((m) => (
-                                    <tr key={m.id} className="border-t border-border/60 group">
+                                    <tr key={m.id} className={`border-t border-border/60 group ${selectedIds.includes(m.id) ? "bg-primary/5" : ""}`}>
+                                        <td className="px-2 py-1 text-center">
+                                            <input
+                                                type="checkbox"
+                                                className="size-4 align-middle"
+                                                checked={selectedIds.includes(m.id)}
+                                                onChange={() => toggleSelected(m.id)}
+                                                aria-label={`Select ${m.description || "catalogue item"}`}
+                                            />
+                                        </td>
                                         {order.map((k) => (
                                             <td key={k} className="px-2 py-1 overflow-hidden">{renderCell(k, m)}</td>
                                         ))}
@@ -456,7 +514,6 @@ export default function CataloguePage() {
                                                 <Trash2 className="size-3.5" />
                                             </button>
                                         </td>
-                                        <td />
                                     </tr>
                                 ))}
                                 {filtered.length === 0 && (
@@ -490,7 +547,7 @@ export default function CataloguePage() {
                         </Button>
                     </div>
 
-                    <div className="columns-1 lg:columns-2 xl:columns-3 gap-3 mt-4">
+                    <div className="columns-1 lg:columns-2 xl:columns-3 2xl:columns-4 gap-3 mt-4">
                         {sectionGroups.map(({ name, subsections }) => (
                             <div
                                 key={name}
@@ -592,6 +649,23 @@ export default function CataloguePage() {
                 </section>
                     </TabsContent>
                 </Tabs>
+
+                <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!bulkDeleting) setBulkDeleteOpen(open) }}>
+                    <DialogContent className="sm:max-w-[460px]">
+                        <DialogHeader>
+                            <DialogTitle>Delete {selectedIds.length} catalogue item{selectedIds.length === 1 ? "" : "s"}?</DialogTitle>
+                            <DialogDescription>
+                                The selected catalogue items will be permanently removed. Existing job lines keep their current values. This can&apos;t be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" disabled={bulkDeleting} onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+                            <Button variant="destructive" disabled={bulkDeleting || selectedIds.length === 0} onClick={confirmBulkDelete}>
+                                <Trash2 className="mr-1.5 size-4" /> {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.length}`}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <Dialog open={deleteTarget != null} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
                     <DialogContent className="sm:max-w-[440px]">
