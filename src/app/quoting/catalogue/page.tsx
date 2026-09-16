@@ -94,6 +94,8 @@ export default function CataloguePage() {
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [supplier, setSupplier] = useState("all")
+    const [sectionFilter, setSectionFilter] = useState("all")
+    const [subsectionFilter, setSubsectionFilter] = useState("all")
     const [deleteTarget, setDeleteTarget] = useState<Material | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -136,6 +138,15 @@ export default function CataloguePage() {
         const inUse = materials.map((m) => m.section).filter(Boolean)
         return Array.from(new Set([...defined, ...inUse]))
     }, [materials, sections])
+    const subsectionNames = useMemo(() => {
+        const fromDefinitions = sections
+            .filter((s) => s.subsection && (sectionFilter === "all" || s.section === sectionFilter))
+            .map((s) => s.subsection as string)
+        const fromMaterials = materials
+            .filter((m) => m.subsection && (sectionFilter === "all" || (m.section ?? "Materials") === sectionFilter))
+            .map((m) => m.subsection as string)
+        return Array.from(new Set([...fromDefinitions, ...fromMaterials])).sort((a, b) => a.localeCompare(b))
+    }, [materials, sections, sectionFilter])
     const sectionGroups = useMemo(() => sectionNames.map((name) => ({
         name,
         subsections: sections.filter((section) => section.section === name && section.subsection)
@@ -145,6 +156,8 @@ export default function CataloguePage() {
     const tokens = search.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const filtered = materials.filter((m) => {
         if (supplier !== "all" && (m.supplier ?? "") !== supplier) return false
+        if (sectionFilter !== "all" && (m.section ?? "Materials") !== sectionFilter) return false
+        if (subsectionFilter !== "all" && (m.subsection ?? "") !== subsectionFilter) return false
         if (tokens.length) {
             const hay = `${m.description} ${m.code ?? ""}`.toLowerCase()
             return tokens.every((t) => hay.includes(t))
@@ -451,6 +464,23 @@ export default function CataloguePage() {
                         <option value="all">All suppliers</option>
                         {suppliers.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <select
+                        value={sectionFilter}
+                        onChange={(e) => { setSectionFilter(e.target.value); setSubsectionFilter("all") }}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring"
+                    >
+                        <option value="all">All sections</option>
+                        {sectionNames.map((section) => <option key={section} value={section}>{section}</option>)}
+                    </select>
+                    <select
+                        value={subsectionFilter}
+                        onChange={(e) => setSubsectionFilter(e.target.value)}
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring"
+                        disabled={subsectionNames.length === 0}
+                    >
+                        <option value="all">All subsections</option>
+                        {subsectionNames.map((subsection) => <option key={subsection} value={subsection}>{subsection}</option>)}
+                    </select>
                     {selectedIds.length > 0 && (
                         <>
                             <span className="text-xs font-medium tabular-nums">{selectedIds.length} selected</span>
@@ -525,7 +555,7 @@ export default function CataloguePage() {
                 )}
 
                 <p className="text-xs text-muted-foreground mt-3">
-                    Tip: pick a supplier above, then edit their unit costs — each edit stamps today&apos;s date.
+                    Tip: pick a supplier, section, or subsection above to narrow the catalogue, then edit unit costs — each cost edit stamps today&apos;s date.
                     Bulk price-list upload is coming once item codes are in (matched on code).
                 </p>
                     </TabsContent>
