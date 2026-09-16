@@ -20,20 +20,20 @@ export function PageHeader({
     kickerIcon: KickerIcon,
 }: PageHeaderProps) {
     return (
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between pb-5 border-b border-border/60">
-            <div className="space-y-1.5">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between pb-3 border-b border-border/60">
+            <div className="space-y-1">
                 {kicker && (
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                         {KickerIcon && <KickerIcon className="size-3.5" />}
                         <span className="text-xs font-medium">{kicker}</span>
                     </div>
                 )}
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                     {Icon && <Icon className="size-5 text-muted-foreground shrink-0" />}
-                    <h1 className="text-[1.7rem] font-semibold tracking-tight text-foreground">{title}</h1>
+                    <h1 className="text-[1.5rem] font-semibold tracking-tight text-foreground leading-tight">{title}</h1>
                 </div>
                 {description && (
-                    <p className="text-sm text-muted-foreground max-w-2xl">
+                    <p className="text-sm text-muted-foreground max-w-2xl leading-snug">
                         {description}
                     </p>
                 )}
