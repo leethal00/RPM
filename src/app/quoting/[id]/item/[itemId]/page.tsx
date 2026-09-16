@@ -116,13 +116,26 @@ export default function ItemCostSheetPage() {
                                     placeholder="Item name"
                                 />
                             </div>
-                            <div className="shrink-0 w-16">
-                                <label className="text-[11px] text-muted-foreground">Qty</label>
-                                <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
+                            <div className="flex items-end gap-3 shrink-0">
+                                <div className="w-20">
+                                    <label className="text-[11px] text-muted-foreground">Quote qty</label>
+                                    <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
+                                </div>
+                                {item.mode === "build" && (
+                                    <div className="w-20">
+                                        <label className="text-[11px] text-muted-foreground">Build qty</label>
+                                        <NumCell value={item.build_qty ?? item.qty} onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} />
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        {/* Compact quote description — feeds the customer quote line */}
+                        {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
+                            <div className="mt-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                                Batch build: customer quote quantity is <span className="font-medium text-foreground">{Number(item.qty)}</span>; production quantity is <span className="font-medium text-foreground">{Number(item.build_qty)}</span>. BOM quantities below are for the complete batch and are not multiplied automatically.
+                            </div>
+                        )}
+
                         <div className="mt-3 rounded-lg border border-border/60 p-3 space-y-2.5">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
