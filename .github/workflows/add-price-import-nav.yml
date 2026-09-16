@@ -1,0 +1,39 @@
+name: Add price import navigation
+on:
+  push:
+    branches: [stu-dev]
+    paths: ['.github/workflows/add-price-import-nav.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stu-dev
+      - name: Add catalogue navigation button
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/app/quoting/catalogue/page.tsx')
+          s = p.read_text()
+          if 'import Link from "next/link"' not in s:
+              s = s.replace('import { useEffect, useMemo, useState } from "react"\n', 'import { useEffect, useMemo, useState } from "react"\nimport Link from "next/link"\n', 1)
+          old = '''                    actions={activeTab === "catalogue" ? (\n                        <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>\n                            <Plus className="size-3.5" /> Add material\n                        </Button>\n                    ) : undefined}'''
+          new = '''                    actions={activeTab === "catalogue" ? (\n                        <div className="flex items-center gap-2">\n                            <Button variant="outline" size="sm" className="gap-1.5 h-9" asChild>\n                                <Link href="/quoting/catalogue/price-imports">Price imports</Link>\n                            </Button>\n                            <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>\n                                <Plus className="size-3.5" /> Add material\n                            </Button>\n                        </div>\n                    ) : undefined}'''
+          if old not in s:
+              raise SystemExit('PageHeader action block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Verify
+        run: |
+          grep -q 'href="/quoting/catalogue/price-imports"' src/app/quoting/catalogue/page.tsx
+      - name: Commit
+        run: |
+          git config user.name "WSTSTU"
+          git config user.email "311196036+WSTSTU@users.noreply.github.com"
+          rm .github/workflows/add-price-import-nav.yml
+          git add src/app/quoting/catalogue/page.tsx .github/workflows/add-price-import-nav.yml
+          git commit -m "Add supplier price import navigation"
+          git push origin HEAD:stu-dev
