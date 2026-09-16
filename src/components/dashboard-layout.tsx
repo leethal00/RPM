@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -16,6 +17,20 @@ export default function DashboardLayout({
     children: React.ReactNode
 }) {
     const [sessionExpired, setSessionExpired] = useState(false)
+    const pathname = usePathname()
+
+    // Catalogue is already the reference layout for the dense workspace. Apply the
+    // same full-width/condensed treatment to the rest of Job & Project Management,
+    // while leaving print/job-card pages untouched.
+    const isJobProjectArea =
+        pathname === "/leads" ||
+        pathname.startsWith("/quoting") ||
+        pathname.startsWith("/projects") ||
+        pathname.startsWith("/tasks")
+    const compactWorkspace =
+        isJobProjectArea &&
+        !pathname.startsWith("/quoting/catalogue") &&
+        !pathname.includes("/job-card")
 
     useEffect(() => {
         const supabase = createClient()
@@ -56,7 +71,7 @@ export default function DashboardLayout({
                             <ThemeToggle />
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-3 p-3 pt-0">
+                    <div className={`flex flex-1 flex-col gap-3 p-3 pt-0 ${compactWorkspace ? "rpm-compact-workspace" : ""}`}>
                         {children}
                     </div>
                 </SidebarInset>
