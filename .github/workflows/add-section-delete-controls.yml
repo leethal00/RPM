@@ -1,0 +1,63 @@
+name: Add section delete controls
+on:
+  push:
+    branches: [stu-dev]
+    paths: ['.github/workflows/add-section-delete-controls.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stu-dev
+      - name: Add safe delete controls for sections and subsections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/app/quoting/catalogue/page.tsx')
+          s = p.read_text()
+
+          s = s.replace(
+              '    const [dragOverSection, setDragOverSection] = useState<string | null>(null)\n',
+              '    const [dragOverSection, setDragOverSection] = useState<string | null>(null)\n    const [deleteSectionTarget, setDeleteSectionTarget] = useState<string | null>(null)\n    const [deleteSubsectionTarget, setDeleteSubsectionTarget] = useState<CostingSection | null>(null)\n    const [deletingStructure, setDeletingStructure] = useState(false)\n'
+          )
+
+          marker = '''    function renderCell(key: string, m: Material) {'''
+          helpers = '''    async function deleteSubsection(record: CostingSection) {\n        const subsection = record.subsection\n        if (!subsection) return\n        setDeletingStructure(true)\n        const results = await Promise.all([\n            supabase.from("materials").update({ subsection: null }).eq("section", record.section).eq("subsection", subsection),\n            supabase.from("costing_lines").update({ subsection: null }).eq("section", record.section).eq("subsection", subsection),\n            supabase.from("costing_sections").delete().eq("id", record.id),\n        ])\n        setDeletingStructure(false)\n        const error = results.find((result) => result.error)?.error\n        if (error) return toast.error(error.message)\n        setSections((prev) => prev.filter((section) => section.id !== record.id))\n        setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === subsection\n            ? { ...material, subsection: null } : material))\n        setDeleteSubsectionTarget(null)\n        toast.success(`Deleted subsection “${subsection}”`)\n    }\n\n    async function deleteSection(name: string) {\n        const [{ count: materialCount, error: materialError }, { count: lineCount, error: lineError }] = await Promise.all([\n            supabase.from("materials").select("id", { count: "exact", head: true }).eq("section", name),\n            supabase.from("costing_lines").select("id", { count: "exact", head: true }).eq("section", name),\n        ])\n        if (materialError || lineError) return toast.error(materialError?.message || lineError?.message || "Could not check section usage")\n        if ((materialCount ?? 0) > 0 || (lineCount ?? 0) > 0) {\n            setDeleteSectionTarget(null)\n            return toast.error(`“${name}” is still in use. Move its catalogue/costing items to another section before deleting it.`)\n        }\n        setDeletingStructure(true)\n        const { error } = await supabase.from("costing_sections").delete().eq("section", name)\n        setDeletingStructure(false)\n        if (error) return toast.error(error.message)\n        setSections((prev) => prev.filter((section) => section.section !== name))\n        setDeleteSectionTarget(null)\n        toast.success(`Deleted section “${name}”`)\n    }\n\n'''
+          if marker not in s:
+              raise SystemExit('renderCell marker not found')
+          s = s.replace(marker, helpers + marker, 1)
+
+          old_header = '''                                    <span className="text-xs text-muted-foreground shrink-0">\n                                        {subsections.length} subsection{subsections.length === 1 ? "" : "s"}\n                                    </span>\n'''
+          new_header = '''                                    <span className="text-xs text-muted-foreground shrink-0">\n                                        {subsections.length} subsection{subsections.length === 1 ? "" : "s"}\n                                    </span>\n                                    <button\n                                        type="button"\n                                        onClick={() => setDeleteSectionTarget(name)}\n                                        className="p-1 text-muted-foreground hover:text-destructive shrink-0"\n                                        title={`Delete section ${name}`}\n                                        aria-label={`Delete section ${name}`}\n                                    >\n                                        <Trash2 className="size-3.5" />\n                                    </button>\n'''
+          if old_header not in s:
+              raise SystemExit('section header marker not found')
+          s = s.replace(old_header, new_header, 1)
+
+          old_sub = '''                                                    <input\n                                                        key={subsection.subsection}\n                                                        defaultValue={subsection.subsection ?? ""}\n                                                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}\n                                                        onBlur={(e) => { if (e.target.value !== subsection.subsection) renameSubsection(subsection, e.target.value) }}\n                                                        className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"\n                                                        aria-label={`Rename subsection ${subsection.subsection}`}\n                                                    />\n'''
+          new_sub = old_sub + '''                                                    <button\n                                                        type="button"\n                                                        onClick={() => setDeleteSubsectionTarget(subsection)}\n                                                        className="p-1 text-muted-foreground hover:text-destructive shrink-0"\n                                                        title={`Delete subsection ${subsection.subsection}`}\n                                                        aria-label={`Delete subsection ${subsection.subsection}`}\n                                                    >\n                                                        <Trash2 className="size-3.5" />\n                                                    </button>\n'''
+          if old_sub not in s:
+              raise SystemExit('subsection input marker not found')
+          s = s.replace(old_sub, new_sub, 1)
+
+          dialog_marker = '''                <Dialog open={bulkDeleteOpen}'''
+          dialogs = '''                <Dialog open={deleteSectionTarget != null} onOpenChange={(open) => { if (!deletingStructure && !open) setDeleteSectionTarget(null) }}>\n                    <DialogContent className="sm:max-w-[480px]">\n                        <DialogHeader>\n                            <DialogTitle>Delete section “{deleteSectionTarget}”?</DialogTitle>\n                            <DialogDescription>\n                                RPM will only delete an empty section. If catalogue or costing items still use it, deletion will be stopped so nothing is reassigned or lost accidentally.\n                            </DialogDescription>\n                        </DialogHeader>\n                        <DialogFooter>\n                            <Button variant="outline" disabled={deletingStructure} onClick={() => setDeleteSectionTarget(null)}>Cancel</Button>\n                            <Button variant="destructive" disabled={deletingStructure || !deleteSectionTarget} onClick={() => deleteSectionTarget && deleteSection(deleteSectionTarget)}>\n                                <Trash2 className="mr-1.5 size-4" /> {deletingStructure ? "Deleting…" : "Delete section"}\n                            </Button>\n                        </DialogFooter>\n                    </DialogContent>\n                </Dialog>\n\n                <Dialog open={deleteSubsectionTarget != null} onOpenChange={(open) => { if (!deletingStructure && !open) setDeleteSubsectionTarget(null) }}>\n                    <DialogContent className="sm:max-w-[480px]">\n                        <DialogHeader>\n                            <DialogTitle>Delete subsection “{deleteSubsectionTarget?.subsection}”?</DialogTitle>\n                            <DialogDescription>\n                                Materials and costing lines in this subsection will stay in “{deleteSubsectionTarget?.section}” but their subsection will be cleared. No catalogue items or costing lines are deleted.\n                            </DialogDescription>\n                        </DialogHeader>\n                        <DialogFooter>\n                            <Button variant="outline" disabled={deletingStructure} onClick={() => setDeleteSubsectionTarget(null)}>Cancel</Button>\n                            <Button variant="destructive" disabled={deletingStructure || !deleteSubsectionTarget} onClick={() => deleteSubsectionTarget && deleteSubsection(deleteSubsectionTarget)}>\n                                <Trash2 className="mr-1.5 size-4" /> {deletingStructure ? "Deleting…" : "Delete subsection"}\n                            </Button>\n                        </DialogFooter>\n                    </DialogContent>\n                </Dialog>\n\n'''
+          if dialog_marker not in s:
+              raise SystemExit('dialog marker not found')
+          s = s.replace(dialog_marker, dialogs + dialog_marker, 1)
+          p.write_text(s)
+          PY
+      - name: Verify patch
+        run: |
+          grep -q 'Delete section' src/app/quoting/catalogue/page.tsx
+          grep -q 'Delete subsection' src/app/quoting/catalogue/page.tsx
+      - name: Commit
+        run: |
+          git config user.name "WSTSTU"
+          git config user.email "311196036+WSTSTU@users.noreply.github.com"
+          rm .github/workflows/add-section-delete-controls.yml
+          git add src/app/quoting/catalogue/page.tsx .github/workflows/add-section-delete-controls.yml
+          git commit -m "Add section and subsection delete controls"
+          git push origin HEAD:stu-dev
