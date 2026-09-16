@@ -304,10 +304,10 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="details" className="text-xs font-medium text-muted-foreground">Details</Label>
+                    <Label htmlFor="details" className="text-xs font-medium text-muted-foreground">Details — shown near the top of the Xero quote</Label>
                     <Textarea
                         id="details"
-                        placeholder="Scope / notes for this job…"
+                        placeholder="Scope / notes for this quote…"
                         className="min-h-[90px]"
                         value={formData.details}
                         onChange={(e) => setFormData({ ...formData, details: e.target.value })}
