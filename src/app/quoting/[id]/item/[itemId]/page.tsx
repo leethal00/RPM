@@ -86,7 +86,7 @@ export default function ItemCostSheetPage() {
 
     return (
         <DashboardLayout>
-            <PageShell width="full" className="px-4 xl:px-6 gap-2 py-3">
+            <PageShell width="full" className="px-4 xl:px-6 gap-1.5 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                     <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
                         onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
@@ -103,8 +103,8 @@ export default function ItemCostSheetPage() {
                     <div className="h-16 rounded-lg bg-muted/40 animate-pulse" />
                 ) : (
                     <>
-                        <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-2">
-                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                        <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-1.5">
+                            <div className="min-w-0 flex-1 flex items-center gap-2.5">
                                 <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
                                     <Layers className="size-3" />
                                     <span className="text-[11px] font-medium">Item — build</span>
@@ -116,70 +116,81 @@ export default function ItemCostSheetPage() {
                                     placeholder="Item name"
                                 />
                             </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                                <div className="flex items-center gap-1.5">
-                                    <label className="text-[11px] text-muted-foreground whitespace-nowrap">Quote qty</label>
-                                    <div className="w-16"><NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} /></div>
-                                </div>
-                                {item.mode === "build" && (
+                            {item.mode === "build" && (
+                                <div className="flex items-center gap-2 shrink-0">
                                     <div className="flex items-center gap-1.5">
                                         <label className="text-[11px] text-muted-foreground whitespace-nowrap">Build qty</label>
                                         <div className="w-16"><NumCell value={item.build_qty ?? item.qty} onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} /></div>
                                     </div>
-                                )}
+                                    {item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
+                                        <span className="hidden xl:inline text-[11px] text-muted-foreground whitespace-nowrap">
+                                            Batch build · BOM qty is for {Number(item.build_qty)} units
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="rounded-lg border border-border/60 p-2">
+                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] gap-3">
+                                <div className="min-w-0 space-y-1.5">
+                                    <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
+                                    <div className="grid grid-cols-[88px_minmax(0,1fr)_180px] gap-2">
+                                        <div>
+                                            <label className="mb-0.5 block text-[11px] text-muted-foreground">Qty</label>
+                                            <div className="h-8 flex items-center rounded-md border border-input bg-background px-1.5">
+                                                <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="mb-0.5 block text-[11px] text-muted-foreground">Size</label>
+                                            <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
+                                                onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
+                                                className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring" />
+                                        </div>
+                                        <div>
+                                            <label className="mb-0.5 block text-[11px] text-muted-foreground">Delivery</label>
+                                            <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
+                                                className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring">
+                                                <option value="">—</option>
+                                                <option value="Ex-factory">Ex-factory</option>
+                                                <option value="Freight to site">Freight to site</option>
+                                                <option value="Install on site">Install on site</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="mb-0.5 block text-[11px] text-muted-foreground">Details</label>
+                                        <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
+                                            onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
+                                            className="min-h-[54px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
+                                    </div>
+                                </div>
+
+                                <div className="min-w-0 lg:border-l lg:border-border/60 lg:pl-3">
+                                    <div className="mb-1 text-[11px] font-medium text-muted-foreground">Customer quote preview</div>
+                                    <div className="rounded-md bg-muted/20 px-2.5 py-2 text-[11px] leading-4 text-foreground/80 min-h-[96px]">
+                                        <div className="font-medium text-foreground">{item.name || "Item"}</div>
+                                        <div><span className="font-medium text-muted-foreground">Qty:</span> {Number(item.qty)}</div>
+                                        {item.size?.trim() && <div><span className="font-medium text-muted-foreground">Size:</span> {item.size.trim()}</div>}
+                                        {item.details?.trim() && (
+                                            <div className="whitespace-pre-line"><span className="font-medium text-muted-foreground">Details:</span> {item.details.trim()}</div>
+                                        )}
+                                        {item.delivery?.trim() && <div>{item.delivery.trim()}</div>}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
-                            <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-1 text-[11px] leading-4 text-muted-foreground">
+                            <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
                                 Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
                             </div>
                         )}
 
-                        <div className="rounded-lg border border-border/60 p-2.5 space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
-                                <div className="hidden lg:block text-[11px] text-muted-foreground truncate max-w-[48%]">
-                                    {[item.size, item.delivery].filter(Boolean).join(" · ")}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2">
-                                <div>
-                                    <label className="mb-0.5 block text-[11px] text-muted-foreground">Size</label>
-                                    <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
-                                        onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring" />
-                                </div>
-                                <div>
-                                    <label className="mb-0.5 block text-[11px] text-muted-foreground">Delivery</label>
-                                    <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring">
-                                        <option value="">—</option>
-                                        <option value="Ex-factory">Ex-factory</option>
-                                        <option value="Freight to site">Freight to site</option>
-                                        <option value="Install on site">Install on site</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="mb-0.5 block text-[11px] text-muted-foreground">Details</label>
-                                <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
-                                    onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
-                                    className="min-h-[58px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
-                            </div>
-                            <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-[11px] leading-4 text-foreground/80">
-                                <span className="font-medium text-muted-foreground">Customer quote preview:</span>{" "}
-                                <span className="font-medium">{item.name || "Item"}</span>
-                                <span> · Qty {Number(item.qty)}</span>
-                                {item.size?.trim() && <span> · {item.size.trim()}</span>}
-                                {item.details?.trim() && <span> · {item.details.trim().replace(/\n+/g, " / ")}</span>}
-                                {item.delivery?.trim() && <span> · {item.delivery.trim()}</span>}
-                            </div>
-                        </div>
-
                         <CostSheet jobId={jobId} item={item} />
 
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 mt-0.5 border-t border-border/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 mt-0.5 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <Check className="size-3.5 text-emerald-500" /> Changes save automatically.
                             </p>
