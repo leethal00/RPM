@@ -6,6 +6,7 @@ import Link from "next/link"
 import { ArrowLeft, Briefcase, FileText, Pencil, Trash2 } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { PageShell } from "@/components/page-shell"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -61,6 +62,7 @@ export default function ActiveJobDetailPage() {
   const jobTitle = job?.production_title || job?.title || ""
   const jobDetails = job?.production_details ?? job?.details ?? ""
   const jobContact = job?.production_contact_name ?? job?.contact_name ?? ""
+  const clientSite = job ? [job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ") : ""
 
   useEffect(() => {
     async function fetchTeamMembers() {
@@ -131,39 +133,38 @@ export default function ActiveJobDetailPage() {
     }
   }
 
-  return <DashboardLayout><PageShell>
-    <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground" onClick={() => router.push("/quoting/jobs")}>
-      <ArrowLeft className="size-3.5"/> Active Jobs
-    </Button>
-
-    {isLoading ? <div className="h-28 rounded-lg bg-muted/40 animate-pulse"/> : !job ? <div className="py-16 text-center text-muted-foreground">Job not found.</div> : <>
-      <div className="flex items-start justify-between gap-4 pb-5 border-b border-border/60">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <Briefcase className="size-5 text-muted-foreground shrink-0"/>
-            <h1 className="text-[1.7rem] font-semibold tracking-tight">{jobTitle}</h1>
-            <button onClick={openEdit} className="p-1 text-muted-foreground hover:text-foreground" title="Edit active job"><Pencil className="size-4"/></button>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">{[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}</p>
-          {job.reference && <p className="mt-0.5 text-xs text-muted-foreground">{job.reference}</p>}
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
-            {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
-            <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
-            <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
-            <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
-            {editingDate ? <span className="inline-flex items-center gap-1.5"><span>Complete by:</span><Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="h-7 w-36 text-xs"/><Button size="xs" onClick={saveCompletionDate}>Save</Button><Button size="xs" variant="ghost" onClick={() => setEditingDate(false)}>Cancel</Button></span> : <button className="hover:underline" onClick={() => { setDateValue(job.completion_date || ""); setEditingDate(true) }}>Complete by: <strong className="text-foreground">{formatDate(job.completion_date)}</strong> <Pencil className="ml-1 inline size-3"/></button>}
-          </div>
-          {jobContact && <p className="mt-2 text-sm text-muted-foreground"><span className="font-medium text-foreground">Contact:</span> {jobContact}</p>}
-          {jobDetails && <p className="mt-3 max-w-3xl text-sm text-muted-foreground whitespace-pre-wrap">{jobDetails}</p>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button asChild variant="outline" size="sm" className="gap-1.5 h-9"><Link href={`/quoting/${id}/job-card`} target="_blank"><FileText className="size-3.5"/> Job card</Link></Button>
-          <Button variant="outline" size="sm" className="gap-1.5 h-9 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
+  return <DashboardLayout><PageShell width="full" className="px-4 xl:px-6 gap-2 py-4">
+    {isLoading ? <div className="h-24 rounded-lg bg-muted/40 animate-pulse"/> : !job ? <div className="py-16 text-center text-muted-foreground">Job not found.</div> : <>
+      <PageHeader
+        icon={Briefcase}
+        kicker="Job & Project Management"
+        title={jobTitle}
+        description={clientSite}
+        actions={<>
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => router.push("/quoting/jobs")}>
+            <ArrowLeft className="size-3.5"/> Active Jobs
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openEdit}>
+            <Pencil className="size-3.5"/> Edit
+          </Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-card`} target="_blank"><FileText className="size-3.5"/> Job card</Link></Button>
+          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
             <Trash2 className="size-3.5"/> {deletingJob ? "Deleting…" : "Delete Job"}
           </Button>
-        </div>
+        </>}
+      />
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1 text-xs text-muted-foreground">
+        {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
+        {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
+        <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
+        <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
+        <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
+        {editingDate ? <span className="inline-flex items-center gap-1.5"><span>Complete by:</span><Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="h-7 w-36 text-xs"/><Button size="xs" onClick={saveCompletionDate}>Save</Button><Button size="xs" variant="ghost" onClick={() => setEditingDate(false)}>Cancel</Button></span> : <button className="hover:underline" onClick={() => { setDateValue(job.completion_date || ""); setEditingDate(true) }}>Complete by: <strong className="text-foreground">{formatDate(job.completion_date)}</strong> <Pencil className="ml-1 inline size-3"/></button>}
+        {jobContact && <span><span className="font-medium text-foreground">Contact:</span> {jobContact}</span>}
+        {job.reference && <span><span className="font-medium text-foreground">Ref:</span> {job.reference}</span>}
       </div>
+      {jobDetails && <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-xs leading-4 text-muted-foreground whitespace-pre-wrap">{jobDetails}</div>}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[600px]">
@@ -182,17 +183,17 @@ export default function ActiveJobDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Tabs value={activeTab} onValueChange={(value) => router.replace(`/quoting/jobs/${id}${value === "items" ? "" : `?tab=${value}`}`)} className="mt-5">
+      <Tabs value={activeTab} onValueChange={(value) => router.replace(`/quoting/jobs/${id}${value === "items" ? "" : `?tab=${value}`}`)} className="mt-1">
         <TabsList>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
         </TabsList>
-        <TabsContent value="items"><ItemsList job={job}/></TabsContent>
-        <TabsContent value="time"><TimeEntries job={job}/></TabsContent>
-        <TabsContent value="actuals"><CostingActuals job={job}/></TabsContent>
-        <TabsContent value="est-vs-actual"><EstVsActual job={job}/></TabsContent>
+        <TabsContent value="items" className="mt-0 [&>div]:!mt-2 [&>div]:!space-y-3"><ItemsList job={job}/></TabsContent>
+        <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>
+        <TabsContent value="actuals" className="mt-1"><CostingActuals job={job}/></TabsContent>
+        <TabsContent value="est-vs-actual" className="mt-1"><EstVsActual job={job}/></TabsContent>
       </Tabs>
     </>}
   </PageShell></DashboardLayout>
