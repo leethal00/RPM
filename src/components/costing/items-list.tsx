@@ -42,7 +42,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     async function reload() {
         const [{ data: its }, { data: ls }] = await Promise.all([
             supabase.from("costing_items").select("*").eq("job_id", job.id).order("sort"),
-            supabase.from("costing_lines").select("id, item_id, qty, unit_cost, markup, unit_sell_override").eq("job_id", job.id),
+            supabase.from("costing_lines").select("id, item_id, section, subsection, description, supplier, qty, unit_cost, markup, unit_sell_override").eq("job_id", job.id),
         ])
         setItems((its as CostingItem[]) || [])
         setLines((ls as CostingLine[]) || [])
@@ -90,6 +90,33 @@ export function ItemsList({ job }: { job: CostingJob }) {
             cost: ls.reduce((a, l) => a + lineCost(l), 0),
             sell: override > 0 ? override : calculatedSell,
         }
+    }
+
+    function itemSummary(it: CostingItem) {
+        const parts: string[] = []
+        const add = (value?: string | null) => {
+            const clean = value?.replace(/\s+/g, " ").trim()
+            if (!clean || parts.some(part => part.toLowerCase() === clean.toLowerCase())) return
+            parts.push(clean)
+        }
+
+        add(it.size)
+        add(it.details)
+
+        if (it.mode === "build") {
+            const itemLines = lines.filter(line => line.item_id === it.id)
+            for (const line of itemLines) {
+                if (parts.length >= 5) break
+                const description = line.description?.trim()
+                if (!description) continue
+                const lowered = description.toLowerCase()
+                if (lowered === "freight" || lowered.includes("freight to")) continue
+                add(description)
+            }
+        }
+
+        if (!parts.length && it.delivery) add(it.delivery)
+        return parts.join(" · ")
     }
 
     const rows = items.map(it => {
@@ -371,7 +398,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                         <thead className="bg-muted/40 text-muted-foreground text-xs">
                             <tr className="text-left">
                                 <th className="w-10"></th>
-                                <th className="font-medium px-3 py-2 min-w-[260px]">Item</th>
+                                <th className="font-medium px-3 py-2 min-w-[360px]">Item / BOM summary</th>
                                 <th className="font-medium px-2 py-2 w-20">Type</th>
                                 <th className="font-medium px-2 py-2 w-16 text-right">Qty</th>
                                 <th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th>
@@ -387,6 +414,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const sectionNumber = heading ? items.slice(0, rowIndex + 1).filter(isSectionHeading).length : 0
                                 const m = us > 0 ? 1 - unitCost / us : 0
                                 const build = it.mode === "build"
+                                const summary = !heading ? itemSummary(it) : ""
                                 const suggestions = !heading && !build && editingName === it.id ? suggestionsFor(it) : []
 
                                 const handleCell = (
@@ -492,7 +520,10 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                         {handleCell}
                                         <td className="px-3 py-1.5 relative">
                                             {build ? (
-                                                <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} />
+                                                <div>
+                                                    <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} />
+                                                    {summary && <div className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground" title={summary}>{summary}</div>}
+                                                </div>
                                             ) : (
                                                 <>
                                                     <input
@@ -518,6 +549,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                                         onBlur={() => setTimeout(() => commitName(it), 150)}
                                                         className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
                                                     />
+                                                    {summary && <div className="px-1.5 truncate text-[11px] leading-4 text-muted-foreground" title={summary}>{summary}</div>}
                                                     {suggestions.length > 0 && (
                                                         <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">
                                                             {suggestions.map(s => (
