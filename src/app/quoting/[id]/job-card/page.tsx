@@ -257,7 +257,6 @@ export default function JobCardPage() {
           due={fmt(requiredBy)}
           contact={contact}
           phone={phone}
-          qrUrl={qrUrl}
         />
 
         <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
@@ -300,18 +299,30 @@ export default function JobCardPage() {
           <span>Total Hours:</span><span className="h-[7mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
 
-        <div className="mt-[2.5mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
-          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[36mm]" />
-          <Box title="JOB STATUS (tick when complete)" className="h-[36mm]">
+        <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
+          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[44mm]" />
+          <Box title="JOB STATUS (tick)" className="h-[31mm]">
             <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />
           </Box>
-          <Box title="SIGN OFF" className="h-[36mm]">
-            <div className="space-y-[4mm] pt-[.5mm] text-[11.5px]">
-              <SignLine label="Name" />
-              <SignLine label="Signature" />
-              <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
+          <div className="flex h-[44mm] flex-col">
+            <Box title="SIGN OFF" className="h-[25mm]">
+              <div className="space-y-[2.7mm] pt-[.2mm] text-[11.2px]">
+                <SignLine label="Name" />
+                <SignLine label="Signature" />
+                <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
+              </div>
+            </Box>
+            <div className="mt-[2mm] flex flex-1 items-center justify-center">
+              {qrUrl ? (
+                <div className="flex items-center gap-[2mm]">
+                  <img src={qrUrl} alt="RPM job QR code" className="h-[14mm] w-[14mm]" />
+                  <div className="text-[7.5px] leading-tight text-neutral-600">Scan to<br />view in RPM</div>
+                </div>
+              ) : (
+                <div className="h-[14mm] w-[14mm] border border-neutral-400" />
+              )}
             </div>
-          </Box>
+          </div>
         </div>
       </Sheet>
 
@@ -396,7 +407,6 @@ function JobHeader({
   due,
   contact,
   phone,
-  qrUrl,
 }: {
   number: string
   customer: string
@@ -406,10 +416,9 @@ function JobHeader({
   due: string
   contact: string
   phone: string
-  qrUrl: string
 }) {
   return (
-    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_22mm_29mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
+    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_31mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
       <div className="flex items-center justify-center bg-white">
         <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
       </div>
@@ -422,11 +431,6 @@ function JobHeader({
         <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Job Title:</span><span className="font-bold">{title}</span></div>
         <div className="flex gap-[1.8mm]"><span className="font-bold">Date Issued:</span><span>{issued}</span></div>
         <div className="flex gap-[1.8mm]"><span className="font-bold">Required By:</span><span>{due}</span></div>
-      </div>
-
-      <div className="flex flex-col items-center justify-center bg-white">
-        {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-        <div className="mt-[.8mm] text-center text-[7.4px] leading-none">Scan to view in RPM</div>
       </div>
 
       <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
@@ -506,7 +510,7 @@ function JobGrid() {
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(7).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+      <tbody>{rows(8).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />}</tr>)}</tbody>
     </table>
   )
 }
