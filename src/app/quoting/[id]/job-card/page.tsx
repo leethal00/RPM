@@ -24,6 +24,7 @@ import type { CostingJob } from "@/types/database"
 
 const GREEN = "#155f4c"
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
 const rows = (n: number) => Array.from({ length: n })
 const fmt = (v?: string | null) => v
   ? new Date(`${v.slice(0, 10)}T00:00:00`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
@@ -78,9 +79,13 @@ const ppe = [
 type JobItem = {
   id: string
   name: string
+  sign_code: string | null
   mode: string
   qty: number | null
   build_qty: number | null
+  size: string | null
+  details: string | null
+  delivery: string | null
   sort: number | null
 }
 
@@ -96,13 +101,15 @@ type BomLine = {
   materials?: { unit?: string | null; is_labour?: boolean | null } | { unit?: string | null; is_labour?: boolean | null }[] | null
 }
 
-function materialMeta(line: BomLine) {
-  return Array.isArray(line.materials) ? line.materials[0] : line.materials
-}
-
 function prettyQty(value: number | null | undefined) {
   const n = Number(value || 0)
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
+}
+
+function deliveryLabel(value?: string | null) {
+  if (!value) return ""
+  if (value.toLowerCase() === "ex-factory") return "Ex-factory"
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function inferDepartments(title: string, details: string, lines: BomLine[]) {
@@ -137,7 +144,7 @@ export default function JobCardPage() {
           .single(),
         supabase
           .from("costing_items")
-          .select("id,name,mode,qty,build_qty,sort")
+          .select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort")
           .eq("job_id", id)
           .order("sort"),
         supabase
@@ -183,14 +190,7 @@ export default function JobCardPage() {
   const contact = j.production_contact_name || j.quote_contact || job.contact_name || j.stores?.manager_name || ""
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
-  const buildItems = items.filter((item) => item.mode === "build")
-  const buildSummary = buildItems.length
-    ? buildItems.map((item) => `${item.name}: ${prettyQty(item.build_qty ?? item.qty ?? 1)}`).join(" · ")
-    : ""
-
-  const scopeLines = bomLines
-    .filter((line) => line.description?.trim() && Number(line.qty || 0) !== 0 && !materialMeta(line)?.is_labour)
-    .slice(0, 8)
+  const quoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
 
   const toggleDepartment = (department: string) => {
     setSelectedDepartments((current) => current.includes(department)
@@ -240,18 +240,18 @@ export default function JobCardPage() {
 
         <div className="mt-[2.5mm] grid grid-cols-[1.08fr_.92fr] items-stretch gap-[2mm]">
           <Box title="JOB DETAILS / SCOPE OF WORK" className="min-h-[66mm]">
-            {buildSummary && <div className="mb-[1.5mm]"><strong>Build qty:</strong> {buildSummary}</div>}
-            {details && <div className="mb-[2mm] whitespace-pre-wrap"><strong>Details:</strong> {details}</div>}
-            {scopeLines.length > 0 && (
-              <div>
-                <div className="mb-[1mm] font-bold">Materials / work:</div>
-                <ul className="list-disc space-y-[.8mm] pl-[4mm]">
-                  {scopeLines.map((line) => (
-                    <li key={line.id}>{line.description}{Number(line.qty || 0) ? ` — ${prettyQty(line.qty)}${materialMeta(line)?.unit ? ` ${materialMeta(line)?.unit}` : ""}` : ""}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="space-y-[3mm]">
+              {quoteItems.length ? quoteItems.map((item) => (
+                <div key={item.id} className="space-y-[1mm]">
+                  <div><strong>Qty:</strong> {prettyQty(item.qty || 1)}</div>
+                  {item.size && <div><strong>Size:</strong> {item.size}</div>}
+                  {item.details && <div className="whitespace-pre-wrap">{item.details}</div>}
+                  {item.delivery && <div>{deliveryLabel(item.delivery)}</div>}
+                </div>
+              )) : (
+                <div className="whitespace-pre-wrap">{details || title}</div>
+              )}
+            </div>
           </Box>
           <Box title="DRAWING / SKETCH" className="min-h-[66mm]">
             <div className="flex min-h-[54mm] items-center justify-center border border-[#d5dfdc] text-center text-[9.5px] text-neutral-400">
@@ -401,7 +401,7 @@ function JobHeader({
 
       <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
         <div className="text-[7.5px] font-bold leading-none">Job No.</div>
-        <div className="mt-[1.3mm] text-[25px] font-black leading-none" style={{ color: GREEN }}>{number}</div>
+        <div className="mt-[1mm] text-[34px] font-black leading-none tracking-tight" style={{ color: GREEN }}>{number}</div>
       </div>
     </div>
   )
