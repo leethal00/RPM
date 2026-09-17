@@ -525,7 +525,7 @@ function MaterialsGrid({ lines }: { lines: BomLine[] }) {
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
           </tr>
         ))}
-        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />}</tr>)}
+        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />)}</tr>)}
       </tbody>
     </table>
   )
