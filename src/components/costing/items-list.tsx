@@ -97,22 +97,19 @@ export function ItemsList({ job }: { job: CostingJob }) {
         const size = it.size?.trim()
         const details = it.details?.trim()
         const delivery = it.delivery?.trim()
-        const hasExtra = Boolean(size || details || delivery)
-        if (!hasExtra && !it.qty) return null
-
-        const summary = [
-            `Qty: ${qty}`,
-            size ? `Size: ${size}` : null,
-            delivery || null,
-        ].filter(Boolean).join(" · ")
+        const hasExtra = Boolean(size || details || delivery || it.qty)
+        if (!hasExtra) return null
 
         return (
-            <details className="group/details mt-1 ml-4 text-[11px] leading-4 text-muted-foreground">
-                <summary className="flex w-fit max-w-full cursor-pointer list-none items-center gap-1.5 rounded-sm py-0.5 pr-1 hover:text-foreground [&::-webkit-details-marker]:hidden">
-                    <ChevronRight className="size-3 shrink-0 transition-transform group-open/details:rotate-90" />
-                    <span className="truncate">{summary}</span>
+            <details className="group/details inline-block align-middle">
+                <summary
+                    className="ml-1 inline-flex cursor-pointer list-none items-center rounded-sm p-0.5 text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden"
+                    title="Show quote details"
+                    aria-label={`Show quote details for ${it.name || "item"}`}
+                >
+                    <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
                 </summary>
-                <div className="mt-1 ml-4 space-y-0.5 border-l border-border/50 pl-2.5">
+                <div className="mt-1 ml-5 space-y-0.5 border-l border-border/50 pl-2.5 text-[11px] leading-4 text-muted-foreground">
                     <div><span className="font-medium text-foreground/70">Qty:</span> {qty}</div>
                     {size && <div><span className="font-medium text-foreground/70">Size:</span> {size}</div>}
                     {details && <div className="whitespace-pre-line"><span className="font-medium text-foreground/70">Details:</span> {details}</div>}
@@ -325,14 +322,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         const rpmMatches: Suggestion[] = (products || [])
             .filter(p => `${p.name || ""} ${p.details || ""}`.toLowerCase().includes(q))
             .slice(0, 5)
-            .map(p => ({
-                key: `rpm-${p.id}`,
-                source: "rpm",
-                name: p.name || "Untitled product",
-                detail: p.details || (p.mode === "build" ? "RPM product with BOM" : "RPM product"),
-                sell: Number(p.unit_price || 0),
-                rpm: p,
-            }))
+            .map(p => ({ key: `rpm-${p.id}`, source: "rpm", name: p.name || "Untitled product", detail: p.details || (p.mode === "build" ? "RPM product with BOM" : "RPM product"), sell: Number(p.unit_price || 0), rpm: p }))
         const rpmNames = new Set((products || []).map(p => (p.name || "").trim().toLowerCase()).filter(Boolean))
         const xeroMatches: Suggestion[] = (xeroProducts || [])
             .filter(p => !rpmNames.has((p.name || "").trim().toLowerCase()) && `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(q))
@@ -346,13 +336,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (s.source === "xero" && s.xero) {
             const p = s.xero
             setNameDraft(d => ({ ...d, [it.id]: p.name || p.code }))
-            await patchItem(it.id, {
-                name: p.name || p.code,
-                details: p.description || null,
-                mode: "simple",
-                unit_cost: Number(p.cost || 0),
-                unit_price: Number(p.sell || 0),
-            })
+            await patchItem(it.id, { name: p.name || p.code, details: p.description || null, mode: "simple", unit_cost: Number(p.cost || 0), unit_price: Number(p.sell || 0) })
             toast.success(`Loaded "${p.name || p.code}" from Xero`)
             return
         }
@@ -374,10 +358,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const search = productSearch.trim().toLowerCase()
     const filteredRpm = (products || []).filter(p => !search || `${p.name || ""} ${p.details || ""}`.toLowerCase().includes(search))
     const rpmNames = new Set((products || []).map(p => (p.name || "").trim().toLowerCase()).filter(Boolean))
-    const filteredXero = (xeroProducts || []).filter(p => {
-        if (rpmNames.has((p.name || "").trim().toLowerCase())) return false
-        return !search || `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(search)
-    })
+    const filteredXero = (xeroProducts || []).filter(p => !rpmNames.has((p.name || "").trim().toLowerCase()) && (!search || `${p.code} ${p.name} ${p.description}`.toLowerCase().includes(search)))
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
 
@@ -400,15 +381,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40 text-muted-foreground text-xs">
                             <tr className="text-left">
-                                <th className="w-10"></th>
-                                <th className="font-medium px-3 py-2 min-w-[360px]">Item / quote details</th>
-                                <th className="font-medium px-2 py-2 w-20">Type</th>
-                                <th className="font-medium px-2 py-2 w-16 text-right">Qty</th>
-                                <th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th>
-                                <th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th>
-                                <th className="font-medium px-2 py-2 w-28 text-right">Total</th>
-                                <th className="font-medium px-2 py-2 w-20 text-right">Margin</th>
-                                <th className="w-28"></th>
+                                <th className="w-10"></th><th className="font-medium px-3 py-2 min-w-[360px]">Item / quote details</th><th className="font-medium px-2 py-2 w-20">Type</th><th className="font-medium px-2 py-2 w-16 text-right">Qty</th><th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th><th className="font-medium px-2 py-2 w-28 text-right">Unit sell</th><th className="font-medium px-2 py-2 w-28 text-right">Total</th><th className="font-medium px-2 py-2 w-20 text-right">Margin</th><th className="w-28"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -418,268 +391,19 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const m = us > 0 ? 1 - unitCost / us : 0
                                 const build = it.mode === "build"
                                 const suggestions = !heading && !build && editingName === it.id ? suggestionsFor(it) : []
-
-                                const handleCell = (
-                                    <td className="pl-1 pr-0 py-1 align-middle">
-                                        <div className="flex items-center gap-0">
-                                            <button
-                                                type="button"
-                                                draggable
-                                                onDragStart={e => {
-                                                    setDraggingId(it.id)
-                                                    e.dataTransfer.effectAllowed = "move"
-                                                    e.dataTransfer.setData("text/plain", it.id)
-                                                }}
-                                                onDragEnd={() => setDraggingId(null)}
-                                                className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground"
-                                                title="Drag to reorder"
-                                                aria-label={`Drag ${it.name || (heading ? "section heading" : "item")} to reorder`}
-                                            >
-                                                <GripVertical className="size-3.5" />
-                                            </button>
-                                            <div className="flex flex-col">
-                                                <button
-                                                    type="button"
-                                                    disabled={rowIndex === 0}
-                                                    onClick={() => void moveItem(it.id, -1)}
-                                                    className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                    title="Move up"
-                                                >
-                                                    <ArrowUp className="size-3" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={rowIndex === rows.length - 1}
-                                                    onClick={() => void moveItem(it.id, 1)}
-                                                    className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed"
-                                                    title="Move down"
-                                                >
-                                                    <ArrowDown className="size-3" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </td>
-                                )
-
-                                if (heading) {
-                                    return (
-                                        <tr
-                                            key={it.id}
-                                            onDragOver={e => {
-                                                if (!draggingId || draggingId === it.id) return
-                                                e.preventDefault()
-                                                e.dataTransfer.dropEffect = "move"
-                                            }}
-                                            onDrop={e => {
-                                                e.preventDefault()
-                                                if (draggingId) void reorderItems(draggingId, it.id)
-                                            }}
-                                            className={`border-t border-border/60 group bg-muted/35 ${draggingId === it.id ? "opacity-50" : ""}`}
-                                        >
-                                            {handleCell}
-                                            <td colSpan={7} className="px-3 py-2">
-                                                <div className="flex items-center gap-2 font-semibold tracking-wide">
-                                                    <span className="shrink-0 tabular-nums">{sectionNumber}.</span>
-                                                    <input
-                                                        autoFocus={editingName === it.id}
-                                                        value={nameDraft[it.id] ?? it.name ?? ""}
-                                                        placeholder="SECTION HEADING"
-                                                        onFocus={() => {
-                                                            setEditingName(it.id)
-                                                            setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" }))
-                                                        }}
-                                                        onChange={e => setNameDraft(d => ({ ...d, [it.id]: e.target.value }))}
-                                                        onKeyDown={e => {
-                                                            if (e.key === "Enter") e.currentTarget.blur()
-                                                            else if (e.key === "Escape") setEditingName(null)
-                                                        }}
-                                                        onBlur={() => void commitName(it)}
-                                                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold uppercase tracking-wide outline-none hover:border-input focus:border-input"
-                                                    />
-                                                </div>
-                                            </td>
-                                            <td className="px-1 py-1.5 text-right">
-                                                <button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100" title="Delete section heading"><Trash2 className="size-3.5" /></button>
-                                            </td>
-                                        </tr>
-                                    )
-                                }
-
-                                return (
-                                    <tr
-                                        key={it.id}
-                                        onDragOver={e => {
-                                            if (!draggingId || draggingId === it.id) return
-                                            e.preventDefault()
-                                            e.dataTransfer.dropEffect = "move"
-                                        }}
-                                        onDrop={e => {
-                                            e.preventDefault()
-                                            if (draggingId) void reorderItems(draggingId, it.id)
-                                        }}
-                                        className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}
-                                    >
-                                        {handleCell}
-                                        <td className="px-3 py-1.5 relative align-top">
-                                            {build ? (
-                                                <div>
-                                                    <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} />
-                                                    {quoteFacingDetails(it)}
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <input
-                                                        value={nameDraft[it.id] ?? it.name ?? ""}
-                                                        placeholder="Start typing an item…"
-                                                        onFocus={() => {
-                                                            setEditingName(it.id)
-                                                            setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" }))
-                                                            loadLibraries()
-                                                        }}
-                                                        onChange={e => {
-                                                            setNameDraft(d => ({ ...d, [it.id]: e.target.value }))
-                                                            setEditingName(it.id)
-                                                        }}
-                                                        onKeyDown={e => {
-                                                            if (e.key === "Enter" && suggestions[0]) {
-                                                                e.preventDefault()
-                                                                chooseSuggestion(it, suggestions[0])
-                                                            } else if (e.key === "Escape") {
-                                                                setEditingName(null)
-                                                            }
-                                                        }}
-                                                        onBlur={() => setTimeout(() => commitName(it), 150)}
-                                                        className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
-                                                    />
-                                                    {quoteFacingDetails(it)}
-                                                    {suggestions.length > 0 && (
-                                                        <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">
-                                                            {suggestions.map(s => (
-                                                                <button key={s.key} type="button" onMouseDown={e => e.preventDefault()} onClick={() => chooseSuggestion(it, s)} className="w-full px-3 py-2 text-left hover:bg-muted/60 border-b last:border-b-0 flex gap-3 items-start">
-                                                                    <span className="flex-1 min-w-0">
-                                                                        <span className="flex items-center gap-2">
-                                                                            <span className="font-medium">{s.name}</span>
-                                                                            <Badge variant="secondary" className={s.source === "rpm" ? "text-[10px] bg-violet-500/15 text-violet-600" : "text-[10px] bg-blue-500/15 text-blue-600"}>{s.source === "rpm" ? "RPM" : "Xero"}</Badge>
-                                                                        </span>
-                                                                        {s.detail && <span className="block text-xs text-muted-foreground truncate">{s.detail}</span>}
-                                                                    </span>
-                                                                    <span className="tabular-nums text-sm">{s.sell ? nz(s.sell) : ""}</span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )}
-                                        </td>
-                                        <td className="px-2 py-1.5 align-top">
-                                            <button
-                                                type="button"
-                                                onClick={() => openItemEditor(it)}
-                                                title={build ? "Open BOM" : "Convert to Build and add a BOM"}
-                                                className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                            >
-                                                <Badge variant="secondary" className={`${build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"} cursor-pointer hover:opacity-80 transition-opacity`}>
-                                                    {build ? "Build" : "Simple"}
-                                                </Badge>
-                                            </button>
-                                        </td>
-                                        <td className="px-2 py-1.5 align-top"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums align-top">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums align-top"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums font-medium align-top">{nz(totalSell)}</td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground align-top">{pct(m)}</td>
-                                        <td className="px-1 py-1.5 align-top">
-                                            <div className="flex justify-end gap-1">
-                                                {build && <button onClick={() => openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}
-                                                {build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}
-                                                <button onClick={() => void duplicateItem(it)} className="p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100" title="Copy this item"><Copy className="size-3.5" /></button>
-                                                <button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )
+                                const handleCell = <td className="pl-1 pr-0 py-1 align-middle"><div className="flex items-center gap-0"><button type="button" draggable onDragStart={e => { setDraggingId(it.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.id) }} onDragEnd={() => setDraggingId(null)} className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground" title="Drag to reorder"><GripVertical className="size-3.5" /></button><div className="flex flex-col"><button type="button" disabled={rowIndex === 0} onClick={() => void moveItem(it.id, -1)} className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20"><ArrowUp className="size-3" /></button><button type="button" disabled={rowIndex === rows.length - 1} onClick={() => void moveItem(it.id, 1)} className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20"><ArrowDown className="size-3" /></button></div></div></td>
+                                if (heading) return <tr key={it.id} onDragOver={e => { if (!draggingId || draggingId === it.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move" }} onDrop={e => { e.preventDefault(); if (draggingId) void reorderItems(draggingId, it.id) }} className={`border-t border-border/60 group bg-muted/35 ${draggingId === it.id ? "opacity-50" : ""}`}>{handleCell}<td colSpan={7} className="px-3 py-2"><div className="flex items-center gap-2 font-semibold tracking-wide"><span className="shrink-0 tabular-nums">{sectionNumber}.</span><input autoFocus={editingName === it.id} value={nameDraft[it.id] ?? it.name ?? ""} placeholder="SECTION HEADING" onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })) }} onChange={e => setNameDraft(d => ({ ...d, [it.id]: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") setEditingName(null) }} onBlur={() => void commitName(it)} className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold uppercase tracking-wide outline-none hover:border-input focus:border-input" /></div></td><td className="px-1 py-1.5 text-right"><button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></td></tr>
+                                return <tr key={it.id} onDragOver={e => { if (!draggingId || draggingId === it.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move" }} onDrop={e => { e.preventDefault(); if (draggingId) void reorderItems(draggingId, it.id) }} className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}>{handleCell}<td className="px-3 py-1.5 relative align-top">{build ? <div><div className="flex items-start"><div className="min-w-0 flex-1"><TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /></div>{quoteFacingDetails(it)}</div></div> : <><div className="flex items-start"><input value={nameDraft[it.id] ?? it.name ?? ""} placeholder="Start typing an item…" onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })); loadLibraries() }} onChange={e => { setNameDraft(d => ({ ...d, [it.id]: e.target.value })); setEditingName(it.id) }} onKeyDown={e => { if (e.key === "Enter" && suggestions[0]) { e.preventDefault(); chooseSuggestion(it, suggestions[0]) } else if (e.key === "Escape") setEditingName(null) }} onBlur={() => setTimeout(() => commitName(it), 150)} className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none" />{quoteFacingDetails(it)}</div>{suggestions.length > 0 && <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">{suggestions.map(s => <button key={s.key} type="button" onMouseDown={e => e.preventDefault()} onClick={() => chooseSuggestion(it, s)} className="w-full px-3 py-2 text-left hover:bg-muted/60 border-b last:border-b-0 flex gap-3 items-start"><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{s.name}</span><Badge variant="secondary" className={s.source === "rpm" ? "text-[10px] bg-violet-500/15 text-violet-600" : "text-[10px] bg-blue-500/15 text-blue-600"}>{s.source === "rpm" ? "RPM" : "Xero"}</Badge></span>{s.detail && <span className="block text-xs text-muted-foreground truncate">{s.detail}</span>}</span><span className="tabular-nums text-sm">{s.sell ? nz(s.sell) : ""}</span></button>)}</div>}</>}</td><td className="px-2 py-1.5 align-top"><button type="button" onClick={() => openItemEditor(it)}><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></button></td><td className="px-2 py-1.5 align-top"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums align-top">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums align-top"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium align-top">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground align-top">{pct(m)}</td><td className="px-1 py-1.5 align-top"><div className="flex justify-end gap-1">{build && <button onClick={() => openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100"><Package2 className="size-3.5" /></button>}<button onClick={() => void duplicateItem(it)} className="p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"><Copy className="size-3.5" /></button><button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr>
                             })}
                         </tbody>
-                        <tfoot className="bg-muted/20 border-t border-border/70">
-                            <tr>
-                                <td></td>
-                                <td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td>
-                                <td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td>
-                                <td></td>
-                                <td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td>
-                                <td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td>
-                                <td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td>
-                            </tr>
-                        </tfoot>
+                        <tfoot className="bg-muted/20 border-t border-border/70"><tr><td></td><td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td><td></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td></tr></tfoot>
                     </table>
                 </div>
             )}
 
-            <Dialog open={deleteTarget != null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}>
-                <DialogContent className="sm:max-w-[440px]">
-                    <DialogHeader>
-                        <DialogTitle>Delete this item?</DialogTitle>
-                        <DialogDescription><strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be permanently deleted. This can&apos;t be undone.</DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-                        <Button variant="destructive" onClick={confirmDelete}>Delete item</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <Dialog open={deleteTarget != null} onOpenChange={o => { if (!o) setDeleteTarget(null) }}><DialogContent className="sm:max-w-[440px]"><DialogHeader><DialogTitle>Delete this item?</DialogTitle><DialogDescription><strong>{deleteTarget?.name}</strong>{deleteTarget?.mode === "build" ? " and its BOM" : ""} will be permanently deleted. This can&apos;t be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button variant="destructive" onClick={confirmDelete}>Delete item</Button></DialogFooter></DialogContent></Dialog>
 
-            <Dialog open={productOpen} onOpenChange={setProductOpen}>
-                <DialogContent className="sm:max-w-[620px]">
-                    <DialogHeader>
-                        <DialogTitle>Add a product</DialogTitle>
-                        <DialogDescription>Search RPM products with BOMs and existing Xero items. Xero items come in as editable simple items; an RPM product with the same name takes priority.</DialogDescription>
-                    </DialogHeader>
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <Input autoFocus value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search product, item code or description…" className="pl-8" />
-                    </div>
-                    <div className="max-h-[420px] overflow-y-auto border rounded-md">
-                        <ul className="divide-y divide-border/60">
-                            {filteredRpm.map(p => (
-                                <li key={`rpm-${p.id}`}>
-                                    <button type="button" onClick={() => addProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2">
-                                        <Package2 className="size-4 text-muted-foreground mt-0.5" />
-                                        <span className="flex-1 min-w-0">
-                                            <span className="flex items-center gap-2">
-                                                <span className="font-medium">{p.name || "Untitled product"}</span>
-                                                <Badge variant="secondary" className="text-[10px] bg-violet-500/15 text-violet-600">RPM {p.mode === "build" ? "BOM" : "Product"}</Badge>
-                                            </span>
-                                            {p.details && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.details}</span>}
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
-                            {filteredXero.map(p => (
-                                <li key={`xero-${p.id}`}>
-                                    <button type="button" onClick={() => addXeroProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2">
-                                        <Package2 className="size-4 text-muted-foreground mt-0.5" />
-                                        <span className="flex-1 min-w-0">
-                                            <span className="flex items-center gap-2">
-                                                <span className="font-medium">{p.name}</span>
-                                                <Badge variant="secondary" className="text-[10px] bg-blue-500/15 text-blue-600">Xero item</Badge>
-                                                {p.code && <span className="text-[11px] text-muted-foreground">{p.code}</span>}
-                                                <span className="ml-auto text-sm tabular-nums">{nz(p.sell)}</span>
-                                            </span>
-                                            {p.description && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.description}</span>}
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                        {products === null || xeroProducts === null ? (
-                            <div className="py-8 text-center text-sm text-muted-foreground">Loading products…</div>
-                        ) : filteredRpm.length === 0 && filteredXero.length === 0 ? (
-                            <div className="py-8 text-center text-sm text-muted-foreground">No matching products.</div>
-                        ) : null}
-                    </div>
-                    {xeroError && <p className="text-xs text-amber-600">Xero items unavailable: {xeroError}. RPM products are still available.</p>}
-                </DialogContent>
-            </Dialog>
+            <Dialog open={productOpen} onOpenChange={setProductOpen}><DialogContent className="sm:max-w-[620px]"><DialogHeader><DialogTitle>Add a product</DialogTitle><DialogDescription>Search RPM products with BOMs and existing Xero items. Xero items come in as editable simple items; an RPM product with the same name takes priority.</DialogDescription></DialogHeader><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input autoFocus value={productSearch} onChange={e => setProductSearch(e.target.value)} placeholder="Search product, item code or description…" className="pl-8" /></div><div className="max-h-[420px] overflow-y-auto border rounded-md"><ul className="divide-y divide-border/60">{filteredRpm.map(p => <li key={`rpm-${p.id}`}><button type="button" onClick={() => addProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2"><Package2 className="size-4 text-muted-foreground mt-0.5" /><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{p.name || "Untitled product"}</span><Badge variant="secondary" className="text-[10px] bg-violet-500/15 text-violet-600">RPM {p.mode === "build" ? "BOM" : "Product"}</Badge></span>{p.details && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.details}</span>}</span></button></li>)}{filteredXero.map(p => <li key={`xero-${p.id}`}><button type="button" onClick={() => addXeroProduct(p)} className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-start gap-2"><Package2 className="size-4 text-muted-foreground mt-0.5" /><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{p.name}</span><Badge variant="secondary" className="text-[10px] bg-blue-500/15 text-blue-600">Xero item</Badge>{p.code && <span className="text-[11px] text-muted-foreground">{p.code}</span>}<span className="ml-auto text-sm tabular-nums">{nz(p.sell)}</span></span>{p.description && <span className="block text-xs text-muted-foreground truncate mt-0.5">{p.description}</span>}</span></button></li>)}</ul>{products === null || xeroProducts === null ? <div className="py-8 text-center text-sm text-muted-foreground">Loading products…</div> : filteredRpm.length === 0 && filteredXero.length === 0 ? <div className="py-8 text-center text-sm text-muted-foreground">No matching products.</div> : null}</div>{xeroError && <p className="text-xs text-amber-600">Xero items unavailable: {xeroError}. RPM products are still available.</p>}</DialogContent></Dialog>
         </div>
     )
 }
