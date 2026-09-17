@@ -135,6 +135,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const { widths, setWidth, reset: resetColumns } = useColumnLayout("cost-sheet-columns-v1", COST_COLUMN_LAYOUT)
     const [draggingLineId, setDraggingLineId] = useState<string | null>(null)
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
+    const [dragOverLineId, setDragOverLineId] = useState<string | null>(null)
     const syncingArgon = useRef(false)
 
     // Keep one catalogue Argon/Filler line equal to the combined welding hours.
@@ -359,6 +360,39 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         const res = await Promise.all(updates.map((u) => supabase.from("costing_lines").update({ sort: u.sort }).eq("id", u.id)))
         const err = res.find((r) => r.error)?.error
         if (err) toast.error(err.message)
+    }
+
+    // Drag reorder within the same subsection group.
+    async function reorderByDrop(lineId: string, targetId: string) {
+        const source = lines.find((line) => line.id === lineId)
+        const target = lines.find((line) => line.id === targetId)
+        setDragOverLineId(null)
+        if (!source || !target || source.id === target.id) return
+        if (source.section !== target.section || (source.subsection ?? "") !== (target.subsection ?? "")) return
+
+        const group = lines
+            .filter((line) => line.section === target.section && (line.subsection ?? "") === (target.subsection ?? ""))
+            .sort((a, b) => a.sort - b.sort)
+        const from = group.findIndex((line) => line.id === lineId)
+        let to = group.findIndex((line) => line.id === targetId)
+        if (from < 0 || to < 0) return
+
+        const arranged = [...group]
+        const moved = arranged.splice(from, 1)[0]
+        if (from < to) to -= 1
+        arranged.splice(to, 0, moved)
+
+        const updates = arranged.map((line, index) => ({ id: line.id, sort: index }))
+        setLines((current) => current.map((line) => {
+            const update = updates.find((candidate) => candidate.id === line.id)
+            return update ? { ...line, sort: update.sort } : line
+        }))
+
+        const results = await Promise.all(
+            updates.map((update) => supabase.from("costing_lines").update({ sort: update.sort }).eq("id", update.id))
+        )
+        const error = results.find((result) => result.error)?.error
+        if (error) toast.error("Could not reorder line: " + error.message)
     }
 
     // Move a line between top-level sections. Its subsection is deliberately
@@ -602,7 +636,28 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                     </tr>
                                                 )}
                                                 {rows.map((l, i) => (
-                                                    <tr key={l.id} className="border-b border-border/40 last:border-0 group">
+                                                    <tr
+                                                        key={l.id}
+                                                        onDragOver={(e) => {
+                                                            if (!draggingLineId || draggingLineId === l.id) return
+                                                            const source = lines.find((candidate) => candidate.id === draggingLineId)
+                                                            if (!source || source.section !== l.section || (source.subsection ?? "") !== (l.subsection ?? "")) return
+                                                            e.preventDefault()
+                                                            e.stopPropagation()
+                                                            e.dataTransfer.dropEffect = "move"
+                                                            setDragOverLineId(l.id)
+                                                        }}
+                                                        onDragLeave={() => setDragOverLineId((current) => current === l.id ? null : current)}
+                                                        onDrop={(e) => {
+                                                            if (!draggingLineId || draggingLineId === l.id) return
+                                                            const source = lines.find((candidate) => candidate.id === draggingLineId)
+                                                            if (!source || source.section !== l.section || (source.subsection ?? "") !== (l.subsection ?? "")) return
+                                                            e.preventDefault()
+                                                            e.stopPropagation()
+                                                            void reorderByDrop(draggingLineId, l.id)
+                                                        }}
+                                                        className={"border-b border-border/40 last:border-0 group transition-colors " + (dragOverLineId === l.id ? "bg-primary/5 border-t-2 border-t-primary" : "")}
+                                                    >
                                                         <td className="px-1 py-1">
                                                             <div className="flex min-w-0 items-center gap-0.5">
                                                                 <button
@@ -616,10 +671,11 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                                     onDragEnd={() => {
                                                                         setDraggingLineId(null)
                                                                         setDragOverSection(null)
+                                                                        setDragOverLineId(null)
                                                                     }}
                                                                     className="shrink-0 cursor-grab p-0.5 text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
-                                                                    title="Drag to another section"
-                                                                    aria-label={`Drag ${l.description || "line"} to another section`}
+                                                                    title="Drag to reorder, or move to another section/subsection"
+                                                                    aria-label={`Drag ${l.description || "line"} to reorder or move`}
                                                                 >
                                                                     <GripVertical className="size-3.5" />
                                                                 </button>
