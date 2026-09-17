@@ -111,6 +111,7 @@ export default function JobCardPage() {
   const [job, setJob] = useState<CostingJob | null>(null)
   const [items, setItems] = useState<JobItem[]>([])
   const [bomLines, setBomLines] = useState<BomLine[]>([])
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -171,16 +172,32 @@ export default function JobCardPage() {
   const buildSummary = buildItems.length
     ? buildItems.map((item) => `${item.name}: ${prettyQty(item.build_qty ?? item.qty ?? 1)}`).join(" · ")
     : ""
-  const itemNames = new Map(items.map((item) => [item.id, item.name]))
 
   const routingText = `${title || ""} ${details || ""} ${bomLines.map((line) => `${line.section || ""} ${line.subsection || ""} ${line.description || ""}`).join(" ")}`.toLowerCase()
-  const autoDepartments = new Set<string>()
-  if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) autoDepartments.add("CNC")
-  if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) autoDepartments.add("Metal")
-  if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) autoDepartments.add("Fab")
-  if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) autoDepartments.add("Electrical")
-  if (/vinyl|graphic|print|laminat/.test(routingText)) autoDepartments.add("Vinyl")
-  if (/servic|repair|site|install|maintenance/.test(routingText)) autoDepartments.add("Install")
+  const autoDepartments = useMemo(() => {
+    const result = new Set<string>()
+    if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) result.add("CNC")
+    if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) result.add("Metal")
+    if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) result.add("Fab")
+    if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) result.add("Electrical")
+    if (/vinyl|graphic|print|laminat/.test(routingText)) result.add("Vinyl")
+    if (/servic|repair|site|install|maintenance/.test(routingText)) result.add("Install")
+    return Array.from(result)
+  }, [routingText])
+
+  useEffect(() => {
+    setSelectedDepartments(autoDepartments)
+  }, [autoDepartments.join("|")])
+
+  const scopeLines = bomLines
+    .filter((line) => line.description?.trim() && Number(line.qty || 0) !== 0 && !materialMeta(line)?.is_labour)
+    .slice(0, 8)
+
+  const toggleDepartment = (department: string) => {
+    setSelectedDepartments((current) => current.includes(department)
+      ? current.filter((item) => item !== department)
+      : [...current, department])
+  }
 
   const qrUrl = typeof window !== "undefined"
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
@@ -194,8 +211,9 @@ export default function JobCardPage() {
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           .no-print { display: none !important; }
-          .sheet { margin: 0 !important; box-shadow: none !important; page-break-after: always; break-after: page; }
-          .sheet:last-child { page-break-after: auto; break-after: auto; }
+          .sheet { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; }
+          .sheet:last-child { break-after: auto; page-break-after: auto; }
+          .safety-sheet { break-before: page; page-break-before: always; }
         }
       `}</style>
 
@@ -221,28 +239,34 @@ export default function JobCardPage() {
           qrUrl={qrUrl}
         />
 
-        <div className="mt-[2.5mm] grid grid-cols-[1.4fr_1fr] gap-[2mm]">
-          <Box title="JOB DETAILS / SCOPE OF WORK" className="h-[30mm]">
-            {buildSummary && <div className="mb-[1.2mm] font-bold">Build qty — {buildSummary}</div>}
-            <div className="whitespace-pre-wrap">{details || title}</div>
+        <div className="mt-[2.5mm] grid grid-cols-[1.08fr_.92fr] items-stretch gap-[2mm]">
+          <Box title="JOB DETAILS / SCOPE OF WORK" className="min-h-[66mm]">
+            {buildSummary && <div className="mb-[1.5mm]"><strong>Build qty:</strong> {buildSummary}</div>}
+            {details && <div className="mb-[2mm] whitespace-pre-wrap"><strong>Details:</strong> {details}</div>}
+            {scopeLines.length > 0 && (
+              <div>
+                <div className="mb-[1mm] font-bold">Materials / work:</div>
+                <ul className="list-disc space-y-[.8mm] pl-[4mm]">
+                  {scopeLines.map((line) => (
+                    <li key={line.id}>{line.description}{Number(line.qty || 0) ? ` — ${prettyQty(line.qty)}${materialMeta(line)?.unit ? ` ${materialMeta(line)?.unit}` : ""}` : ""}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Box>
-          <Box title="SPECIAL INSTRUCTIONS" className="h-[30mm]">
-            <ul className="list-disc space-y-[.8mm] pl-[4mm]">
-              <li>Work safely and follow site induction requirements</li>
-              <li>Coordinate with site management</li>
-              <li>Take photos of completed work</li>
-              <li>Report any additional work required</li>
-              <li>Keep site clean and tidy</li>
-            </ul>
+          <Box title="DRAWING / SKETCH" className="min-h-[66mm]">
+            <div className="flex min-h-[54mm] items-center justify-center border border-[#d5dfdc] text-center text-[9.5px] text-neutral-400">
+              Sketch here or attach manufacture drawings
+            </div>
           </Box>
         </div>
 
-        <Bar>DEPARTMENTS</Bar>
+        <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
           {DEPARTMENTS.map((d) => (
-            <span key={d} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[10.2px]">
-              <CheckBox checked={autoDepartments.has(d)} />{d}
-            </span>
+            <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[10.2px]">
+              <CheckBox checked={selectedDepartments.includes(d)} />{d}
+            </button>
           ))}
         </div>
 
@@ -255,51 +279,37 @@ export default function JobCardPage() {
         <Bar noTop>MATERIALS / PARTS USED</Bar>
         <MaterialsGrid />
 
-        <div className="mt-[6mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
-          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[42mm]" />
-          <Box title="JOB STATUS (tick when complete)" className="h-[42mm]">
-            <Checks items={["Work completed", "Site left clean and tidy", "Photos taken", "All materials used", "Any variations noted and reported"]} />
+        <div className="mt-[5mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
+          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[38mm]" />
+          <Box title="JOB STATUS (tick when complete)" className="h-[38mm]">
+            <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />
           </Box>
-          <Box title="SIGN OFF" className="h-[42mm]">
-            <div className="space-y-[5mm] pt-[2mm]">
+          <Box title="SIGN OFF" className="h-[38mm]">
+            <div className="space-y-[4.5mm] pt-[1mm]">
               <SignLine label="Name" />
               <SignLine label="Signature" />
-              <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700 text-center">____ / ____ / ______</span></div>
+              <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
             </div>
           </Box>
         </div>
       </Sheet>
 
-      <Sheet>
-        <ProductionHeader number={number} title={title} customer={customer} buildSummary={buildSummary} requiredBy={fmt(requiredBy)} />
-        <div className="mt-[3mm]">
-          <Bar>BOM / MATERIALS &amp; WORK REQUIRED</Bar>
-          <BomTable lines={bomLines} itemNames={itemNames} />
+      <Sheet className="safety-sheet">
+        <SafetyHeader />
+
+        <div className="mt-[3.5mm] text-center">
+          <div className="text-[21px] font-black tracking-tight" style={{ color: GREEN }}>SAFETY INFORMATION</div>
+          <div className="text-[11px] font-bold" style={{ color: GREEN }}>OUR SAFETY COMMITMENT</div>
+          <p className="mx-auto mt-[3mm] max-w-[165mm] text-[10.4px] leading-[1.45]">
+            At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
+          </p>
+          <div className="mt-[3mm] text-[11.5px] font-black tracking-[.03em]" style={{ color: GREEN }}>
+            THINK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;HOME SAFE
+          </div>
         </div>
-        <div className="mt-[4mm] grid grid-cols-2 gap-[2mm]">
-          <Box title="PRODUCTION NOTES" className="h-[40mm]" />
-          <Box title="VARIATIONS / SUBSTITUTIONS" className="h-[40mm]" />
-        </div>
-        <p className="mt-[3mm] text-[8.5px] text-neutral-500">Quantities shown are the RPM BOM quantities for the complete build. No cost or sell pricing is shown on this job card.</p>
-      </Sheet>
 
-      <Sheet>
-        <Header safety />
-
-        <div className="mt-[3.5mm] grid grid-cols-[1fr_1fr] gap-[2mm]">
-          <Box title="OUR SAFETY COMMITMENT" className="h-[56mm]">
-            <p className="pt-[2mm] text-[10.8px] leading-[1.55]">
-              At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
-            </p>
-            <div className="mt-[6mm] text-[11.5px] font-black tracking-[.03em]" style={{ color: GREEN }}>
-              THINK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;HOME SAFE
-            </div>
-          </Box>
-          <Box title="BEFORE YOU START" className="h-[56mm]">
-            <Checks items={beforeYouStart} tight />
-          </Box>
-
-          <Box title="REQUIRED PPE" suffix="(as applicable)" className="h-[61mm]">
+        <div className="mt-[5mm] grid grid-cols-2 gap-[2mm]">
+          <Box title="REQUIRED PPE" suffix="(as applicable)" className="h-[62mm]">
             <div className="grid grid-cols-4 gap-x-[2mm] gap-y-[4mm] pt-[2mm]">
               {ppe.map(({ label, Icon }) => (
                 <div key={label} className="flex flex-col items-center text-center">
@@ -311,32 +321,27 @@ export default function JobCardPage() {
               ))}
             </div>
           </Box>
+          <Box title="BEFORE YOU START" className="h-[62mm]">
+            <Checks items={beforeYouStart} tight />
+          </Box>
+
           <Box title="ON SITE" className="h-[61mm]">
             <Checks items={onSite} tight />
           </Box>
-        </div>
-
-        <div className="mt-[2.5mm] grid grid-cols-[1.45fr_1fr] gap-[2mm]">
-          <Box title="KEY PROCEDURES" className="h-[68mm]">
-            <ul className="list-disc space-y-[1.45mm] pl-[4.5mm] pt-[1mm] text-[9.8px] leading-tight">
+          <Box title="KEY PROCEDURES" className="h-[61mm]">
+            <ul className="list-disc space-y-[1.2mm] pl-[4.5mm] pt-[.5mm] text-[9.2px] leading-tight">
               {procedures.map((x) => <li key={x}>{x}</li>)}
             </ul>
           </Box>
-          <Box title="EMERGENCY INFORMATION" className="h-[68mm]">
-            <div className="space-y-[3.5mm] pt-[1mm]">
+        </div>
+
+        <div className="mt-[2.5mm]">
+          <Box title="EMERGENCY INFORMATION" className="h-[47mm]">
+            <div className="grid grid-cols-4 gap-[3mm] pt-[2mm]">
               <Emergency icon="phone" color="#ef3d35" title="Emergency (Fire / Police / Ambulance)" value="111" bold />
               <Emergency icon="assembly" color="#159157" title="Site Assembly Point" />
               <Emergency icon="firstaid" color="#159157" title="First Aid Location" />
               <Emergency icon="hospital" color="#ef3d35" title="Nearest Medical Centre" />
-            </div>
-          </Box>
-        </div>
-
-        <div className="mt-[2.5mm] grid grid-cols-[1fr_1fr] gap-[2mm]">
-          <Box title="CUSTOMER SITE SPECIFIC NOTES" className="h-[48mm]" />
-          <Box title="ADDITIONAL INFORMATION" className="h-[48mm]">
-            <div className="px-[1mm] pt-[1mm]">
-              {rows(6).map((_, i) => <div key={i} className="h-[7mm] border-b border-[#b8c8c3]" />)}
             </div>
           </Box>
         </div>
@@ -345,9 +350,9 @@ export default function JobCardPage() {
   )
 }
 
-function Sheet({ children }: { children: React.ReactNode }) {
+function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="sheet box-border mx-auto my-6 h-[297mm] w-[210mm] overflow-hidden bg-white px-[10mm] py-[6mm] text-[10.2px] leading-[1.32] shadow-2xl">
+    <div className={`sheet box-border mx-auto my-6 min-h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[10.2px] leading-[1.32] shadow-2xl ${className}`}>
       {children}
     </div>
   )
@@ -375,84 +380,38 @@ function JobHeader({
   qrUrl: string
 }) {
   return (
-    <div className="grid h-[43mm] grid-cols-[25mm_1fr_28mm] gap-[3mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[3mm] py-[2.5mm]">
+    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_22mm_29mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
       <div className="flex items-center justify-center bg-white">
         <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
       </div>
 
-      <div className="grid grid-cols-[1.2fr_.9fr] gap-x-[5mm] gap-y-[2.1mm] self-center text-[12px] leading-[1.18]">
-        <div className="col-span-2 grid grid-cols-[22mm_1fr] gap-[2mm]">
-          <span className="font-bold">Customer:</span>
-          <span className="font-bold">{customer}</span>
-        </div>
-        <div className="col-span-2 grid grid-cols-[22mm_1fr] gap-[2mm]">
-          <span className="font-bold">Site:</span>
-          <span>{site}</span>
-        </div>
-        <div className="col-span-2 grid grid-cols-[22mm_1fr] gap-[2mm]">
-          <span className="font-bold">Job Title:</span>
-          <span className="font-bold">{title}</span>
-        </div>
-        <div className="grid grid-cols-[22mm_1fr] gap-[2mm]">
-          <span className="font-bold">Date Issued:</span>
-          <span>{issued}</span>
-        </div>
-        <div className="grid grid-cols-[23mm_1fr] gap-[2mm]">
-          <span className="font-bold">Required By:</span>
-          <span>{due}</span>
-        </div>
-        <div className="grid grid-cols-[22mm_1fr] gap-[2mm]">
-          <span className="font-bold">Contact:</span>
-          <span>{contact}</span>
-        </div>
-        <div className="grid grid-cols-[23mm_1fr] gap-[2mm]">
-          <span className="font-bold">Phone:</span>
-          <span>{phone}</span>
-        </div>
+      <div className="grid grid-cols-[1fr_1fr] content-start gap-x-[4mm] gap-y-[1.3mm] pt-[.5mm] text-[9.6px] leading-[1.15]">
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Client:</span><span className="font-bold">{customer}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Contact:</span><span>{contact}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Phone:</span><span>{phone}</span></div>
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Site:</span><span>{site}</span></div>
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Job Title:</span><span className="font-bold">{title}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Date Issued:</span><span>{issued}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Required By:</span><span>{due}</span></div>
       </div>
 
-      <div className="flex flex-col items-center justify-between bg-white py-[1.5mm]">
-        <div className="w-[25mm] rounded-[1.2mm] border border-[#9baaaa] bg-[#f2f5f4] px-[1.2mm] py-[1mm] text-center">
-          <div className="text-[7.5px] leading-none">Job No / Invoice No</div>
-          <div className="mt-[.5mm] text-[19px] font-black leading-none">{number}</div>
-        </div>
+      <div className="flex flex-col items-center justify-center bg-white">
         {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-        <div className="text-center text-[7px] leading-none">Scan to view in RPM</div>
+        <div className="mt-[.8mm] text-center text-[6.5px] leading-none">Scan to view in RPM</div>
+      </div>
+
+      <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
+        <div className="text-[7.5px] font-bold leading-none">Job No.</div>
+        <div className="mt-[1.3mm] text-[25px] font-black leading-none" style={{ color: GREEN }}>{number}</div>
       </div>
     </div>
   )
 }
 
-function ProductionHeader({ number, title, customer, buildSummary, requiredBy }: { number: string; title: string; customer: string; buildSummary: string; requiredBy: string }) {
+function SafetyHeader() {
   return (
-    <div className="flex items-start justify-between border-b border-[#b9c5c1] pb-[3mm]">
-      <div className="flex items-start gap-[4mm]">
-        <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
-        <div>
-          <div className="text-[19px] font-black">PRODUCTION / BOM</div>
-          <div className="mt-[1mm] text-[12px] font-bold">{title}</div>
-          <div className="mt-[.5mm] text-[9.5px]">{customer}</div>
-          {buildSummary && <div className="mt-[1mm] text-[10px]"><strong>Build qty:</strong> {buildSummary}</div>}
-        </div>
-      </div>
-      <div className="text-right text-[10px]">
-        <div><strong>Job:</strong> {number}</div>
-        <div className="mt-[1mm]"><strong>Required by:</strong> {requiredBy || "—"}</div>
-      </div>
-    </div>
-  )
-}
-
-function Header({ safety = false }: { number?: string; safety?: boolean }) {
-  return (
-    <div className="flex h-[25mm] items-start justify-between">
-      <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain object-left" />
-      {safety && (
-        <div className="mt-[1mm] min-w-[58mm] rounded-[1.5mm] border border-[#9baaaa] bg-[#f2f5f4] px-[5mm] py-[2.5mm] text-center">
-          <div className="text-[20px] font-black tracking-tight">JOB CARD</div>
-          <div className="mt-[1mm] text-[10.5px] font-bold">SAFETY &amp; PROCESSES</div>
-        </div>
-      )}
+    <div className="flex justify-center border-b border-[#9ebbb2] pb-[3mm]">
+      <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
     </div>
   )
 }
@@ -477,7 +436,7 @@ function Box({
   className?: string
 }) {
   return (
-    <div className={`box-border overflow-hidden border border-[#b9c5c1] bg-white ${className}`}>
+    <div className={`box-border border border-[#b9c5c1] bg-white ${className}`}>
       <div className="flex h-[6mm] items-center px-[2.5mm] text-[10.7px] text-white" style={{ background: GREEN }}>
         <span className="font-black">{title}</span>{suffix && <span className="ml-[1.2mm] font-normal">{suffix}</span>}
       </div>
@@ -504,7 +463,7 @@ function Checks({ items, tight = false }: { items: string[]; tight?: boolean }) 
       {items.map((x) => (
         <div key={x} className="flex items-start gap-[2mm]">
           <CheckBox />
-          <span className={tight ? "text-[9.7px] leading-[1.06]" : "text-[10px] leading-tight"}>{x}</span>
+          <span className={tight ? "text-[9.4px] leading-[1.06]" : "text-[10px] leading-tight"}>{x}</span>
         </div>
       ))}
     </div>
@@ -518,7 +477,7 @@ function JobGrid() {
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[9px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(7).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+      <tbody>{rows(11).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.5mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
 }
@@ -530,42 +489,7 @@ function MaterialsGrid() {
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[9px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(5).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[6.5mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
-    </table>
-  )
-}
-
-function BomTable({ lines, itemNames }: { lines: BomLine[]; itemNames: Map<string, string> }) {
-  const visible = lines.filter((line) => line.description?.trim() && Number(line.qty || 0) !== 0)
-  const headers = ["Item", "Section", "Description", "Qty", "Unit", "Notes"]
-  const widths = ["15%", "17%", "36%", "8%", "8%", "16%"]
-  return (
-    <table className="w-full table-fixed border-collapse">
-      <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead>
-        <tr className="bg-[#eef2f1]">
-          {headers.map((h) => <th key={h} className="h-[6mm] border border-[#b9c5c1] px-[1mm] text-left text-[8.7px] font-bold">{h}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {visible.length ? visible.map((line) => {
-          const meta = materialMeta(line)
-          const unit = meta?.unit || (/labour/i.test(line.section || "") ? "hr" : "")
-          const section = [line.section, line.subsection].filter(Boolean).join(" / ")
-          return (
-            <tr key={line.id}>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{line.item_id ? itemNames.get(line.item_id) || "" : ""}</td>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{section}</td>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px] font-medium">{line.description}</td>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] text-right align-top text-[8.7px]">{prettyQty(line.qty)}</td>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{unit}</td>
-              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.2px]">{line.internal_note || ""}</td>
-            </tr>
-          )
-        }) : (
-          <tr><td colSpan={6} className="border border-[#b9c5c1] px-[2mm] py-[4mm] text-center text-[9px] text-neutral-500">No BOM lines are recorded for this job.</td></tr>
-        )}
-      </tbody>
+      <tbody>{rows(5).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[6.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
 }
@@ -573,17 +497,15 @@ function BomTable({ lines, itemNames }: { lines: BomLine[]; itemNames: Map<strin
 function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" | "assembly" | "firstaid" | "hospital"; color: string; title: string; value?: string; bold?: boolean }) {
   const iconClass = "h-[7mm] w-[7mm] text-white"
   return (
-    <div className="grid grid-cols-[14mm_1fr] items-center gap-[3mm]">
+    <div className="flex flex-col items-center text-center">
       <div className="grid h-[11mm] w-[11mm] place-items-center rounded-full" style={{ background: color }}>
         {icon === "phone" && <Phone className={iconClass} fill="white" />}
         {icon === "assembly" && <MapPin className={iconClass} />}
         {icon === "firstaid" && <Cross className={iconClass} strokeWidth={3} />}
         {icon === "hospital" && <Hospital className={iconClass} />}
       </div>
-      <div>
-        <div className="text-[9px]">{title}</div>
-        {value ? <div className={bold ? "text-[18px] font-black leading-none" : "text-[11px] font-bold"}>{value}</div> : <div className="mt-[3mm] border-b border-neutral-500" />}
-      </div>
+      <div className="mt-[1.5mm] text-[8px] leading-tight">{title}</div>
+      {value ? <div className={bold ? "mt-[1mm] text-[17px] font-black leading-none" : "text-[11px] font-bold"}>{value}</div> : <div className="mt-[4mm] w-[28mm] border-b border-neutral-500" />}
     </div>
   )
 }
