@@ -44,8 +44,7 @@ type ImportPreview = {
     lines: Array<{ index: number; itemCode: string; description: string; quantity: number; unitAmount: number; lineAmount: number }>
 }
 
-type ColumnKey = SortKey
-type ColumnMeta = { key: ColumnKey; label: string; width: number; min: number }
+type ColumnMeta = { key: SortKey; label: string; width: number; min: number }
 
 const JOB_COLUMNS: ColumnMeta[] = [
     { key: "job", label: "Job", width: 330, min: 180 },
@@ -55,7 +54,16 @@ const JOB_COLUMNS: ColumnMeta[] = [
     { key: "completion_date", label: "Complete by", width: 140, min: 100 },
     { key: "status", label: "Status", width: 130, min: 90 },
 ]
-const JOB_COLUMN_BY_KEY = Object.fromEntries(JOB_COLUMNS.map((column) => [column.key, column])) as Record<ColumnKey, ColumnMeta>
+
+const JOB_COLUMN_BY_KEY: Record<SortKey, ColumnMeta> = {
+    job: JOB_COLUMNS[0],
+    client: JOB_COLUMNS[1],
+    job_number: JOB_COLUMNS[2],
+    job_lead: JOB_COLUMNS[3],
+    completion_date: JOB_COLUMNS[4],
+    status: JOB_COLUMNS[5],
+}
+
 const JOB_COLUMN_LAYOUT = {
     order: JOB_COLUMNS.map((column) => column.key),
     widths: Object.fromEntries(JOB_COLUMNS.map((column) => [column.key, column.width])),
@@ -74,18 +82,12 @@ function formatDate(value?: string | null) {
 }
 
 const nz = (value: number) => value.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
-const isoToday = () => new Date().toISOString().slice(0, 10)
-const isoPlusDays = (days: number) => {
-    const date = new Date()
-    date.setDate(date.getDate() + days)
-    return date.toISOString().slice(0, 10)
-}
+const isoDate = (date: Date) => date.toISOString().slice(0, 10)
 
 function JobColumnHeader({
     column,
     width,
     activeSort,
-    sortDirection,
     onSort,
     onMove,
     onResize,
@@ -93,40 +95,45 @@ function JobColumnHeader({
     column: ColumnMeta
     width: number
     activeSort: SortKey
-    sortDirection: SortDirection
     onSort: (key: SortKey) => void
     onMove: (from: string, to: string) => void
     onResize: (key: string, width: number) => void
 }) {
-    const startResize = (event: React.PointerEvent) => {
+    function startResize(event: React.PointerEvent) {
         event.preventDefault()
         event.stopPropagation()
         const startX = event.clientX
         const startWidth = width
-        const move = (pointer: PointerEvent) => onResize(column.key, Math.max(column.min, startWidth + pointer.clientX - startX))
-        const stop = () => {
-            window.removeEventListener("pointermove", move)
-            window.removeEventListener("pointerup", stop)
+        const handleMove = (pointer: PointerEvent) => onResize(column.key, Math.max(column.min, startWidth + pointer.clientX - startX))
+        const handleUp = () => {
+            window.removeEventListener("pointermove", handleMove)
+            window.removeEventListener("pointerup", handleUp)
             document.body.style.cursor = ""
         }
-        window.addEventListener("pointermove", move)
-        window.addEventListener("pointerup", stop)
+        window.addEventListener("pointermove", handleMove)
+        window.addEventListener("pointerup", handleUp)
         document.body.style.cursor = "col-resize"
     }
 
     return (
         <th
             draggable
-            onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", column.key) }}
+            onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move"
+                event.dataTransfer.setData("text/plain", column.key)
+            }}
             onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => { event.preventDefault(); const from = event.dataTransfer.getData("text/plain"); if (from) onMove(from, column.key) }}
+            onDrop={(event) => {
+                event.preventDefault()
+                const from = event.dataTransfer.getData("text/plain")
+                if (from) onMove(from, column.key)
+            }}
             className="relative border-b border-border/60 p-0 select-none"
             title="Drag to reorder column"
         >
             <button type="button" onClick={() => onSort(column.key)} className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium hover:text-foreground">
                 <span className="truncate">{column.label}</span>
                 <ArrowUpDown className={`size-3.5 shrink-0 ${activeSort === column.key ? "text-foreground" : "opacity-40"}`} />
-                {activeSort === column.key && <span className="sr-only">{sortDirection === "asc" ? "ascending" : "descending"}</span>}
             </button>
             <div onPointerDown={startResize} className="absolute top-0 -right-1.5 z-10 h-full w-3 cursor-col-resize touch-none" title={`Resize ${column.label}`} />
         </th>
@@ -163,58 +170,79 @@ export default function ActiveJobsPage() {
     const [completionDate, setCompletionDate] = useState("")
 
     const statuses = view === "active" ? ["in_progress"] : ["complete", "invoiced", "cancelled"]
+    const key = `costing-jobs-all-${view}-${clientId ?? "all"}`
 
-    const { data: filterOptions } = useSupabaseQuery<{
-        clients: Pick<Client, "id" | "name">[]
-        stores: Pick<Store, "id" | "name" | "client_id">[]
-        leads: string[]
-    }>(`job-filter-options-${view}`, async () => {
-        const [{ data: clientRows }, { data: storeRows }, { data: leadRows }] = await Promise.all([
-            supabase.from("clients").select("id,name").order("name"),
-            supabase.from("stores").select("id,name,client_id").order("name"),
-            supabase.from("costing_jobs").select("job_lead_name").eq("is_template", false).in("status", statuses).not("job_lead_name", "is", null),
-        ])
-        const leads = Array.from(new Set((leadRows || []).map((row) => row.job_lead_name?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b))
-        return { data: { clients: (clientRows || []) as Pick<Client, "id" | "name">[], stores: (storeRows || []) as Pick<Store, "id" | "name" | "client_id">[], leads }, error: null }
-    })
-
-    const filterClients = filterOptions?.clients || []
-    const filterStores = (filterOptions?.stores || []).filter((store) => clientFilter === "all" || store.client_id === clientFilter)
-    const filterLeads = filterOptions?.leads || []
-
-    const key = `costing-jobs-${view}-${page}-${clientId ?? "all"}-${search}-${clientFilter}-${siteFilter}-${leadFilter}-${dateFilter}-${statusFilter}`
-
-    const { data: result, isLoading, mutate } = useSupabaseQuery<{ items: JobRow[]; count: number }>(key, async () => {
+    const { data: allJobs = [], isLoading, mutate } = useSupabaseQuery<JobRow[]>(key, async () => {
         let query = supabase
             .from("costing_jobs")
-            .select(`*, clients ( name ), stores ( name )`, { count: "exact" })
+            .select(`*, clients ( name ), stores ( name )`)
             .eq("is_template", false)
             .in("status", statuses)
+            .order("created_at", { ascending: false })
 
         if (clientId) query = query.eq("client_id", clientId)
-        if (clientFilter !== "all") query = query.eq("client_id", clientFilter)
-        if (siteFilter !== "all") query = query.eq("store_id", siteFilter)
-        if (leadFilter !== "all") query = query.eq("job_lead_name", leadFilter)
-        if (statusFilter !== "all") query = query.eq("status", statusFilter)
-        if (dateFilter === "overdue") query = query.lt("completion_date", isoToday())
-        if (dateFilter === "today") query = query.eq("completion_date", isoToday())
-        if (dateFilter === "next7") query = query.gte("completion_date", isoToday()).lte("completion_date", isoPlusDays(7))
-        if (dateFilter === "none") query = query.is("completion_date", null)
-        if (search.trim()) {
-            const term = search.trim().replace(/[,()*%]/g, "")
-            query = query.or(`title.ilike.%${term}%,production_title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%,quoted_by_name.ilike.%${term}%,job_lead_name.ilike.%${term}%`)
-        }
 
-        query = query.order("created_at", { ascending: false })
-        const from = (page - 1) * PAGE_SIZE
-        query = query.range(from, from + PAGE_SIZE - 1)
-        const { data, error, count } = await query
+        const { data, error } = await query
         if (error) throw error
-        return { data: { items: (data as JobRow[]) || [], count: count ?? 0 }, error: null }
+        return { data: (data as JobRow[]) || [], error: null }
     })
 
-    const jobs = useMemo(() => {
-        const rows = [...(result?.items || [])]
+    const filterClients = useMemo(() => {
+        const map = new Map<string, string>()
+        for (const job of allJobs) if (job.client_id && job.clients?.name) map.set(job.client_id, job.clients.name)
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    }, [allJobs])
+
+    const filterStores = useMemo(() => {
+        const map = new Map<string, { id: string; name: string; client_id: string | null }>()
+        for (const job of allJobs) {
+            if (job.store_id && job.stores?.name && (clientFilter === "all" || job.client_id === clientFilter)) {
+                map.set(job.store_id, { id: job.store_id, name: job.stores.name, client_id: job.client_id })
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+    }, [allJobs, clientFilter])
+
+    const filterLeads = useMemo(() => {
+        return Array.from(new Set(allJobs.map((job) => job.job_lead_name?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b))
+    }, [allJobs])
+
+    const filteredJobs = useMemo(() => {
+        const today = isoDate(new Date())
+        const week = new Date()
+        week.setDate(week.getDate() + 7)
+        const next7 = isoDate(week)
+        const term = search.trim().toLowerCase()
+
+        return allJobs.filter((job) => {
+            if (clientFilter !== "all" && job.client_id !== clientFilter) return false
+            if (siteFilter !== "all" && job.store_id !== siteFilter) return false
+            if (leadFilter !== "all" && job.job_lead_name !== leadFilter) return false
+            if (statusFilter !== "all" && job.status !== statusFilter) return false
+            if (dateFilter === "overdue" && (!job.completion_date || job.completion_date >= today)) return false
+            if (dateFilter === "today" && job.completion_date !== today) return false
+            if (dateFilter === "next7" && (!job.completion_date || job.completion_date < today || job.completion_date > next7)) return false
+            if (dateFilter === "none" && job.completion_date) return false
+            if (term) {
+                const haystack = [
+                    job.title,
+                    job.production_title,
+                    job.reference,
+                    job.job_number,
+                    job.xero_invoice_number,
+                    job.job_lead_name,
+                    job.quoted_by_name,
+                    job.clients?.name,
+                    job.stores?.name,
+                ].filter(Boolean).join(" ").toLowerCase()
+                if (!haystack.includes(term)) return false
+            }
+            return true
+        })
+    }, [allJobs, clientFilter, siteFilter, leadFilter, statusFilter, dateFilter, search])
+
+    const sortedJobs = useMemo(() => {
+        const rows = [...filteredJobs]
         const direction = sortDirection === "asc" ? 1 : -1
         rows.sort((a, b) => {
             let av = ""
@@ -241,17 +269,23 @@ export default function ActiveJobsPage() {
             return av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" }) * direction
         })
         return rows
-    }, [result?.items, sortKey, sortDirection])
+    }, [filteredJobs, sortKey, sortDirection])
 
-    const totalCount = result?.count ?? 0
+    const totalCount = sortedJobs.length
+    const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+    const jobs = sortedJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const clientStores = selectedClient === "none" ? [] : stores.filter((store) => store.client_id === selectedClient)
-    const tableWidth = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as ColumnKey].width), 0)
+    const tableWidth = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0)
 
     function changeView(next: JobView) {
         setView(next)
         setPage(1)
         setSortKey(next === "active" ? "completion_date" : "job")
         setSortDirection("asc")
+        setClientFilter("all")
+        setSiteFilter("all")
+        setLeadFilter("all")
+        setDateFilter("all")
         setStatusFilter("all")
     }
 
@@ -273,7 +307,7 @@ export default function ActiveJobsPage() {
         setPage(1)
     }
 
-    function renderCell(key: ColumnKey, job: JobRow) {
+    function renderCell(key: SortKey, job: JobRow) {
         if (key === "job") return <><div className="font-medium truncate">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground truncate">{job.reference}</div>}</>
         if (key === "client") return <span className="text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</span>
         if (key === "job_number") return <span className="tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</span>
@@ -365,7 +399,7 @@ export default function ActiveJobsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="relative min-w-[260px] flex-1 max-w-md">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-8" />
+                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} className="pl-8 h-8" />
                     </div>
                     <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setSiteFilter("all"); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
                         <option value="all">All customers</option>
@@ -401,7 +435,7 @@ export default function ActiveJobsPage() {
                 </div>
 
                 {isLoading ? (
-                    <div className="space-y-1">{[1,2,3,4].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
+                    <div className="space-y-1">{[1,2,3,4].map((i) => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
                 ) : jobs.length ? (
                     <>
                         <div className="border border-border/60 rounded-lg overflow-auto">
@@ -412,10 +446,9 @@ export default function ActiveJobsPage() {
                                         {order.map((key) => (
                                             <JobColumnHeader
                                                 key={key}
-                                                column={JOB_COLUMN_BY_KEY[key as ColumnKey]}
-                                                width={widths[key] || JOB_COLUMN_BY_KEY[key as ColumnKey].width}
+                                                column={JOB_COLUMN_BY_KEY[key as SortKey]}
+                                                width={widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width}
                                                 activeSort={sortKey}
-                                                sortDirection={sortDirection}
                                                 onSort={toggleSort}
                                                 onMove={move}
                                                 onResize={setWidth}
@@ -424,15 +457,15 @@ export default function ActiveJobsPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {jobs.map(job => (
+                                    {jobs.map((job) => (
                                         <tr key={job.id} onClick={() => router.push(`/quoting/jobs/${job.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30">
-                                            {order.map((key) => <td key={key} className="px-3 py-1.5 overflow-hidden align-middle">{renderCell(key as ColumnKey, job)}</td>)}
+                                            {order.map((key) => <td key={key} className="px-3 py-1.5 overflow-hidden align-middle">{renderCell(key as SortKey, job)}</td>)}
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                        <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />
+                        <TablePagination page={page} pageCount={pageCount} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />
                     </>
                 ) : (
                     <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
