@@ -101,6 +101,10 @@ type BomLine = {
   materials?: { unit?: string | null; is_labour?: boolean | null } | { unit?: string | null; is_labour?: boolean | null }[] | null
 }
 
+function materialMeta(line: BomLine) {
+  return Array.isArray(line.materials) ? line.materials[0] : line.materials
+}
+
 function prettyQty(value: number | null | undefined) {
   const n = Number(value || 0)
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
@@ -191,6 +195,13 @@ export default function JobCardPage() {
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
   const quoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+  const materialRows = bomLines.filter((line) => {
+    const meta = materialMeta(line)
+    if (!line.description?.trim()) return false
+    if (meta?.is_labour || /labou?r/i.test(line.section || "")) return false
+    if (/\bargon\b/i.test(line.description)) return false
+    return Number(line.qty || 0) !== 0
+  })
 
   const toggleDepartment = (department: string) => {
     setSelectedDepartments((current) => current.includes(department)
@@ -238,6 +249,15 @@ export default function JobCardPage() {
           qrUrl={qrUrl}
         />
 
+        <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
+        <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
+          {DEPARTMENTS.map((d) => (
+            <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[10.2px]">
+              <CheckBox checked={selectedDepartments.includes(d)} />{d}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-[2.5mm] grid grid-cols-[1.08fr_.92fr] items-stretch gap-[2mm]">
           <Box title="JOB DETAILS / SCOPE OF WORK" className="min-h-[66mm]">
             <div className="space-y-[3mm]">
@@ -260,23 +280,14 @@ export default function JobCardPage() {
           </Box>
         </div>
 
-        <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
-        <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
-          {DEPARTMENTS.map((d) => (
-            <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[10.2px]">
-              <CheckBox checked={selectedDepartments.includes(d)} />{d}
-            </button>
-          ))}
-        </div>
+        <Bar>MATERIALS / PARTS USED</Bar>
+        <MaterialsGrid lines={materialRows} />
 
         <Bar>TIME LOG</Bar>
         <JobGrid />
         <div className="flex h-[9.5mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[10.5px] font-bold">
           <span>Total Hours:</span><span className="h-[8mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
-
-        <Bar noTop>MATERIALS / PARTS USED</Bar>
-        <MaterialsGrid />
 
         <div className="mt-[5mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
           <Box title="ADDITIONAL NOTES / ISSUES" className="h-[38mm]" />
@@ -481,14 +492,26 @@ function JobGrid() {
   )
 }
 
-function MaterialsGrid() {
+function MaterialsGrid({ lines }: { lines: BomLine[] }) {
   const headers = ["Date", "Item / Description", "Qty", "Unit", "Notes"]
   const widths = ["9%", "44%", "9%", "9%", "29%"]
+  const blankRows = Math.max(4, 7 - lines.length)
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[9px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(5).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[6.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+      <tbody>
+        {lines.map((line) => (
+          <tr key={line.id}>
+            <td className="h-[6.2mm] border border-[#b9c5c1]" />
+            <td className="h-[6.2mm] border border-[#b9c5c1] px-[1.5mm] text-[9px]">{line.description}</td>
+            <td className="h-[6.2mm] border border-[#b9c5c1]" />
+            <td className="h-[6.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[9px]">{materialMeta(line)?.unit || ""}</td>
+            <td className="h-[6.2mm] border border-[#b9c5c1]" />
+          </tr>
+        ))}
+        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[6.2mm] border border-[#b9c5c1]" />)}</tr>)}
+      </tbody>
     </table>
   )
 }
