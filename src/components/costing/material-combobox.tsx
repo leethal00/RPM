@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Search } from "lucide-react"
+import { toast } from "sonner"
 import { applyMaterialSearch } from "@/lib/costing/material-search"
 import type { Material } from "@/types/database"
 
@@ -10,6 +11,7 @@ const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currenc
 const RESULT_LIMIT = 40
 const VISIBLE_ROWS = 8
 const ROW_HEIGHT = 36
+const ADD_TO_PREFIX = "+ Add to "
 
 /**
  * Inline type-ahead over the materials catalogue.
@@ -18,6 +20,11 @@ const ROW_HEIGHT = 36
  *
  * When rendered inside a BOM section, the search is automatically scoped to that
  * top-level section. The general add-item search sits outside a section and remains global.
+ *
+ * The in-subsection "+ Add to …" control also acts as a drop target for BOM rows.
+ * This lets an existing line be dragged between subsections without needing a separate
+ * edit control. The database is updated first, then the costing page is reloaded so the
+ * existing CostSheet state is rebuilt in the new group.
  */
 export function MaterialCombobox({
     value = "", placeholder, onSelect, onTextCommit, clearOnSelect = false, className = "", autoFocus = false,
@@ -37,6 +44,7 @@ export function MaterialCombobox({
     const [capped, setCapped] = useState(false)
     const [active, setActive] = useState(0)
     const [popup, setPopup] = useState({ left: 0, top: 0, width: 640 })
+    const [dragOver, setDragOver] = useState(false)
 
     const inputRef = useRef<HTMLInputElement | null>(null)
     const listRef = useRef<HTMLUListElement | null>(null)
@@ -54,6 +62,41 @@ export function MaterialCombobox({
         const section = inputRef.current?.closest("section")
         const heading = section?.querySelector("h3")?.textContent?.trim()
         return heading || null
+    }
+
+    function contextualSubsection(section: string) {
+        if (!placeholder?.startsWith(ADD_TO_PREFIX)) return undefined
+        const label = placeholder.slice(ADD_TO_PREFIX.length).replace(/…$/, "").trim()
+        return label && label !== section ? label : null
+    }
+
+    const isSubsectionDropTarget = !!placeholder?.startsWith(ADD_TO_PREFIX)
+
+    async function dropIntoSubsection(e: React.DragEvent<HTMLDivElement>) {
+        if (!isSubsectionDropTarget) return
+        const lineId = e.dataTransfer.getData("text/plain")
+        const section = contextualSection()
+        if (!lineId || !section) return
+
+        e.preventDefault()
+        e.stopPropagation()
+        setDragOver(false)
+
+        const subsection = contextualSubsection(section)
+        const { error } = await supabase.from("costing_lines").update({
+            section,
+            subsection: subsection ?? null,
+        }).eq("id", lineId)
+
+        if (error) {
+            toast.error(`Could not move line: ${error.message}`)
+            return
+        }
+
+        toast.success(`Moved to ${subsection || section}`)
+        // CostSheet owns the line state. Reload after the persisted move so the row
+        // immediately appears in its new subsection without risking stale local state.
+        window.location.reload()
     }
 
     useEffect(() => {
@@ -98,7 +141,21 @@ export function MaterialCombobox({
     }
 
     return (
-        <div className="relative">
+        <div
+            className={`relative ${dragOver ? "rounded-md ring-2 ring-primary/40 bg-primary/5" : ""}`}
+            onDragOver={(e) => {
+                if (!isSubsectionDropTarget || !e.dataTransfer.types.includes("text/plain")) return
+                e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = "move"
+                setDragOver(true)
+            }}
+            onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false)
+            }}
+            onDrop={dropIntoSubsection}
+            title={isSubsectionDropTarget ? "Drop a BOM line here to move it into this subsection" : undefined}
+        >
             <input
                 ref={inputRef}
                 autoFocus={autoFocus}
