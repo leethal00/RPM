@@ -224,6 +224,20 @@ export default function JobCardPage() {
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
     : ""
 
+  const header = (
+    <JobHeader
+      number={number}
+      customer={customer}
+      site={j.stores?.address || ""}
+      title={title}
+      issued={fmt(job.created_at)}
+      due={fmt(requiredBy)}
+      contact={contact}
+      phone={phone}
+      qrUrl={qrUrl}
+    />
+  )
+
   return (
     <div className="min-h-screen bg-neutral-900/90 print:bg-white text-black">
       <style>{`
@@ -248,16 +262,7 @@ export default function JobCardPage() {
       </div>
 
       <Sheet>
-        <JobHeader
-          number={number}
-          customer={customer}
-          site={j.stores?.address || ""}
-          title={title}
-          issued={fmt(job.created_at)}
-          due={fmt(requiredBy)}
-          contact={contact}
-          phone={phone}
-        />
+        {header}
 
         <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
@@ -301,46 +306,34 @@ export default function JobCardPage() {
 
         <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
           <Box title="ADDITIONAL NOTES / ISSUES" className="h-[44mm]" />
-          <Box title="JOB STATUS (tick)" className="h-[31mm]">
+          <Box title="JOB STATUS (tick)" className="h-[38mm]">
             <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />
           </Box>
-          <div className="flex h-[44mm] flex-col">
-            <Box title="SIGN OFF" className="h-[25mm]">
-              <div className="space-y-[2.7mm] pt-[.2mm] text-[11.2px]">
-                <SignLine label="Name" />
-                <SignLine label="Signature" />
-                <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
-              </div>
-            </Box>
-            <div className="mt-[2mm] flex flex-1 items-center justify-center">
-              {qrUrl ? (
-                <div className="flex items-center gap-[2mm]">
-                  <img src={qrUrl} alt="RPM job QR code" className="h-[14mm] w-[14mm]" />
-                  <div className="text-[7.5px] leading-tight text-neutral-600">Scan to<br />view in RPM</div>
-                </div>
-              ) : (
-                <div className="h-[14mm] w-[14mm] border border-neutral-400" />
-              )}
+          <Box title="SIGN OFF" className="h-[38mm]">
+            <div className="space-y-[4mm] pt-[.5mm] text-[11.5px]">
+              <SignLine label="Name" />
+              <SignLine label="Signature" />
+              <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
             </div>
-          </div>
+          </Box>
         </div>
       </Sheet>
 
       <Sheet className="safety-sheet">
-        <SafetyHeader />
+        {header}
 
-        <div className="mt-[3.5mm] text-center">
+        <div className="mt-[3mm] text-center">
           <div className="text-[22px] font-black tracking-tight" style={{ color: GREEN }}>SAFETY INFORMATION</div>
           <div className="text-[12px] font-bold" style={{ color: GREEN }}>OUR SAFETY COMMITMENT</div>
-          <p className="mx-auto mt-[3mm] max-w-[165mm] text-[11.4px] leading-[1.42]">
+          <p className="mx-auto mt-[2.5mm] max-w-[165mm] text-[11.4px] leading-[1.42]">
             At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
           </p>
-          <div className="mt-[3mm] text-[12.6px] font-black tracking-[.03em]" style={{ color: GREEN }}>
+          <div className="mt-[2.5mm] text-[12.6px] font-black tracking-[.03em]" style={{ color: GREEN }}>
             THINK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;HOME SAFE
           </div>
         </div>
 
-        <div className="mt-[5mm] grid grid-cols-2 gap-[2mm]">
+        <div className="mt-[4mm] grid grid-cols-2 gap-[2mm]">
           <Box title="REQUIRED PPE" suffix="(as applicable)" className="h-[62mm]">
             <div className="grid grid-cols-4 gap-x-[2mm] gap-y-[4mm] pt-[2mm]">
               {ppe.map(({ label, Icon }) => (
@@ -367,7 +360,7 @@ export default function JobCardPage() {
           </Box>
         </div>
 
-        <div className="mt-[2.5mm]">
+        <div className="mt-[2mm]">
           <Box title="EMERGENCY INFORMATION" className="h-[47mm]">
             <div className="grid grid-cols-4 gap-[3mm] pt-[2mm]">
               <Emergency icon="phone" color="#ef3d35" title="Emergency (Fire / Police / Ambulance)" value="111" bold />
@@ -378,10 +371,10 @@ export default function JobCardPage() {
           </Box>
         </div>
 
-        <div className="mt-[2.5mm]">
-          <Box title="NOTES" className="h-[28mm]">
+        <div className="mt-[2mm]">
+          <Box title="NOTES" className="h-[39mm]">
             <div className="space-y-[5mm] pt-[1mm]">
-              {rows(3).map((_, i) => <div key={i} className="border-b border-[#c7d1ce]" />)}
+              {rows(5).map((_, i) => <div key={i} className="border-b border-[#c7d1ce]" />)}
             </div>
           </Box>
         </div>
@@ -407,6 +400,7 @@ function JobHeader({
   due,
   contact,
   phone,
+  qrUrl,
 }: {
   number: string
   customer: string
@@ -416,9 +410,10 @@ function JobHeader({
   due: string
   contact: string
   phone: string
+  qrUrl: string
 }) {
   return (
-    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_31mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
+    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_22mm_29mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
       <div className="flex items-center justify-center bg-white">
         <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
       </div>
@@ -433,18 +428,15 @@ function JobHeader({
         <div className="flex gap-[1.8mm]"><span className="font-bold">Required By:</span><span>{due}</span></div>
       </div>
 
+      <div className="flex flex-col items-center justify-center bg-white">
+        {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
+        <div className="mt-[.8mm] text-center text-[7.4px] leading-none">Scan to view in RPM</div>
+      </div>
+
       <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
         <div className="text-[8.5px] font-bold leading-none">Job No.</div>
         <div className="mt-[1mm] text-[36px] font-black leading-none tracking-tight" style={{ color: GREEN }}>{number}</div>
       </div>
-    </div>
-  )
-}
-
-function SafetyHeader() {
-  return (
-    <div className="flex justify-center border-b border-[#9ebbb2] pb-[3mm]">
-      <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
     </div>
   )
 }
@@ -533,7 +525,7 @@ function MaterialsGrid({ lines }: { lines: BomLine[] }) {
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
           </tr>
         ))}
-        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />)}</tr>)}
+        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />}</tr>)}
       </tbody>
     </table>
   )
