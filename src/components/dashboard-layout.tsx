@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
+import { Printer } from "lucide-react"
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -67,7 +69,20 @@ export default function DashboardLayout({
                                 <CustomerFilterDropdown />
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                            {pathname === "/leads" && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 gap-1.5"
+                                    onClick={() => window.print()}
+                                    title="Print the currently filtered Leads & To Do list or save it as PDF"
+                                >
+                                    <Printer className="size-3.5" />
+                                    Print / PDF
+                                </Button>
+                            )}
                             <ThemeToggle />
                         </div>
                     </header>
