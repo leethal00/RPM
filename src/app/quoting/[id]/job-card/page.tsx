@@ -105,6 +105,18 @@ function prettyQty(value: number | null | undefined) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
 }
 
+function inferDepartments(title: string, details: string, lines: BomLine[]) {
+  const routingText = `${title} ${details} ${lines.map((line) => `${line.section || ""} ${line.subsection || ""} ${line.description || ""}`).join(" ")}`.toLowerCase()
+  const result = new Set<string>()
+  if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) result.add("CNC")
+  if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) result.add("Metal")
+  if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) result.add("Fab")
+  if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) result.add("Electrical")
+  if (/vinyl|graphic|print|laminat/.test(routingText)) result.add("Vinyl")
+  if (/servic|repair|site|install|maintenance/.test(routingText)) result.add("Install")
+  return Array.from(result)
+}
+
 export default function JobCardPage() {
   const supabase = useMemo(() => createClient(), [])
   const { id } = useParams<{ id: string }>()
@@ -135,9 +147,12 @@ export default function JobCardPage() {
           .order("sort"),
       ])
       if (live) {
-        setJob(jobData as CostingJob)
+        const nextJob = jobData as CostingJob & { production_title?: string | null; production_details?: string | null }
+        const nextLines = (lineData || []) as BomLine[]
+        setJob(nextJob)
         setItems((itemData || []) as JobItem[])
-        setBomLines((lineData || []) as BomLine[])
+        setBomLines(nextLines)
+        setSelectedDepartments(inferDepartments(nextJob.production_title || nextJob.title || "", nextJob.production_details ?? nextJob.details ?? "", nextLines))
         setLoading(false)
       }
     })()
@@ -172,22 +187,6 @@ export default function JobCardPage() {
   const buildSummary = buildItems.length
     ? buildItems.map((item) => `${item.name}: ${prettyQty(item.build_qty ?? item.qty ?? 1)}`).join(" · ")
     : ""
-
-  const routingText = `${title || ""} ${details || ""} ${bomLines.map((line) => `${line.section || ""} ${line.subsection || ""} ${line.description || ""}`).join(" ")}`.toLowerCase()
-  const autoDepartments = useMemo(() => {
-    const result = new Set<string>()
-    if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) result.add("CNC")
-    if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) result.add("Metal")
-    if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) result.add("Fab")
-    if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) result.add("Electrical")
-    if (/vinyl|graphic|print|laminat/.test(routingText)) result.add("Vinyl")
-    if (/servic|repair|site|install|maintenance/.test(routingText)) result.add("Install")
-    return Array.from(result)
-  }, [routingText])
-
-  useEffect(() => {
-    setSelectedDepartments(autoDepartments)
-  }, [autoDepartments.join("|")])
 
   const scopeLines = bomLines
     .filter((line) => line.description?.trim() && Number(line.qty || 0) !== 0 && !materialMeta(line)?.is_labour)
