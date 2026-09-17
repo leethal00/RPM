@@ -212,14 +212,14 @@ export default function CostingJobDetailPage() {
                         <Tabs defaultValue={isJobStage ? "actuals" : "items"} className="mt-2">
                             <TabsList>
                                 <TabsTrigger value="items">{isJobStage ? "Quoted Items" : "Items"}</TabsTrigger>
-                                <TabsTrigger value="actuals">Actuals</TabsTrigger>
-                                <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
+                                {isJobStage && <TabsTrigger value="actuals">Actuals</TabsTrigger>}
+                                {isJobStage && <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>}
                             </TabsList>
                             <TabsContent value="items">
                                 <div className={isJobStage ? "pointer-events-none select-none" : ""}><ItemsList job={job} /></div>
                             </TabsContent>
-                            <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>
-                            <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>
+                            {isJobStage && <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>}
+                            {isJobStage && <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>}
                         </Tabs>
                     </>
                 )}
