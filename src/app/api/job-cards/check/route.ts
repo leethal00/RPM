@@ -11,44 +11,44 @@ export async function POST() {
         return NextResponse.json({ ok: false, error: "Not signed in" }, { status: 401 })
     }
 
+    const { data: sessionData } = await server.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+
+    if (!accessToken) {
+        return NextResponse.json({ ok: false, error: "No active RPM session token" }, { status: 401 })
+    }
+
     try {
-        const { data, error } = await server.functions.invoke("job-card-mail-ingest", {
-            body: {},
+        const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/job-card-mail-ingest`
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                "Content-Type": "application/json",
+            },
+            body: "{}",
+            cache: "no-store",
         })
 
-        if (error) {
-            let detail = error.message || "Mailbox check failed"
-            const context = (error as { context?: Response }).context
-
-            if (context) {
-                try {
-                    const payload = await context.clone().json()
-                    if (payload?.error) {
-                        detail = payload.stage ? `${payload.stage}: ${payload.error}` : payload.error
-                    }
-                } catch {
-                    try {
-                        const text = await context.clone().text()
-                        if (text) detail = text
-                    } catch {
-                        // Keep the original error message.
-                    }
-                }
-            }
-
-            return NextResponse.json({ ok: false, error: detail }, { status: 502 })
+        const text = await response.text()
+        let payload: Record<string, unknown> = {}
+        try {
+            payload = text ? JSON.parse(text) : {}
+        } catch {
+            payload = { ok: false, error: text || `Importer returned HTTP ${response.status}` }
         }
 
-        if (data?.ok === false) {
-            const detail = data.stage ? `${data.stage}: ${data.error || "Mailbox check failed"}` : (data.error || "Mailbox check failed")
-            return NextResponse.json({ ok: false, error: detail }, { status: 502 })
+        const ok = payload.ok !== false && response.ok
+        const error = typeof payload.error === "string" ? payload.error : `Importer returned HTTP ${response.status}`
+        const stage = typeof payload.stage === "string" ? payload.stage : ""
+
+        if (!ok) {
+            return NextResponse.json({ ok: false, error: stage ? `${stage}: ${error}` : error, diagnostic: payload })
         }
 
-        return NextResponse.json(data || { ok: true, checked: 0, results: [] })
+        return NextResponse.json(payload)
     } catch (error) {
-        return NextResponse.json(
-            { ok: false, error: error instanceof Error ? error.message : "Mailbox check failed" },
-            { status: 500 }
-        )
+        return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Mailbox check failed" })
     }
 }
