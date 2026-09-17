@@ -263,7 +263,7 @@ export default function JobCardPage() {
         <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
           {DEPARTMENTS.map((d) => (
-            <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[10.8px]">
+            <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[11.6px]">
               <CheckBox checked={selectedDepartments.includes(d)} />{d}
             </button>
           ))}
@@ -273,19 +273,19 @@ export default function JobCardPage() {
           <Box title="JOB DETAILS / SCOPE OF WORK" className="min-h-[60mm]">
             <div className="space-y-[2.5mm]">
               {quoteItems.length ? quoteItems.map((item) => (
-                <div key={item.id} className="space-y-[.8mm]">
+                <div key={item.id} className="space-y-[.8mm] text-[12px]">
                   <div><strong>Qty:</strong> {prettyQty(item.qty || 1)}</div>
                   {item.size && <div><strong>Size:</strong> {item.size}</div>}
                   {item.details && <div className="whitespace-pre-wrap">{item.details}</div>}
                   {item.delivery && <div>{deliveryLabel(item.delivery)}</div>}
                 </div>
               )) : (
-                <div className="whitespace-pre-wrap">{details || title}</div>
+                <div className="whitespace-pre-wrap text-[12px]">{details || title}</div>
               )}
             </div>
           </Box>
           <Box title="DRAWING / SKETCH" className="min-h-[60mm]">
-            <div className="flex min-h-[48mm] items-center justify-center border border-[#d5dfdc] text-center text-[10px] text-neutral-400">
+            <div className="flex min-h-[48mm] items-center justify-center border border-[#d5dfdc] text-center text-[10.5px] text-neutral-400">
               Sketch here or attach manufacture drawings
             </div>
           </Box>
@@ -296,17 +296,17 @@ export default function JobCardPage() {
 
         <Bar>TIME LOG</Bar>
         <JobGrid />
-        <div className="flex h-[8.5mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[11px] font-bold">
-          <span>Total Hours:</span><span className="h-[7.5mm] w-[17mm] border border-[#7b9e92] bg-white" />
+        <div className="flex h-[8mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[11.8px] font-bold">
+          <span>Total Hours:</span><span className="h-[7mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
 
-        <div className="mt-[3mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
-          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[34mm]" />
-          <Box title="JOB STATUS (tick when complete)" className="h-[34mm]">
+        <div className="mt-[2.5mm] grid grid-cols-[1.15fr_.92fr_1fr] gap-[2mm]">
+          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[36mm]" />
+          <Box title="JOB STATUS (tick when complete)" className="h-[36mm]">
             <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />
           </Box>
-          <Box title="SIGN OFF" className="h-[34mm]">
-            <div className="space-y-[3.8mm] pt-[.5mm]">
+          <Box title="SIGN OFF" className="h-[36mm]">
+            <div className="space-y-[4mm] pt-[.5mm] text-[11.5px]">
               <SignLine label="Name" />
               <SignLine label="Signature" />
               <div className="flex items-end gap-[2mm]"><span className="w-[13mm]">Date:</span><span className="flex-1 border-b border-neutral-700" /></div>
@@ -319,12 +319,12 @@ export default function JobCardPage() {
         <SafetyHeader />
 
         <div className="mt-[3.5mm] text-center">
-          <div className="text-[21px] font-black tracking-tight" style={{ color: GREEN }}>SAFETY INFORMATION</div>
-          <div className="text-[11.5px] font-bold" style={{ color: GREEN }}>OUR SAFETY COMMITMENT</div>
-          <p className="mx-auto mt-[3mm] max-w-[165mm] text-[10.8px] leading-[1.45]">
+          <div className="text-[22px] font-black tracking-tight" style={{ color: GREEN }}>SAFETY INFORMATION</div>
+          <div className="text-[12px] font-bold" style={{ color: GREEN }}>OUR SAFETY COMMITMENT</div>
+          <p className="mx-auto mt-[3mm] max-w-[165mm] text-[11.4px] leading-[1.42]">
             At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
           </p>
-          <div className="mt-[3mm] text-[12px] font-black tracking-[.03em]" style={{ color: GREEN }}>
+          <div className="mt-[3mm] text-[12.6px] font-black tracking-[.03em]" style={{ color: GREEN }}>
             THINK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;HOME SAFE
           </div>
         </div>
@@ -337,7 +337,7 @@ export default function JobCardPage() {
                   <div className="grid h-[15mm] w-[15mm] place-items-center rounded-full bg-[#0871b7] text-white">
                     <Icon className="h-[9mm] w-[9mm]" strokeWidth={1.8} />
                   </div>
-                  <div className="mt-[1.2mm] whitespace-pre-line text-[9.8px] font-medium leading-tight">{label}</div>
+                  <div className="mt-[1.2mm] whitespace-pre-line text-[10.2px] font-medium leading-tight">{label}</div>
                 </div>
               ))}
             </div>
@@ -350,7 +350,7 @@ export default function JobCardPage() {
             <Checks items={onSite} tight />
           </Box>
           <Box title="KEY PROCEDURES" className="h-[61mm]">
-            <ul className="list-disc space-y-[1.2mm] pl-[4.5mm] pt-[.5mm] text-[9.8px] leading-tight">
+            <ul className="list-disc space-y-[1.1mm] pl-[4.5mm] pt-[.5mm] text-[10.2px] leading-tight">
               {procedures.map((x) => <li key={x}>{x}</li>)}
             </ul>
           </Box>
@@ -381,7 +381,7 @@ export default function JobCardPage() {
 
 function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`sheet box-border mx-auto my-6 min-h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11px] leading-[1.3] shadow-2xl ${className}`}>
+    <div className={`sheet box-border mx-auto my-6 min-h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
       {children}
     </div>
   )
@@ -414,7 +414,7 @@ function JobHeader({
         <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
       </div>
 
-      <div className="grid grid-cols-[1fr_1fr] content-start gap-x-[4mm] gap-y-[1.3mm] pt-[.5mm] text-[10.2px] leading-[1.12]">
+      <div className="grid grid-cols-[1fr_1fr] content-start gap-x-[4mm] gap-y-[1.15mm] pt-[.5mm] text-[11px] leading-[1.1]">
         <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Client:</span><span className="font-bold">{customer}</span></div>
         <div className="flex gap-[1.8mm]"><span className="font-bold">Contact:</span><span>{contact}</span></div>
         <div className="flex gap-[1.8mm]"><span className="font-bold">Phone:</span><span>{phone}</span></div>
@@ -426,12 +426,12 @@ function JobHeader({
 
       <div className="flex flex-col items-center justify-center bg-white">
         {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-        <div className="mt-[.8mm] text-center text-[7px] leading-none">Scan to view in RPM</div>
+        <div className="mt-[.8mm] text-center text-[7.4px] leading-none">Scan to view in RPM</div>
       </div>
 
       <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
-        <div className="text-[8px] font-bold leading-none">Job No.</div>
-        <div className="mt-[1mm] text-[34px] font-black leading-none tracking-tight" style={{ color: GREEN }}>{number}</div>
+        <div className="text-[8.5px] font-bold leading-none">Job No.</div>
+        <div className="mt-[1mm] text-[36px] font-black leading-none tracking-tight" style={{ color: GREEN }}>{number}</div>
       </div>
     </div>
   )
@@ -447,7 +447,7 @@ function SafetyHeader() {
 
 function Bar({ children, noTop = false }: { children: React.ReactNode; noTop?: boolean }) {
   return (
-    <div className={`${noTop ? "" : "mt-[2.2mm]"} h-[6mm] px-[2.5mm] py-[.8mm] text-[11.2px] font-black text-white`} style={{ background: GREEN }}>
+    <div className={`${noTop ? "" : "mt-[2.1mm]"} h-[6mm] px-[2.5mm] py-[.7mm] text-[12px] font-black text-white`} style={{ background: GREEN }}>
       {children}
     </div>
   )
@@ -466,7 +466,7 @@ function Box({
 }) {
   return (
     <div className={`box-border border border-[#b9c5c1] bg-white ${className}`}>
-      <div className="flex h-[6mm] items-center px-[2.5mm] text-[11.2px] text-white" style={{ background: GREEN }}>
+      <div className="flex h-[6mm] items-center px-[2.5mm] text-[12px] text-white" style={{ background: GREEN }}>
         <span className="font-black">{title}</span>{suffix && <span className="ml-[1.2mm] font-normal">{suffix}</span>}
       </div>
       <div className="box-border p-[2mm]">{children}</div>
@@ -488,11 +488,11 @@ function CheckBox({ checked = false }: { checked?: boolean }) {
 
 function Checks({ items, tight = false }: { items: string[]; tight?: boolean }) {
   return (
-    <div className={tight ? "space-y-[1.15mm]" : "space-y-[1.8mm]"}>
+    <div className={tight ? "space-y-[.8mm]" : "space-y-[1.5mm]"}>
       {items.map((x) => (
         <div key={x} className="flex items-start gap-[2mm]">
           <CheckBox />
-          <span className={tight ? "text-[10px] leading-[1.05]" : "text-[10.6px] leading-tight"}>{x}</span>
+          <span className={tight ? "text-[10.6px] leading-[1.02]" : "text-[11.2px] leading-tight"}>{x}</span>
         </div>
       ))}
     </div>
@@ -505,8 +505,8 @@ function JobGrid() {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[9.5px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(9).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
+      <tbody>{rows(7).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
 }
@@ -518,14 +518,14 @@ function MaterialsGrid({ lines }: { lines: BomLine[] }) {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[9.5px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
       <tbody>
         {lines.map((line) => (
           <tr key={line.id}>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1.5mm] text-[9.6px]">{line.description}</td>
+            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1.5mm] text-[10.5px]">{line.description}</td>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1mm] text-center text-[9.6px]">{materialMeta(line)?.unit || ""}</td>
+            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.5px]">{materialMeta(line)?.unit || ""}</td>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
           </tr>
         ))}
@@ -545,8 +545,8 @@ function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" 
         {icon === "firstaid" && <Cross className={iconClass} strokeWidth={3} />}
         {icon === "hospital" && <Hospital className={iconClass} />}
       </div>
-      <div className="mt-[1.5mm] text-[8.6px] leading-tight">{title}</div>
-      {value ? <div className={bold ? "mt-[1mm] text-[17px] font-black leading-none" : "text-[11px] font-bold"}>{value}</div> : <div className="mt-[4mm] w-[28mm] border-b border-neutral-500" />}
+      <div className="mt-[1.5mm] text-[9.2px] leading-tight">{title}</div>
+      {value ? <div className={bold ? "mt-[1mm] text-[18px] font-black leading-none" : "text-[11.5px] font-bold"}>{value}</div> : <div className="mt-[4mm] w-[28mm] border-b border-neutral-500" />}
     </div>
   )
 }
