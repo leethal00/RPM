@@ -11,11 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowUpDown, Briefcase, Download, Search } from "lucide-react"
+import { ArrowUpDown, Briefcase, Download, RotateCcw, Search } from "lucide-react"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
+import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { toast } from "sonner"
 import type { Client, CostingJob, Store } from "@/types/database"
 
@@ -30,6 +31,7 @@ type JobRow = CostingJob & {
 type SortKey = "job" | "client" | "job_number" | "job_lead" | "completion_date" | "status"
 type SortDirection = "asc" | "desc"
 type JobView = "active" | "completed"
+type DateFilter = "all" | "overdue" | "today" | "next7" | "none"
 type ImportPreview = {
     invoiceId: string | null
     invoiceNumber: string
@@ -40,6 +42,23 @@ type ImportPreview = {
     status: string
     total: number
     lines: Array<{ index: number; itemCode: string; description: string; quantity: number; unitAmount: number; lineAmount: number }>
+}
+
+type ColumnKey = SortKey
+type ColumnMeta = { key: ColumnKey; label: string; width: number; min: number }
+
+const JOB_COLUMNS: ColumnMeta[] = [
+    { key: "job", label: "Job", width: 330, min: 180 },
+    { key: "client", label: "Client / Site", width: 250, min: 140 },
+    { key: "job_number", label: "Job #", width: 120, min: 80 },
+    { key: "job_lead", label: "People", width: 160, min: 110 },
+    { key: "completion_date", label: "Complete by", width: 140, min: 100 },
+    { key: "status", label: "Status", width: 130, min: 90 },
+]
+const JOB_COLUMN_BY_KEY = Object.fromEntries(JOB_COLUMNS.map((column) => [column.key, column])) as Record<ColumnKey, ColumnMeta>
+const JOB_COLUMN_LAYOUT = {
+    order: JOB_COLUMNS.map((column) => column.key),
+    widths: Object.fromEntries(JOB_COLUMNS.map((column) => [column.key, column.width])),
 }
 
 const STATUS = {
@@ -55,6 +74,64 @@ function formatDate(value?: string | null) {
 }
 
 const nz = (value: number) => value.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
+const isoToday = () => new Date().toISOString().slice(0, 10)
+const isoPlusDays = (days: number) => {
+    const date = new Date()
+    date.setDate(date.getDate() + days)
+    return date.toISOString().slice(0, 10)
+}
+
+function JobColumnHeader({
+    column,
+    width,
+    activeSort,
+    sortDirection,
+    onSort,
+    onMove,
+    onResize,
+}: {
+    column: ColumnMeta
+    width: number
+    activeSort: SortKey
+    sortDirection: SortDirection
+    onSort: (key: SortKey) => void
+    onMove: (from: string, to: string) => void
+    onResize: (key: string, width: number) => void
+}) {
+    const startResize = (event: React.PointerEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const startX = event.clientX
+        const startWidth = width
+        const move = (pointer: PointerEvent) => onResize(column.key, Math.max(column.min, startWidth + pointer.clientX - startX))
+        const stop = () => {
+            window.removeEventListener("pointermove", move)
+            window.removeEventListener("pointerup", stop)
+            document.body.style.cursor = ""
+        }
+        window.addEventListener("pointermove", move)
+        window.addEventListener("pointerup", stop)
+        document.body.style.cursor = "col-resize"
+    }
+
+    return (
+        <th
+            draggable
+            onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", column.key) }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => { event.preventDefault(); const from = event.dataTransfer.getData("text/plain"); if (from) onMove(from, column.key) }}
+            className="relative border-b border-border/60 p-0 select-none"
+            title="Drag to reorder column"
+        >
+            <button type="button" onClick={() => onSort(column.key)} className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium hover:text-foreground">
+                <span className="truncate">{column.label}</span>
+                <ArrowUpDown className={`size-3.5 shrink-0 ${activeSort === column.key ? "text-foreground" : "opacity-40"}`} />
+                {activeSort === column.key && <span className="sr-only">{sortDirection === "asc" ? "ascending" : "descending"}</span>}
+            </button>
+            <div onPointerDown={startResize} className="absolute top-0 -right-1.5 z-10 h-full w-3 cursor-col-resize touch-none" title={`Resize ${column.label}`} />
+        </th>
+    )
+}
 
 export default function ActiveJobsPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -65,6 +142,12 @@ export default function ActiveJobsPage() {
     const [search, setSearch] = useState("")
     const [sortKey, setSortKey] = useState<SortKey>("completion_date")
     const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
+    const [clientFilter, setClientFilter] = useState("all")
+    const [siteFilter, setSiteFilter] = useState("all")
+    const [leadFilter, setLeadFilter] = useState("all")
+    const [dateFilter, setDateFilter] = useState<DateFilter>("all")
+    const [statusFilter, setStatusFilter] = useState("all")
+    const { order, widths, move, setWidth, reset } = useColumnLayout("jobs-columns-v1", JOB_COLUMN_LAYOUT)
 
     const [importOpen, setImportOpen] = useState(false)
     const [invoiceSearch, setInvoiceSearch] = useState("")
@@ -80,7 +163,26 @@ export default function ActiveJobsPage() {
     const [completionDate, setCompletionDate] = useState("")
 
     const statuses = view === "active" ? ["in_progress"] : ["complete", "invoiced", "cancelled"]
-    const key = `costing-jobs-${view}-${page}-${clientId ?? "all"}-${search}`
+
+    const { data: filterOptions } = useSupabaseQuery<{
+        clients: Pick<Client, "id" | "name">[]
+        stores: Pick<Store, "id" | "name" | "client_id">[]
+        leads: string[]
+    }>(`job-filter-options-${view}`, async () => {
+        const [{ data: clientRows }, { data: storeRows }, { data: leadRows }] = await Promise.all([
+            supabase.from("clients").select("id,name").order("name"),
+            supabase.from("stores").select("id,name,client_id").order("name"),
+            supabase.from("costing_jobs").select("job_lead_name").eq("is_template", false).in("status", statuses).not("job_lead_name", "is", null),
+        ])
+        const leads = Array.from(new Set((leadRows || []).map((row) => row.job_lead_name?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b))
+        return { data: { clients: (clientRows || []) as Pick<Client, "id" | "name">[], stores: (storeRows || []) as Pick<Store, "id" | "name" | "client_id">[], leads }, error: null }
+    })
+
+    const filterClients = filterOptions?.clients || []
+    const filterStores = (filterOptions?.stores || []).filter((store) => clientFilter === "all" || store.client_id === clientFilter)
+    const filterLeads = filterOptions?.leads || []
+
+    const key = `costing-jobs-${view}-${page}-${clientId ?? "all"}-${search}-${clientFilter}-${siteFilter}-${leadFilter}-${dateFilter}-${statusFilter}`
 
     const { data: result, isLoading, mutate } = useSupabaseQuery<{ items: JobRow[]; count: number }>(key, async () => {
         let query = supabase
@@ -90,6 +192,14 @@ export default function ActiveJobsPage() {
             .in("status", statuses)
 
         if (clientId) query = query.eq("client_id", clientId)
+        if (clientFilter !== "all") query = query.eq("client_id", clientFilter)
+        if (siteFilter !== "all") query = query.eq("store_id", siteFilter)
+        if (leadFilter !== "all") query = query.eq("job_lead_name", leadFilter)
+        if (statusFilter !== "all") query = query.eq("status", statusFilter)
+        if (dateFilter === "overdue") query = query.lt("completion_date", isoToday())
+        if (dateFilter === "today") query = query.eq("completion_date", isoToday())
+        if (dateFilter === "next7") query = query.gte("completion_date", isoToday()).lte("completion_date", isoPlusDays(7))
+        if (dateFilter === "none") query = query.is("completion_date", null)
         if (search.trim()) {
             const term = search.trim().replace(/[,()*%]/g, "")
             query = query.or(`title.ilike.%${term}%,production_title.ilike.%${term}%,reference.ilike.%${term}%,job_number.ilike.%${term}%,xero_invoice_number.ilike.%${term}%,quoted_by_name.ilike.%${term}%,job_lead_name.ilike.%${term}%`)
@@ -135,12 +245,14 @@ export default function ActiveJobsPage() {
 
     const totalCount = result?.count ?? 0
     const clientStores = selectedClient === "none" ? [] : stores.filter((store) => store.client_id === selectedClient)
+    const tableWidth = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as ColumnKey].width), 0)
 
     function changeView(next: JobView) {
         setView(next)
         setPage(1)
         setSortKey(next === "active" ? "completion_date" : "job")
         setSortDirection("asc")
+        setStatusFilter("all")
     }
 
     function toggleSort(field: SortKey) {
@@ -151,15 +263,24 @@ export default function ActiveJobsPage() {
         }
     }
 
-    function renderSortHeader(field: SortKey, children: React.ReactNode, className = "") {
-        return (
-            <th className={`font-medium px-4 py-2.5 ${className}`}>
-                <button type="button" onClick={() => toggleSort(field)} className="inline-flex items-center gap-1.5 hover:text-foreground">
-                    {children}
-                    <ArrowUpDown className={`size-3.5 ${sortKey === field ? "text-foreground" : "opacity-45"}`} />
-                </button>
-            </th>
-        )
+    function resetFilters() {
+        setSearch("")
+        setClientFilter("all")
+        setSiteFilter("all")
+        setLeadFilter("all")
+        setDateFilter("all")
+        setStatusFilter("all")
+        setPage(1)
+    }
+
+    function renderCell(key: ColumnKey, job: JobRow) {
+        if (key === "job") return <><div className="font-medium truncate">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground truncate">{job.reference}</div>}</>
+        if (key === "client") return <span className="text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</span>
+        if (key === "job_number") return <span className="tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</span>
+        if (key === "job_lead") return <div className="text-xs"><div className="font-medium truncate">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground truncate">Quoted: {job.quoted_by_name || "—"}</div></div>
+        if (key === "completion_date") return <span className="tabular-nums">{formatDate(job.completion_date)}</span>
+        const meta = STATUS[job.status as keyof typeof STATUS] || STATUS.in_progress
+        return <Badge variant="secondary" className={meta.className}>{meta.label}</Badge>
     }
 
     async function openImport() {
@@ -186,11 +307,8 @@ export default function ActiveJobsPage() {
             const response = await fetch(`/api/xero/import-job?invoice=${encodeURIComponent(invoiceNumber)}`, { cache: "no-store" })
             const body = await response.json()
             if (!response.ok) {
-                if (body?.existingJobId) {
-                    setImportError(`${body.error} Open the existing RPM job instead.`)
-                } else {
-                    setImportError(body?.error || "Could not find that Xero invoice.")
-                }
+                if (body?.existingJobId) setImportError(`${body.error} Open the existing RPM job instead.`)
+                else setImportError(body?.error || "Could not find that Xero invoice.")
                 return
             }
             const invoice = body.invoice as ImportPreview
@@ -234,63 +352,91 @@ export default function ActiveJobsPage() {
 
     return (
         <DashboardLayout>
-            <PageShell>
+            <PageShell width="full" className="px-4 xl:px-6 gap-2 py-4">
                 <PageHeader icon={Briefcase} kicker="Job & Project Management" title="Jobs" description="Manage live production work and keep completed jobs available as history." />
 
-                <Tabs value={view} onValueChange={(value) => changeView(value as JobView)} className="mb-5">
+                <Tabs value={view} onValueChange={(value) => changeView(value as JobView)}>
                     <TabsList>
                         <TabsTrigger value="active">Active Jobs</TabsTrigger>
                         <TabsTrigger value="completed">Completed Jobs</TabsTrigger>
                     </TabsList>
                 </Tabs>
 
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="relative flex-1 max-w-md">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-[260px] flex-1 max-w-md">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-9" />
+                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-8" />
                     </div>
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={openImport}><Download className="size-3.5"/> Import from Xero</Button>
-                    <span className="text-xs text-muted-foreground ml-2">{totalCount} {totalCount === 1 ? "job" : "jobs"}</span>
+                    <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setSiteFilter("all"); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                        <option value="all">All customers</option>
+                        {filterClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                    </select>
+                    <select value={siteFilter} onChange={(event) => { setSiteFilter(event.target.value); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                        <option value="all">All sites</option>
+                        {filterStores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                    </select>
+                    <select value={leadFilter} onChange={(event) => { setLeadFilter(event.target.value); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                        <option value="all">All job leads</option>
+                        {filterLeads.map((lead) => <option key={lead} value={lead}>{lead}</option>)}
+                    </select>
+                    <select value={dateFilter} onChange={(event) => { setDateFilter(event.target.value as DateFilter); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                        <option value="all">All complete-by dates</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="today">Due today</option>
+                        <option value="next7">Next 7 days</option>
+                        <option value="none">No date</option>
+                    </select>
+                    {view === "completed" && (
+                        <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                            <option value="all">All statuses</option>
+                            <option value="complete">Complete</option>
+                            <option value="invoiced">Invoiced</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    )}
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openImport}><Download className="size-3.5"/> Import from Xero</Button>
+                    <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={resetFilters}>Clear filters</Button>
+                    <span className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "job" : "jobs"}</span>
+                    <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-xs text-muted-foreground" onClick={reset} title="Reset column order and widths"><RotateCcw className="size-3.5" /> Reset columns</Button>
                 </div>
 
                 {isLoading ? (
-                    <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />)}</div>
+                    <div className="space-y-1">{[1,2,3,4].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
                 ) : jobs.length ? (
                     <>
-                        <div className="border border-border/60 rounded-lg overflow-hidden">
-                            <table className="w-full text-sm">
+                        <div className="border border-border/60 rounded-lg overflow-auto">
+                            <table className="text-sm table-fixed min-w-full" style={{ width: tableWidth }}>
+                                <colgroup>{order.map((key) => <col key={key} style={{ width: widths[key] }} />)}</colgroup>
                                 <thead className="bg-muted/40 text-muted-foreground">
                                     <tr className="text-left">
-                                        {renderSortHeader("job", "Job")}
-                                        {renderSortHeader("client", "Client / Site")}
-                                        {renderSortHeader("job_number", "Job #", "w-32")}
-                                        {renderSortHeader("job_lead", "People", "w-36")}
-                                        {renderSortHeader("completion_date", "Complete by", "w-36")}
-                                        {renderSortHeader("status", "Status", "w-32")}
+                                        {order.map((key) => (
+                                            <JobColumnHeader
+                                                key={key}
+                                                column={JOB_COLUMN_BY_KEY[key as ColumnKey]}
+                                                width={widths[key] || JOB_COLUMN_BY_KEY[key as ColumnKey].width}
+                                                activeSort={sortKey}
+                                                sortDirection={sortDirection}
+                                                onSort={toggleSort}
+                                                onMove={move}
+                                                onResize={setWidth}
+                                            />
+                                        ))}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {jobs.map(job => {
-                                        const meta = STATUS[job.status as keyof typeof STATUS] || STATUS.in_progress
-                                        return (
-                                            <tr key={job.id} onClick={() => router.push(`/quoting/jobs/${job.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30">
-                                                <td className="px-4 py-3"><div className="font-medium">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground">{job.reference}</div>}</td>
-                                                <td className="px-4 py-3 text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</td>
-                                                <td className="px-4 py-3 tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</td>
-                                                <td className="px-4 py-3 text-xs"><div className="font-medium">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground">Quoted: {job.quoted_by_name || "—"}</div></td>
-                                                <td className="px-4 py-3 tabular-nums">{formatDate(job.completion_date)}</td>
-                                                <td className="px-4 py-3"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td>
-                                            </tr>
-                                        )
-                                    })}
+                                    {jobs.map(job => (
+                                        <tr key={job.id} onClick={() => router.push(`/quoting/jobs/${job.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30">
+                                            {order.map((key) => <td key={key} className="px-3 py-1.5 overflow-hidden align-middle">{renderCell(key as ColumnKey, job)}</td>)}
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
                         <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />
                     </>
                 ) : (
-                    <div className="py-16 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
-                        {view === "active" ? "No active jobs." : "No completed jobs yet."}
+                    <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
+                        {view === "active" ? "No active jobs match the selected filters." : "No completed jobs match the selected filters."}
                     </div>
                 )}
 
