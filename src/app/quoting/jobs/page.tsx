@@ -47,12 +47,12 @@ type ImportPreview = {
 type ColumnMeta = { key: SortKey; label: string; width: number; min: number }
 
 const JOB_COLUMNS: ColumnMeta[] = [
-    { key: "job", label: "Job", width: 330, min: 180 },
-    { key: "client", label: "Client / Site", width: 250, min: 140 },
-    { key: "job_number", label: "Job #", width: 120, min: 80 },
-    { key: "job_lead", label: "People", width: 160, min: 110 },
-    { key: "completion_date", label: "Complete by", width: 140, min: 100 },
-    { key: "status", label: "Status", width: 130, min: 90 },
+    { key: "job", label: "Job", width: 300, min: 80 },
+    { key: "client", label: "Client / Site", width: 220, min: 70 },
+    { key: "job_number", label: "Job #", width: 105, min: 55 },
+    { key: "job_lead", label: "People", width: 145, min: 70 },
+    { key: "completion_date", label: "Complete by", width: 130, min: 75 },
+    { key: "status", label: "Status", width: 110, min: 65 },
 ]
 
 const JOB_COLUMN_BY_KEY: Record<SortKey, ColumnMeta> = {
@@ -131,9 +131,9 @@ function JobColumnHeader({
             className="relative border-b border-border/60 p-0 select-none"
             title="Drag to reorder column"
         >
-            <button type="button" onClick={() => onSort(column.key)} className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium hover:text-foreground">
+            <button type="button" onClick={() => onSort(column.key)} className="flex w-full items-center gap-1 px-2 py-2 text-left text-xs font-medium hover:text-foreground">
                 <span className="truncate">{column.label}</span>
-                <ArrowUpDown className={`size-3.5 shrink-0 ${activeSort === column.key ? "text-foreground" : "opacity-40"}`} />
+                <ArrowUpDown className={`size-3 shrink-0 ${activeSort === column.key ? "text-foreground" : "opacity-40"}`} />
             </button>
             <div onPointerDown={startResize} className="absolute top-0 -right-1.5 z-10 h-full w-3 cursor-col-resize touch-none" title={`Resize ${column.label}`} />
         </th>
@@ -275,7 +275,7 @@ export default function ActiveJobsPage() {
     const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
     const jobs = sortedJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const clientStores = selectedClient === "none" ? [] : stores.filter((store) => store.client_id === selectedClient)
-    const tableWidth = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0)
+    const totalColumnWeight = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0) || 1
 
     function changeView(next: JobView) {
         setView(next)
@@ -309,12 +309,12 @@ export default function ActiveJobsPage() {
 
     function renderCell(key: SortKey, job: JobRow) {
         if (key === "job") return <><div className="font-medium truncate">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground truncate">{job.reference}</div>}</>
-        if (key === "client") return <span className="text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</span>
-        if (key === "job_number") return <span className="tabular-nums">{job.job_number || job.xero_invoice_number || "—"}</span>
+        if (key === "client") return <span className="block truncate text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</span>
+        if (key === "job_number") return <span className="tabular-nums truncate block">{job.job_number || job.xero_invoice_number || "—"}</span>
         if (key === "job_lead") return <div className="text-xs"><div className="font-medium truncate">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground truncate">Quoted: {job.quoted_by_name || "—"}</div></div>
-        if (key === "completion_date") return <span className="tabular-nums">{formatDate(job.completion_date)}</span>
+        if (key === "completion_date") return <span className="tabular-nums whitespace-nowrap">{formatDate(job.completion_date)}</span>
         const meta = STATUS[job.status as keyof typeof STATUS] || STATUS.in_progress
-        return <Badge variant="secondary" className={meta.className}>{meta.label}</Badge>
+        return <Badge variant="secondary" className={`${meta.className} whitespace-nowrap`}>{meta.label}</Badge>
     }
 
     async function openImport() {
@@ -438,9 +438,14 @@ export default function ActiveJobsPage() {
                     <div className="space-y-1">{[1,2,3,4].map((i) => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
                 ) : jobs.length ? (
                     <>
-                        <div className="border border-border/60 rounded-lg overflow-auto">
-                            <table className="text-sm table-fixed min-w-full" style={{ width: tableWidth }}>
-                                <colgroup>{order.map((key) => <col key={key} style={{ width: widths[key] }} />)}</colgroup>
+                        <div className="border border-border/60 rounded-lg overflow-hidden">
+                            <table className="w-full table-fixed text-sm">
+                                <colgroup>
+                                    {order.map((key) => {
+                                        const weight = widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width
+                                        return <col key={key} style={{ width: `${(weight / totalColumnWeight) * 100}%` }} />
+                                    })}
+                                </colgroup>
                                 <thead className="bg-muted/40 text-muted-foreground">
                                     <tr className="text-left">
                                         {order.map((key) => (
@@ -459,7 +464,7 @@ export default function ActiveJobsPage() {
                                 <tbody>
                                     {jobs.map((job) => (
                                         <tr key={job.id} onClick={() => router.push(`/quoting/jobs/${job.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30">
-                                            {order.map((key) => <td key={key} className="px-3 py-1.5 overflow-hidden align-middle">{renderCell(key as SortKey, job)}</td>)}
+                                            {order.map((key) => <td key={key} className="px-2 py-1.5 overflow-hidden align-middle">{renderCell(key as SortKey, job)}</td>)}
                                         </tr>
                                     ))}
                                 </tbody>
