@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Briefcase, FileText, Pencil } from "lucide-react"
+import { ArrowLeft, Briefcase, FileText, Pencil, Trash2 } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { PageShell } from "@/components/page-shell"
 import { Button } from "@/components/ui/button"
@@ -49,6 +49,7 @@ export default function ActiveJobDetailPage() {
   const [editJobLead, setEditJobLead] = useState("")
   const [teamMembers, setTeamMembers] = useState<string[]>([])
   const [savingJob, setSavingJob] = useState(false)
+  const [deletingJob, setDeletingJob] = useState(false)
 
   const { data, isLoading, mutate } = useSupabaseQuery<ActiveJob | null>(id ? `active-job-${id}` : null, async () => {
     const { data: job, error } = await supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("id", id).single()
@@ -107,6 +108,29 @@ export default function ActiveJobDetailPage() {
     mutate()
   }
 
+  async function deleteJob() {
+    if (!job || deletingJob) return
+    const jobNumber = job.job_number || job.xero_invoice_number || "no job number"
+    const confirmed = window.confirm(
+      `Delete \"${jobTitle}\" (${jobNumber}) from RPM?\n\nThis permanently removes this RPM job and its RPM costing/actual data. It does NOT delete or change anything in Xero.`
+    )
+    if (!confirmed) return
+
+    setDeletingJob(true)
+    try {
+      const response = await fetch(`/api/costing/jobs/${job.id}`, { method: "DELETE" })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body?.error || "Could not delete the RPM job.")
+      toast.success(`Deleted ${jobTitle} from RPM. Xero was not changed.`)
+      router.push("/quoting/jobs")
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the RPM job.")
+    } finally {
+      setDeletingJob(false)
+    }
+  }
+
   return <DashboardLayout><PageShell>
     <Button variant="ghost" size="sm" className="mb-2 -ml-2 gap-1.5 text-muted-foreground" onClick={() => router.push("/quoting/jobs")}>
       <ArrowLeft className="size-3.5"/> Active Jobs
@@ -133,7 +157,12 @@ export default function ActiveJobDetailPage() {
           {jobContact && <p className="mt-2 text-sm text-muted-foreground"><span className="font-medium text-foreground">Contact:</span> {jobContact}</p>}
           {jobDetails && <p className="mt-3 max-w-3xl text-sm text-muted-foreground whitespace-pre-wrap">{jobDetails}</p>}
         </div>
-        <Button asChild variant="outline" size="sm" className="gap-1.5 h-9 shrink-0"><Link href={`/quoting/${id}/job-card`} target="_blank"><FileText className="size-3.5"/> Job card</Link></Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 h-9"><Link href={`/quoting/${id}/job-card`} target="_blank"><FileText className="size-3.5"/> Job card</Link></Button>
+          <Button variant="outline" size="sm" className="gap-1.5 h-9 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
+            <Trash2 className="size-3.5"/> {deletingJob ? "Deleting…" : "Delete Job"}
+          </Button>
+        </div>
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
