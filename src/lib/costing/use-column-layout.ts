@@ -8,19 +8,21 @@ export interface ColumnLayout {
 }
 
 const COST_SHEET_WIDTH_BUDGET = 900
+const JOBS_WIDTH_BUDGET = 980
 
 function fittedWidths(storageKey: string, widths: Record<string, number>) {
-    // The costing sheet has a lot of useful columns, especially when steel weights
-    // are visible. Keep their relative proportions, but fit the normal desktop view
-    // into the page so users do not have to horizontally scroll just to read a line.
-    // Other tables that use this hook keep their existing behaviour unchanged.
-    if (!storageKey.startsWith("cost-sheet-columns-")) return widths
+    // Costing sheets and the Jobs list have useful user-adjustable columns, but
+    // should still fit the normal desktop workspace without horizontal scrolling.
+    let budget: number | null = null
+    if (storageKey.startsWith("cost-sheet-columns-")) budget = COST_SHEET_WIDTH_BUDGET
+    if (storageKey.startsWith("jobs-columns-")) budget = JOBS_WIDTH_BUDGET
+    if (budget == null) return widths
 
     const entries = Object.entries(widths)
     const total = entries.reduce((sum, [, width]) => sum + Number(width || 0), 0)
-    if (total <= COST_SHEET_WIDTH_BUDGET || total <= 0) return widths
+    if (total <= budget || total <= 0) return widths
 
-    const scale = COST_SHEET_WIDTH_BUDGET / total
+    const scale = budget / total
     return Object.fromEntries(entries.map(([key, width]) => [key, Math.max(44, Math.round(width * scale))]))
 }
 
