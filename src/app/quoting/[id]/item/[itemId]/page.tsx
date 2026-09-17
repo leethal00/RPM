@@ -86,7 +86,7 @@ export default function ItemCostSheetPage() {
 
     return (
         <DashboardLayout>
-            <PageShell>
+            <PageShell width="full" className="px-4 xl:px-6 gap-2 py-3">
                 <div className="flex items-center justify-between gap-3">
                     <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
                         onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
@@ -100,58 +100,58 @@ export default function ItemCostSheetPage() {
                 </div>
 
                 {loading || !item ? (
-                    <div className="h-20 rounded-lg bg-muted/40 animate-pulse mt-2" />
+                    <div className="h-16 rounded-lg bg-muted/40 animate-pulse" />
                 ) : (
                     <>
-                        <div className="mt-1 flex items-end justify-between gap-4 pb-3 border-b border-border/60">
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 text-muted-foreground mb-0.5">
+                        <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-2">
+                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                                <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
                                     <Layers className="size-3" />
                                     <span className="text-[11px] font-medium">Item — build</span>
                                 </div>
                                 <input
                                     defaultValue={item.name}
                                     onBlur={(e) => { if (e.target.value !== item.name) patchItem({ name: e.target.value }) }}
-                                    className="text-[1.35rem] leading-tight font-semibold tracking-tight bg-transparent outline-none border-b border-transparent focus:border-input w-full"
+                                    className="min-w-0 flex-1 text-lg leading-tight font-semibold tracking-tight bg-transparent outline-none border-b border-transparent focus:border-input"
                                     placeholder="Item name"
                                 />
                             </div>
-                            <div className="flex items-end gap-3 shrink-0">
-                                <div className="w-20">
-                                    <label className="text-[11px] text-muted-foreground">Quote qty</label>
-                                    <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
+                            <div className="flex items-center gap-3 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                    <label className="text-[11px] text-muted-foreground whitespace-nowrap">Quote qty</label>
+                                    <div className="w-16"><NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} /></div>
                                 </div>
                                 {item.mode === "build" && (
-                                    <div className="w-20">
-                                        <label className="text-[11px] text-muted-foreground">Build qty</label>
-                                        <NumCell value={item.build_qty ?? item.qty} onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} />
+                                    <div className="flex items-center gap-1.5">
+                                        <label className="text-[11px] text-muted-foreground whitespace-nowrap">Build qty</label>
+                                        <div className="w-16"><NumCell value={item.build_qty ?? item.qty} onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} /></div>
                                     </div>
                                 )}
                             </div>
                         </div>
 
                         {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
-                            <div className="mt-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                                Batch build: customer quote quantity is <span className="font-medium text-foreground">{Number(item.qty)}</span>; production quantity is <span className="font-medium text-foreground">{Number(item.build_qty)}</span>. BOM quantities below are for the complete batch and are not multiplied automatically.
+                            <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-1 text-[11px] leading-4 text-muted-foreground">
+                                Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
                             </div>
                         )}
 
-                        <div className="mt-3 rounded-lg border border-border/60 p-3 space-y-2.5">
+                        <div className="rounded-lg border border-border/60 p-2.5 space-y-2">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="text-[11px] font-medium text-muted-foreground">Quote description — customer facing</div>
                                 <div className="hidden lg:block text-[11px] text-muted-foreground truncate max-w-[48%]">
                                     {[item.size, item.delivery].filter(Boolean).join(" · ")}
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2.5">
+                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2">
                                 <div>
-                                    <label className="mb-1 block text-[11px] text-muted-foreground">Size</label>
+                                    <label className="mb-0.5 block text-[11px] text-muted-foreground">Size</label>
                                     <input defaultValue={item.size ?? ""} placeholder="e.g. 1400x400mm"
                                         onBlur={(e) => { if (e.target.value !== (item.size ?? "")) patchItem({ size: e.target.value || null }) }}
                                         className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring" />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-[11px] text-muted-foreground">Delivery</label>
+                                    <label className="mb-0.5 block text-[11px] text-muted-foreground">Delivery</label>
                                     <select value={item.delivery ?? ""} onChange={(e) => patchItem({ delivery: e.target.value || null })}
                                         className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm outline-none focus:border-ring">
                                         <option value="">—</option>
@@ -162,24 +162,24 @@ export default function ItemCostSheetPage() {
                                 </div>
                             </div>
                             <div>
-                                <label className="mb-1 block text-[11px] text-muted-foreground">Details</label>
+                                <label className="mb-0.5 block text-[11px] text-muted-foreground">Details</label>
                                 <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
                                     onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
-                                    className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
+                                    className="min-h-[58px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
                             </div>
-                            <div className="rounded-md bg-muted/25 px-2.5 py-2 text-xs leading-5 text-foreground/80">
-                                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Customer quote preview</div>
-                                <div><span className="font-medium">Item:</span> {item.name || "Item"}</div>
-                                <div><span className="font-medium">Qty:</span> {Number(item.qty)}</div>
-                                {item.size?.trim() && <div><span className="font-medium">Size:</span> {item.size.trim()}</div>}
-                                <div className="whitespace-pre-wrap"><span className="font-medium">Details:</span>{item.details?.trim() ? ` ${item.details.trim()}` : " —"}</div>
-                                {item.delivery?.trim() && <div>{item.delivery.trim()}</div>}
+                            <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-[11px] leading-4 text-foreground/80">
+                                <span className="font-medium text-muted-foreground">Customer quote preview:</span>{" "}
+                                <span className="font-medium">{item.name || "Item"}</span>
+                                <span> · Qty {Number(item.qty)}</span>
+                                {item.size?.trim() && <span> · {item.size.trim()}</span>}
+                                {item.details?.trim() && <span> · {item.details.trim().replace(/\n+/g, " / ")}</span>}
+                                {item.delivery?.trim() && <span> · {item.delivery.trim()}</span>}
                             </div>
                         </div>
 
                         <CostSheet jobId={jobId} item={item} />
 
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-4 mt-1 border-t border-border/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 mt-0.5 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <Check className="size-3.5 text-emerald-500" /> Changes save automatically.
                             </p>
