@@ -93,15 +93,32 @@ export function ItemsList({ job }: { job: CostingJob }) {
     }
 
     function quoteFacingDetails(it: CostingItem) {
-        const hasExtra = Boolean(it.size?.trim() || it.details?.trim() || it.delivery?.trim())
+        const qty = Number(it.qty) || 1
+        const size = it.size?.trim()
+        const details = it.details?.trim()
+        const delivery = it.delivery?.trim()
+        const hasExtra = Boolean(size || details || delivery)
         if (!hasExtra && !it.qty) return null
+
+        const summary = [
+            `Qty: ${qty}`,
+            size ? `Size: ${size}` : null,
+            delivery || null,
+        ].filter(Boolean).join(" · ")
+
         return (
-            <div className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
-                <div><span className="font-medium text-foreground/70">Qty:</span> {Number(it.qty) || 1}</div>
-                {it.size?.trim() && <div><span className="font-medium text-foreground/70">Size:</span> {it.size.trim()}</div>}
-                {it.details?.trim() && <div className="whitespace-pre-line"><span className="font-medium text-foreground/70">Details:</span> {it.details.trim()}</div>}
-                {it.delivery?.trim() && <div><span className="font-medium text-foreground/70">Delivery:</span> {it.delivery.trim()}</div>}
-            </div>
+            <details className="group/details mt-1 ml-4 text-[11px] leading-4 text-muted-foreground">
+                <summary className="flex w-fit max-w-full cursor-pointer list-none items-center gap-1.5 rounded-sm py-0.5 pr-1 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="size-3 shrink-0 transition-transform group-open/details:rotate-90" />
+                    <span className="truncate">{summary}</span>
+                </summary>
+                <div className="mt-1 ml-4 space-y-0.5 border-l border-border/50 pl-2.5">
+                    <div><span className="font-medium text-foreground/70">Qty:</span> {qty}</div>
+                    {size && <div><span className="font-medium text-foreground/70">Size:</span> {size}</div>}
+                    {details && <div className="whitespace-pre-line"><span className="font-medium text-foreground/70">Details:</span> {details}</div>}
+                    {delivery && <div><span className="font-medium text-foreground/70">Delivery:</span> {delivery}</div>}
+                </div>
+            </details>
         )
     }
 
