@@ -41,9 +41,9 @@ export default function TimeEntriesPage() {
   const checkMailbox = async () => {
     setCheckingMailbox(true)
     try {
-      const { data, error } = await supabase.functions.invoke("job-card-mail-ingest", { body: {} })
-      if (error) throw error
-      if (data?.ok === false) throw new Error(data.error || "Mailbox check failed")
+      const response = await fetch("/api/job-cards/check", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || `Mailbox check failed (${response.status})`)
       const imported = Array.isArray(data?.results) ? data.results.reduce((sum: number, r: { imported?: number }) => sum + (r.imported || 0), 0) : 0
       toast.success(imported ? `${imported} job card${imported === 1 ? "" : "s"} imported` : "Mailbox checked — no new job cards")
       setScanRefresh((v) => v + 1)
