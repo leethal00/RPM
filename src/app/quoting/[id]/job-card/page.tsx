@@ -75,22 +75,68 @@ const ppe = [
   { label: "Respiratory\nProtection", Icon: Wind },
 ]
 
+type JobItem = {
+  id: string
+  name: string
+  mode: string
+  qty: number | null
+  build_qty: number | null
+  sort: number | null
+}
+
+type BomLine = {
+  id: string
+  item_id: string | null
+  section: string | null
+  subsection: string | null
+  description: string
+  qty: number | null
+  internal_note: string | null
+  sort: number | null
+  materials?: { unit?: string | null; is_labour?: boolean | null } | { unit?: string | null; is_labour?: boolean | null }[] | null
+}
+
+function materialMeta(line: BomLine) {
+  return Array.isArray(line.materials) ? line.materials[0] : line.materials
+}
+
+function prettyQty(value: number | null | undefined) {
+  const n = Number(value || 0)
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
+}
+
 export default function JobCardPage() {
   const supabase = useMemo(() => createClient(), [])
   const { id } = useParams<{ id: string }>()
   const [job, setJob] = useState<CostingJob | null>(null)
+  const [items, setItems] = useState<JobItem[]>([])
+  const [bomLines, setBomLines] = useState<BomLine[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let live = true
     ;(async () => {
-      const { data } = await supabase
-        .from("costing_jobs")
-        .select(`*, clients ( name ), stores ( name, address, manager_name, manager_phone )`)
-        .eq("id", id)
-        .single()
+      const [{ data: jobData }, { data: itemData }, { data: lineData }] = await Promise.all([
+        supabase
+          .from("costing_jobs")
+          .select(`*, clients ( name ), stores ( name, address, manager_name, manager_phone )`)
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("costing_items")
+          .select("id,name,mode,qty,build_qty,sort")
+          .eq("job_id", id)
+          .order("sort"),
+        supabase
+          .from("costing_lines")
+          .select("id,item_id,section,subsection,description,qty,internal_note,sort,materials(unit,is_labour)")
+          .eq("job_id", id)
+          .order("sort"),
+      ])
       if (live) {
-        setJob(data as CostingJob)
+        setJob(jobData as CostingJob)
+        setItems((itemData || []) as JobItem[])
+        setBomLines((lineData || []) as BomLine[])
         setLoading(false)
       }
     })()
@@ -103,6 +149,10 @@ export default function JobCardPage() {
   const j = job as CostingJob & {
     quote_contact?: string | null
     due_date?: string | null
+    completion_date?: string | null
+    production_title?: string | null
+    production_details?: string | null
+    production_contact_name?: string | null
     stores?: {
       name?: string | null
       address?: string | null
@@ -110,14 +160,28 @@ export default function JobCardPage() {
       manager_phone?: string | null
     } | null
   }
+  const title = j.production_title || job.title
+  const details = j.production_details ?? job.details ?? ""
   const customer = [job.clients?.name, j.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
   const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
-  const contact = j.quote_contact || job.contact_name || j.stores?.manager_name || ""
+  const contact = j.production_contact_name || j.quote_contact || job.contact_name || j.stores?.manager_name || ""
   const phone = j.stores?.manager_phone || ""
-  const routingText = `${job.title || ""} ${job.details || ""}`.toLowerCase()
+  const requiredBy = j.completion_date || j.due_date || null
+  const buildItems = items.filter((item) => item.mode === "build")
+  const buildSummary = buildItems.length
+    ? buildItems.map((item) => `${item.name}: ${prettyQty(item.build_qty ?? item.qty ?? 1)}`).join(" · ")
+    : ""
+  const itemNames = new Map(items.map((item) => [item.id, item.name]))
+
+  const routingText = `${title || ""} ${details || ""} ${bomLines.map((line) => `${line.section || ""} ${line.subsection || ""} ${line.description || ""}`).join(" ")}`.toLowerCase()
   const autoDepartments = new Set<string>()
-  if (/illumin|electrical|\bled\b|light|wiring|power/.test(routingText)) autoDepartments.add("Electrical")
+  if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) autoDepartments.add("CNC")
+  if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) autoDepartments.add("Metal")
+  if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) autoDepartments.add("Fab")
+  if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) autoDepartments.add("Electrical")
+  if (/vinyl|graphic|print|laminat/.test(routingText)) autoDepartments.add("Vinyl")
   if (/servic|repair|site|install|maintenance/.test(routingText)) autoDepartments.add("Install")
+
   const qrUrl = typeof window !== "undefined"
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
     : ""
@@ -149,9 +213,9 @@ export default function JobCardPage() {
           number={number}
           customer={customer}
           site={j.stores?.address || ""}
-          title={job.title}
+          title={title}
           issued={fmt(job.created_at)}
-          due={fmt(j.due_date)}
+          due={fmt(requiredBy)}
           contact={contact}
           phone={phone}
           qrUrl={qrUrl}
@@ -159,7 +223,8 @@ export default function JobCardPage() {
 
         <div className="mt-[2.5mm] grid grid-cols-[1.4fr_1fr] gap-[2mm]">
           <Box title="JOB DETAILS / SCOPE OF WORK" className="h-[30mm]">
-            {job.details || job.title}
+            {buildSummary && <div className="mb-[1.2mm] font-bold">Build qty — {buildSummary}</div>}
+            <div className="whitespace-pre-wrap">{details || title}</div>
           </Box>
           <Box title="SPECIAL INSTRUCTIONS" className="h-[30mm]">
             <ul className="list-disc space-y-[.8mm] pl-[4mm]">
@@ -203,6 +268,19 @@ export default function JobCardPage() {
             </div>
           </Box>
         </div>
+      </Sheet>
+
+      <Sheet>
+        <ProductionHeader number={number} title={title} customer={customer} buildSummary={buildSummary} requiredBy={fmt(requiredBy)} />
+        <div className="mt-[3mm]">
+          <Bar>BOM / MATERIALS &amp; WORK REQUIRED</Bar>
+          <BomTable lines={bomLines} itemNames={itemNames} />
+        </div>
+        <div className="mt-[4mm] grid grid-cols-2 gap-[2mm]">
+          <Box title="PRODUCTION NOTES" className="h-[40mm]" />
+          <Box title="VARIATIONS / SUBSTITUTIONS" className="h-[40mm]" />
+        </div>
+        <p className="mt-[3mm] text-[8.5px] text-neutral-500">Quantities shown are the RPM BOM quantities for the complete build. No cost or sell pricing is shown on this job card.</p>
       </Sheet>
 
       <Sheet>
@@ -345,6 +423,26 @@ function JobHeader({
   )
 }
 
+function ProductionHeader({ number, title, customer, buildSummary, requiredBy }: { number: string; title: string; customer: string; buildSummary: string; requiredBy: string }) {
+  return (
+    <div className="flex items-start justify-between border-b border-[#b9c5c1] pb-[3mm]">
+      <div className="flex items-start gap-[4mm]">
+        <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
+        <div>
+          <div className="text-[19px] font-black">PRODUCTION / BOM</div>
+          <div className="mt-[1mm] text-[12px] font-bold">{title}</div>
+          <div className="mt-[.5mm] text-[9.5px]">{customer}</div>
+          {buildSummary && <div className="mt-[1mm] text-[10px]"><strong>Build qty:</strong> {buildSummary}</div>}
+        </div>
+      </div>
+      <div className="text-right text-[10px]">
+        <div><strong>Job:</strong> {number}</div>
+        <div className="mt-[1mm]"><strong>Required by:</strong> {requiredBy || "—"}</div>
+      </div>
+    </div>
+  )
+}
+
 function Header({ safety = false }: { number?: string; safety?: boolean }) {
   return (
     <div className="flex h-[25mm] items-start justify-between">
@@ -433,6 +531,41 @@ function MaterialsGrid() {
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.5mm] border border-[#b9c5c1] px-[1mm] text-center text-[9px] font-bold">{h}</th>)}</tr></thead>
       <tbody>{rows(5).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[6.5mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+    </table>
+  )
+}
+
+function BomTable({ lines, itemNames }: { lines: BomLine[]; itemNames: Map<string, string> }) {
+  const visible = lines.filter((line) => line.description?.trim() && Number(line.qty || 0) !== 0)
+  const headers = ["Item", "Section", "Description", "Qty", "Unit", "Notes"]
+  const widths = ["15%", "17%", "36%", "8%", "8%", "16%"]
+  return (
+    <table className="w-full table-fixed border-collapse">
+      <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+      <thead>
+        <tr className="bg-[#eef2f1]">
+          {headers.map((h) => <th key={h} className="h-[6mm] border border-[#b9c5c1] px-[1mm] text-left text-[8.7px] font-bold">{h}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {visible.length ? visible.map((line) => {
+          const meta = materialMeta(line)
+          const unit = meta?.unit || (/labour/i.test(line.section || "") ? "hr" : "")
+          const section = [line.section, line.subsection].filter(Boolean).join(" / ")
+          return (
+            <tr key={line.id}>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{line.item_id ? itemNames.get(line.item_id) || "" : ""}</td>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{section}</td>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px] font-medium">{line.description}</td>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] text-right align-top text-[8.7px]">{prettyQty(line.qty)}</td>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.7px]">{unit}</td>
+              <td className="border border-[#b9c5c1] px-[1mm] py-[1mm] align-top text-[8.2px]">{line.internal_note || ""}</td>
+            </tr>
+          )
+        }) : (
+          <tr><td colSpan={6} className="border border-[#b9c5c1] px-[2mm] py-[4mm] text-center text-[9px] text-neutral-500">No BOM lines are recorded for this job.</td></tr>
+        )}
+      </tbody>
     </table>
   )
 }
