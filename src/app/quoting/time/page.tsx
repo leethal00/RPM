@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import { Clock, Search, ScanLine, Package } from "lucide-react"
+import { Clock, Search, ScanLine, Package, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
 
 type JobRow = CostingJob & { clients?: { name: string } | null; stores?: { name: string } | null; production_title?: string | null }
@@ -22,6 +23,8 @@ export default function TimeEntriesPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const [search, setSearch] = useState("")
+  const [checkingMailbox, setCheckingMailbox] = useState(false)
+  const [scanRefresh, setScanRefresh] = useState(0)
 
   const { data: jobs, isLoading } = useSupabaseQuery<JobRow[]>("time-entry-active-jobs", async () => {
     const { data, error } = await supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("is_template", false).eq("status", "in_progress").order("completion_date", { ascending: true, nullsFirst: false })
@@ -29,11 +32,27 @@ export default function TimeEntriesPage() {
     return { data: (data as JobRow[]) || [], error: null }
   })
 
-  const { data: scans, isLoading: scansLoading } = useSupabaseQuery<ScanRow[]>("job-card-scans", async () => {
+  const { data: scans, isLoading: scansLoading } = useSupabaseQuery<ScanRow[]>(`job-card-scans-${scanRefresh}`, async () => {
     const { data, error } = await supabase.from("job_card_scans").select(`id, subject, attachment_name, received_at, status, detected_job_number, confidence, review_notes, costing_jobs ( job_number, title )`).order("received_at", { ascending: false }).limit(100)
     if (error) throw error
     return { data: (data as ScanRow[]) || [], error: null }
   })
+
+  const checkMailbox = async () => {
+    setCheckingMailbox(true)
+    try {
+      const { data, error } = await supabase.functions.invoke("job-card-mail-ingest", { body: {} })
+      if (error) throw error
+      if (data?.ok === false) throw new Error(data.error || "Mailbox check failed")
+      const imported = Array.isArray(data?.results) ? data.results.reduce((sum: number, r: { imported?: number }) => sum + (r.imported || 0), 0) : 0
+      toast.success(imported ? `${imported} job card${imported === 1 ? "" : "s"} imported` : "Mailbox checked — no new job cards")
+      setScanRefresh((v) => v + 1)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check job card mailbox")
+    } finally {
+      setCheckingMailbox(false)
+    }
+  }
 
   const filtered = (jobs || []).filter((job) => {
     const term = search.trim().toLowerCase()
@@ -51,8 +70,8 @@ export default function TimeEntriesPage() {
       </TabsContent>
       <TabsContent value="materials"><div className="rounded-lg border border-border/60 px-5 py-8"><div className="font-medium">Direct materials entry</div><div className="mt-1 text-sm text-muted-foreground">This tab is reserved for quickly recording actual materials used against active jobs. We can finish this workflow after the scan test.</div></div></TabsContent>
       <TabsContent value="scans">
-        <div className="mb-3 flex items-center justify-between"><div><div className="font-medium">Incoming job cards</div><div className="text-sm text-muted-foreground">Scans emailed to jobcards@rodier.co.nz will appear here for checking before anything is posted to a job.</div></div></div>
-        {scansLoading ? <div className="h-20 rounded-lg bg-muted/40 animate-pulse"/> : !scans?.length ? <div className="rounded-lg border border-dashed border-border px-5 py-12 text-center"><ScanLine className="mx-auto mb-3 size-7 text-muted-foreground"/><div className="font-medium">Waiting for the first scanned job card</div><div className="mt-1 text-sm text-muted-foreground">Once the mailbox importer is live, incoming PDF/JPG/PNG job cards will queue here.</div></div> : <div className="rounded-lg border border-border/60 overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground"><th className="px-3 py-2.5">Received</th><th className="px-3 py-2.5">File</th><th className="px-3 py-2.5">Matched job</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Confidence</th></tr></thead><tbody>{scans.map(scan => <tr key={scan.id} className="border-b last:border-0"><td className="px-3 py-3 text-muted-foreground">{scan.received_at ? new Date(scan.received_at).toLocaleString("en-NZ") : "—"}</td><td className="px-3 py-3"><div className="font-medium">{scan.attachment_name || scan.subject || "Job card"}</div></td><td className="px-3 py-3">{scan.costing_jobs?.job_number || scan.detected_job_number || "—"}</td><td className="px-3 py-3"><span className="rounded-full bg-muted px-2 py-1 text-xs">{statusLabel[scan.status] || scan.status}</span></td><td className="px-3 py-3 text-muted-foreground">{scan.confidence == null ? "—" : `${Math.round(Number(scan.confidence) * 100)}%`}</td></tr>)}</tbody></table></div>}
+        <div className="mb-3 flex items-center justify-between gap-4"><div><div className="font-medium">Incoming job cards</div><div className="text-sm text-muted-foreground">Scans emailed to jobcards@rodier.co.nz will appear here for checking before anything is posted to a job.</div></div><Button size="sm" variant="outline" onClick={checkMailbox} disabled={checkingMailbox}><RefreshCw className={checkingMailbox ? "animate-spin" : ""}/>{checkingMailbox ? "Checking…" : "Check mailbox"}</Button></div>
+        {scansLoading ? <div className="h-20 rounded-lg bg-muted/40 animate-pulse"/> : !scans?.length ? <div className="rounded-lg border border-dashed border-border px-5 py-12 text-center"><ScanLine className="mx-auto mb-3 size-7 text-muted-foreground"/><div className="font-medium">Waiting for the first scanned job card</div><div className="mt-1 text-sm text-muted-foreground">Use Check mailbox after emailing a PDF/JPG/PNG job card to jobcards@rodier.co.nz.</div></div> : <div className="rounded-lg border border-border/60 overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground"><th className="px-3 py-2.5">Received</th><th className="px-3 py-2.5">File</th><th className="px-3 py-2.5">Matched job</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Confidence</th></tr></thead><tbody>{scans.map(scan => <tr key={scan.id} className="border-b last:border-0"><td className="px-3 py-3 text-muted-foreground">{scan.received_at ? new Date(scan.received_at).toLocaleString("en-NZ") : "—"}</td><td className="px-3 py-3"><div className="font-medium">{scan.attachment_name || scan.subject || "Job card"}</div></td><td className="px-3 py-3">{scan.costing_jobs?.job_number || scan.detected_job_number || "—"}</td><td className="px-3 py-3"><span className="rounded-full bg-muted px-2 py-1 text-xs">{statusLabel[scan.status] || scan.status}</span></td><td className="px-3 py-3 text-muted-foreground">{scan.confidence == null ? "—" : `${Math.round(Number(scan.confidence) * 100)}%`}</td></tr>)}</tbody></table></div>}
       </TabsContent>
     </Tabs>
   </PageShell></DashboardLayout>
