@@ -42,7 +42,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     async function reload() {
         const [{ data: its }, { data: ls }] = await Promise.all([
             supabase.from("costing_items").select("*").eq("job_id", job.id).order("sort"),
-            supabase.from("costing_lines").select("id, item_id, section, subsection, description, supplier, qty, unit_cost, markup, unit_sell_override").eq("job_id", job.id),
+            supabase.from("costing_lines").select("id, item_id, qty, unit_cost, markup, unit_sell_override").eq("job_id", job.id),
         ])
         setItems((its as CostingItem[]) || [])
         setLines((ls as CostingLine[]) || [])
@@ -92,31 +92,17 @@ export function ItemsList({ job }: { job: CostingJob }) {
         }
     }
 
-    function itemSummary(it: CostingItem) {
-        const parts: string[] = []
-        const add = (value?: string | null) => {
-            const clean = value?.replace(/\s+/g, " ").trim()
-            if (!clean || parts.some(part => part.toLowerCase() === clean.toLowerCase())) return
-            parts.push(clean)
-        }
-
-        add(it.size)
-        add(it.details)
-
-        if (it.mode === "build") {
-            const itemLines = lines.filter(line => line.item_id === it.id)
-            for (const line of itemLines) {
-                if (parts.length >= 5) break
-                const description = line.description?.trim()
-                if (!description) continue
-                const lowered = description.toLowerCase()
-                if (lowered === "freight" || lowered.includes("freight to")) continue
-                add(description)
-            }
-        }
-
-        if (!parts.length && it.delivery) add(it.delivery)
-        return parts.join(" · ")
+    function quoteFacingDetails(it: CostingItem) {
+        const hasExtra = Boolean(it.size?.trim() || it.details?.trim() || it.delivery?.trim())
+        if (!hasExtra && !it.qty) return null
+        return (
+            <div className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
+                <div><span className="font-medium text-foreground/70">Qty:</span> {Number(it.qty) || 1}</div>
+                {it.size?.trim() && <div><span className="font-medium text-foreground/70">Size:</span> {it.size.trim()}</div>}
+                {it.details?.trim() && <div className="whitespace-pre-line"><span className="font-medium text-foreground/70">Details:</span> {it.details.trim()}</div>}
+                {it.delivery?.trim() && <div><span className="font-medium text-foreground/70">Delivery:</span> {it.delivery.trim()}</div>}
+            </div>
+        )
     }
 
     const rows = items.map(it => {
@@ -398,7 +384,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                         <thead className="bg-muted/40 text-muted-foreground text-xs">
                             <tr className="text-left">
                                 <th className="w-10"></th>
-                                <th className="font-medium px-3 py-2 min-w-[360px]">Item / BOM summary</th>
+                                <th className="font-medium px-3 py-2 min-w-[360px]">Item / quote details</th>
                                 <th className="font-medium px-2 py-2 w-20">Type</th>
                                 <th className="font-medium px-2 py-2 w-16 text-right">Qty</th>
                                 <th className="font-medium px-2 py-2 w-28 text-right">Unit cost</th>
@@ -414,7 +400,6 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const sectionNumber = heading ? items.slice(0, rowIndex + 1).filter(isSectionHeading).length : 0
                                 const m = us > 0 ? 1 - unitCost / us : 0
                                 const build = it.mode === "build"
-                                const summary = !heading ? itemSummary(it) : ""
                                 const suggestions = !heading && !build && editingName === it.id ? suggestionsFor(it) : []
 
                                 const handleCell = (
@@ -518,11 +503,11 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                         className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}
                                     >
                                         {handleCell}
-                                        <td className="px-3 py-1.5 relative">
+                                        <td className="px-3 py-1.5 relative align-top">
                                             {build ? (
                                                 <div>
                                                     <TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} />
-                                                    {summary && <div className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground" title={summary}>{summary}</div>}
+                                                    {quoteFacingDetails(it)}
                                                 </div>
                                             ) : (
                                                 <>
@@ -549,7 +534,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                                         onBlur={() => setTimeout(() => commitName(it), 150)}
                                                         className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
                                                     />
-                                                    {summary && <div className="px-1.5 truncate text-[11px] leading-4 text-muted-foreground" title={summary}>{summary}</div>}
+                                                    {quoteFacingDetails(it)}
                                                     {suggestions.length > 0 && (
                                                         <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">
                                                             {suggestions.map(s => (
@@ -569,7 +554,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                                 </>
                                             )}
                                         </td>
-                                        <td className="px-2 py-1.5">
+                                        <td className="px-2 py-1.5 align-top">
                                             <button
                                                 type="button"
                                                 onClick={() => openItemEditor(it)}
@@ -581,12 +566,12 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                                 </Badge>
                                             </button>
                                         </td>
-                                        <td className="px-2 py-1.5"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums font-medium">{nz(totalSell)}</td>
-                                        <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{pct(m)}</td>
-                                        <td className="px-1 py-1.5">
+                                        <td className="px-2 py-1.5 align-top"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums align-top">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums align-top"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums font-medium align-top">{nz(totalSell)}</td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground align-top">{pct(m)}</td>
+                                        <td className="px-1 py-1.5 align-top">
                                             <div className="flex justify-end gap-1">
                                                 {build && <button onClick={() => openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}
                                                 {build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100" title="Save as product"><Package2 className="size-3.5" /></button>}
