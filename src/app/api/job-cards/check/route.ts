@@ -31,24 +31,23 @@ export async function POST() {
             payload = { ok: false, error: text || `Diagnostic returned HTTP ${response.status}` }
         }
 
-        const ok = payload.ok === true
-        const stage = typeof payload.stage === "string" ? payload.stage : "diagnostic"
-        const error = typeof payload.error === "string" ? payload.error : ""
-        const host = typeof payload.host === "string" ? payload.host : "mail server"
-        const port = typeof payload.port === "number" ? payload.port : 993
-        const ms = typeof payload.ms === "number" ? payload.ms : null
-
-        if (ok) {
+        if (payload.ok === true) {
+            const unread = typeof payload.unread === "number" ? payload.unread : 0
+            const connectMs = typeof payload.connectMs === "number" ? payload.connectMs : null
             return NextResponse.json({
                 ok: false,
-                error: `TLS connection works to ${host}:${port}${ms != null ? ` (${ms} ms)` : ""}. Next step is testing the IMAP library/runtime.`,
+                error: `Native IMAP login works${connectMs != null ? ` (${connectMs} ms)` : ""}. ${unread} unread message${unread === 1 ? "" : "s"} found.`,
                 diagnostic: payload,
             })
         }
 
+        const stage = typeof payload.stage === "string" ? payload.stage : "diagnostic"
+        const error = typeof payload.error === "string" ? payload.error : ""
+        const responseText = typeof payload.response === "string" ? payload.response : ""
+
         return NextResponse.json({
             ok: false,
-            error: `${stage}: ${error || `Diagnostic returned HTTP ${response.status}`}`,
+            error: `${stage}: ${error || responseText || `Diagnostic returned HTTP ${response.status}`}`,
             diagnostic: payload,
         })
     } catch (error) {
