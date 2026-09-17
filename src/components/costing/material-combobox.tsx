@@ -15,6 +15,9 @@ const ROW_HEIGHT = 36
  * Inline type-ahead over the materials catalogue.
  * The result panel floats over the page rather than changing the BOM height.
  * It opens below the input where practical, shows about eight rows, and scrolls independently.
+ *
+ * When rendered inside a BOM section, the search is automatically scoped to that
+ * top-level section. The general add-item search sits outside a section and remains global.
  */
 export function MaterialCombobox({
     value = "", placeholder, onSelect, onTextCommit, clearOnSelect = false, className = "", autoFocus = false,
@@ -47,6 +50,12 @@ export function MaterialCombobox({
         setPopup({ left, top: rect.bottom + 4, width })
     }
 
+    function contextualSection() {
+        const section = inputRef.current?.closest("section")
+        const heading = section?.querySelector("h3")?.textContent?.trim()
+        return heading || null
+    }
+
     useEffect(() => {
         if (!open) return
         positionPopup()
@@ -69,7 +78,9 @@ export function MaterialCombobox({
         if (timerRef.current) clearTimeout(timerRef.current)
         if (!text.trim()) { setResults([]); setOpen(false); return }
         timerRef.current = setTimeout(async () => {
-            const query = supabase.from("materials").select("*").eq("active", true)
+            let query = supabase.from("materials").select("*").eq("active", true)
+            const section = contextualSection()
+            if (section) query = query.eq("section", section)
             const { data } = await applyMaterialSearch(query, text).order("description").limit(RESULT_LIMIT)
             const rows = (data as Material[]) || []
             setResults(rows)
