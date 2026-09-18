@@ -3,7 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 
 export const dynamic = "force-dynamic"
-const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"\nconst NOTE_CODE = "__RPM_NOTE__"
 
 function normalise(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -149,7 +149,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 ]
             }
 
-            let unitAmount = Number(item.unit_price || 0)
+            if (item.sign_code === NOTE_CODE) return [{ Description: (item.name || "").trim() }]\n\n            let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
                     const sell = line.unit_sell_override != null ? Number(line.unit_sell_override) : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
