@@ -3,7 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 
 export const dynamic = "force-dynamic"
-const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"\nconst NOTE_CODE = "__RPM_NOTE__"
 
 function isoDate(date: Date) {
     return date.toISOString().slice(0, 10)
@@ -163,7 +163,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 ]
             }
 
-            let unitAmount = Number(item.unit_price || 0)
+            if (item.sign_code === NOTE_CODE) return [{ Description: (item.name || "").trim() }]\n\n            let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines
                     .filter((line) => line.item_id === item.id)
