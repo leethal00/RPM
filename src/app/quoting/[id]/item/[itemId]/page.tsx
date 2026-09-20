@@ -171,7 +171,7 @@ export default function ItemCostSheetPage() {
                                     <div className="mb-1 text-[11px] font-medium text-muted-foreground">Customer quote preview</div>
                                     <div className="rounded-md bg-muted/20 px-2.5 py-2 text-[11px] leading-4 text-foreground/80 min-h-[96px]">
                                         <div className="font-medium text-foreground">{item.name || "Item"}</div>
-                                        <div><span className="font-medium text-muted-foreground">Qty:</span> {Number(item.qty)}</div>
+                                        <div><span className="font-medium text-muted-foreground">Qty:</span> {Number(item.mode === "build" && item.build_qty != null ? item.build_qty : item.qty)}</div>
                                         {item.size?.trim() && <div><span className="font-medium text-muted-foreground">Size:</span> {item.size.trim()}</div>}
                                         {item.details?.trim() && (
                                             <div className="whitespace-pre-line"><span className="font-medium text-muted-foreground">Details:</span> {item.details.trim()}</div>
