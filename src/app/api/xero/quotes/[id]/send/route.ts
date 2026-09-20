@@ -3,7 +3,8 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 
 export const dynamic = "force-dynamic"
-const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"\nconst NOTE_CODE = "__RPM_NOTE__"
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
+const NOTE_CODE = "__RPM_NOTE__"
 
 function isoDate(date: Date) {
     return date.toISOString().slice(0, 10)
@@ -29,11 +30,11 @@ function cleanItemDetails(name: string, details?: string | null) {
 }
 
 
-function quoteItemDescription(item: { name: string; qty: number; size?: string | null; details?: string | null; delivery?: string | null }) {
+function quoteItemDescription(item: { name: string; qty: number; build_qty?: number | null; mode?: string; size?: string | null; details?: string | null; delivery?: string | null }) {
     const details = cleanItemDetails(item.name, item.details)
     return [
         item.name,
-        `Qty: ${Number(item.qty || 1)}`,
+        `Qty: ${Number(item.mode === "build" && item.build_qty != null ? item.build_qty : (item.qty || 1))}`,
         item.size?.trim() ? `Size: ${item.size.trim()}` : null,
         details ? `Details: ${details}` : null,
         item.delivery?.trim() || null,
@@ -133,7 +134,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
-        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
         admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
     ])
 
@@ -163,7 +164,9 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 ]
             }
 
-            if (item.sign_code === NOTE_CODE) return [{ Description: (item.name || "").trim() }]\n\n            let unitAmount = Number(item.unit_price || 0)
+            if (item.sign_code === NOTE_CODE) return [{ Description: (item.name || "").trim() }]
+
+            let unitAmount = Number(item.unit_price || 0)
             if (item.mode === "build") {
                 const calculated = lines
                     .filter((line) => line.item_id === item.id)
