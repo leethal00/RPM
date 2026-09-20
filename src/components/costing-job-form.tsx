@@ -148,7 +148,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         }
 
         setLoading(false)
-        toast.success(job ? "Job updated" : "Job created")
+        toast.success(job ? "Quote updated" : "Quote created")
         onSuccess(data?.id)
     }
 
@@ -321,7 +321,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                     {loading ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{job ? "Saving…" : "Creating…"}</>
                     ) : (
-                        job ? "Save Changes" : "Create Job"
+                        job ? "Save Changes" : "Create Quote"
                     )}
                 </Button>
             </div>
