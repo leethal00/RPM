@@ -110,7 +110,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     }
 
     function quoteFacingDetailRows(it: CostingItem) {
-        const qty = Number(it.qty) || 1
+        const qty = Number(it.mode === "build" && it.build_qty != null ? it.build_qty : it.qty) || 1
         const size = it.size?.trim()
         const details = it.details?.trim()
         const delivery = it.delivery?.trim()
