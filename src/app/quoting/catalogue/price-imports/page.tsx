@@ -83,6 +83,15 @@ export default function SupplierPriceImportsPage() {
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
     const [dragActive, setDragActive] = useState(false)
+    const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null)
+    const [editMaterial, setEditMaterial] = useState({
+        description: "",
+        code: "",
+        supplier: "",
+        section: "",
+        subsection: "",
+    })
+    const [savingMaterial, setSavingMaterial] = useState(false)
 
     const suppliers = useMemo(() => {
         const names: string[] = []
@@ -286,6 +295,61 @@ export default function SupplierPriceImportsPage() {
             : row))
     }
 
+    function skipRow(rowNo: number) {
+        setRows((current) => current.map((row) => row.rowNo === rowNo
+            ? { ...row, status: "skipped", reason: "Skipped for this import" }
+            : row))
+    }
+
+    function startEditMaterial(material: Material) {
+        setEditingMaterialId(material.id)
+        setEditMaterial({
+            description: material.description || "",
+            code: material.code || "",
+            supplier: material.supplier || "",
+            section: material.section || "",
+            subsection: material.subsection || "",
+        })
+    }
+
+    async function saveMaterialEdit() {
+        if (!editingMaterialId) return
+        if (!editMaterial.description.trim()) return toast.error("Description is required")
+        setSavingMaterial(true)
+        const patch = {
+            description: editMaterial.description.trim(),
+            code: editMaterial.code.trim() || null,
+            supplier: editMaterial.supplier.trim() || null,
+            section: editMaterial.section.trim() || "Materials",
+            subsection: editMaterial.subsection.trim() || null,
+            updated_at: new Date().toISOString(),
+        }
+        const { error } = await supabase.from("materials").update(patch).eq("id", editingMaterialId)
+        setSavingMaterial(false)
+        if (error) return toast.error(error.message)
+
+        setMaterials((current) => current.map((material) => material.id === editingMaterialId ? { ...material, ...patch } as Material : material))
+        setRows((current) => current.map((row) => row.matchId === editingMaterialId
+            ? { ...row, reason: row.reason.includes("Manually matched") ? row.reason : row.reason + "; RPM item edited" }
+            : row))
+        toast.success("RPM catalogue item updated")
+        setEditingMaterialId(null)
+    }
+
+    async function deactivateMaterial(material: Material) {
+        const confirmed = window.confirm(`Deactivate "${material.description}" from the RPM catalogue? Existing historical BOM lines will remain unchanged.`)
+        if (!confirmed) return
+        const { error } = await supabase.from("materials").update({ active: false, updated_at: new Date().toISOString() }).eq("id", material.id)
+        if (error) return toast.error(error.message)
+
+        setMaterials((current) => current.filter((item) => item.id !== material.id))
+        setRows((current) => current.map((row) => row.matchId === material.id
+            ? { ...row, matchId: null, status: "skipped", reason: "Matched RPM item was deactivated" }
+            : row))
+        if (editingMaterialId === material.id) setEditingMaterialId(null)
+        toast.success("RPM catalogue item deactivated")
+    }
+
     async function applyImport() {
         const reviewCount = rows.filter((row) => row.status === "review").length
         if (reviewCount > 0) return toast.error(`${reviewCount} row${reviewCount === 1 ? " still needs" : "s still need"} review`)
@@ -426,6 +490,35 @@ export default function SupplierPriceImportsPage() {
                                                                 {supplierMaterials.map((material) => <option key={material.id} value={material.id}>{material.code ? `${material.code} — ` : ""}{material.description}</option>)}
                                                             </select>
                                                             <div className="mt-1 text-[11px] text-muted-foreground">{row.reason}</div>
+                                                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                                {currentMatch && (
+                                                                    <>
+                                                                        <button type="button" onClick={() => startEditMaterial(currentMatch)} className="text-[11px] text-primary hover:underline">Edit RPM item</button>
+                                                                        <button type="button" onClick={() => void deactivateMaterial(currentMatch)} className="text-[11px] text-destructive hover:underline">Deactivate RPM item</button>
+                                                                    </>
+                                                                )}
+                                                                {row.status !== "skipped" && (
+                                                                    <button type="button" onClick={() => skipRow(row.rowNo)} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">Skip this row</button>
+                                                                )}
+                                                            </div>
+                                                            {currentMatch && editingMaterialId === currentMatch.id && (
+                                                                <div className="mt-2 grid gap-2 rounded-md border bg-muted/20 p-2">
+                                                                    <div className="text-[11px] font-medium">Edit existing RPM catalogue item</div>
+                                                                    <Input value={editMaterial.description} onChange={(event) => setEditMaterial({ ...editMaterial, description: event.target.value })} className="h-8 text-xs" placeholder="Description" />
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <Input value={editMaterial.code} onChange={(event) => setEditMaterial({ ...editMaterial, code: event.target.value })} className="h-8 text-xs" placeholder="Code" />
+                                                                        <Input value={editMaterial.supplier} onChange={(event) => setEditMaterial({ ...editMaterial, supplier: event.target.value })} className="h-8 text-xs" placeholder="Supplier" />
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <Input value={editMaterial.section} onChange={(event) => setEditMaterial({ ...editMaterial, section: event.target.value })} className="h-8 text-xs" placeholder="Section" />
+                                                                        <Input value={editMaterial.subsection} onChange={(event) => setEditMaterial({ ...editMaterial, subsection: event.target.value })} className="h-8 text-xs" placeholder="Subsection" />
+                                                                    </div>
+                                                                    <div className="flex justify-end gap-2">
+                                                                        <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingMaterialId(null)}>Cancel</Button>
+                                                                        <Button type="button" size="sm" className="h-7 text-xs" disabled={savingMaterial} onClick={() => void saveMaterialEdit()}>{savingMaterial ? "Saving..." : "Save RPM item"}</Button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </td>
                                                         <td className="px-3 py-2 tabular-nums">{currentMatch ? `$${Number(currentMatch.unit_cost).toFixed(2)}` : "—"}</td>
                                                         <td className="px-3 py-2">
