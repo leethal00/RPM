@@ -530,6 +530,9 @@ export default function CataloguePage() {
                     actions={activeTab === "catalogue" ? (
                         <div className="flex items-center gap-2">
                             <Button variant="outline" size="sm" className="gap-1.5 h-9" asChild>
+                                <Link href="/quoting/catalogue/quality">Quality check</Link>
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5 h-9" asChild>
                                 <Link href="/quoting/catalogue/price-imports">Price imports</Link>
                             </Button>
                             <Button size="sm" className="gap-1.5 h-9" onClick={addMaterial}>
