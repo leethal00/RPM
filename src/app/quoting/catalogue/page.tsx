@@ -111,6 +111,7 @@ export default function CataloguePage() {
     const [activeTab, setActiveTab] = useState("catalogue")
     const [draggingSubsectionId, setDraggingSubsectionId] = useState<number | null>(null)
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
+    const [dragOverSubsectionId, setDragOverSubsectionId] = useState<number | null>(null)
     const [deleteSectionTarget, setDeleteSectionTarget] = useState<string | null>(null)
     const [deleteSubsectionTarget, setDeleteSubsectionTarget] = useState<CostingSection | null>(null)
     const [deletingStructure, setDeletingStructure] = useState(false)
@@ -284,6 +285,51 @@ export default function CataloguePage() {
         setMaterials((prev) => prev.map((material) => material.section === record.section && material.subsection === oldName
             ? { ...material, subsection: name } : material))
         toast.success(`Subsection renamed to “${name}”`)
+    }
+
+    async function reorderSubsection(sourceId: number, targetId: number) {
+        if (sourceId === targetId) {
+            setDraggingSubsectionId(null)
+            setDragOverSubsectionId(null)
+            return
+        }
+
+        const source = sections.find((section) => section.id === sourceId)
+        const target = sections.find((section) => section.id === targetId)
+        if (!source?.subsection || !target?.subsection || source.section !== target.section) return
+
+        const ordered = sections
+            .filter((section) => section.section === source.section && section.subsection)
+            .sort((a, b) => a.sort - b.sort)
+        const from = ordered.findIndex((section) => section.id === sourceId)
+        let to = ordered.findIndex((section) => section.id === targetId)
+        if (from < 0 || to < 0) return
+
+        const next = [...ordered]
+        const moved = next.splice(from, 1)[0]
+        if (from < to) to -= 1
+        next.splice(to, 0, moved)
+
+        const updates = next.map((section, index) => ({ id: section.id, sort: (index + 1) * 10 }))
+        setSections((prev) => prev.map((section) => {
+            const update = updates.find((candidate) => candidate.id === section.id)
+            return update ? { ...section, sort: update.sort } : section
+        }))
+        setDraggingSubsectionId(null)
+        setDragOverSubsectionId(null)
+        setDragOverSection(null)
+
+        const results = await Promise.all(
+            updates.map((update) => supabase.from("costing_sections").update({ sort: update.sort }).eq("id", update.id))
+        )
+        const error = results.find((result) => result.error)?.error
+        if (error) {
+            toast.error("Could not reorder subsections: " + error.message)
+            const { data } = await supabase.from("costing_sections").select("*").order("sort").order("section")
+            if (data) setSections(data as CostingSection[])
+            return
+        }
+        toast.success("Subsection order updated")
     }
 
     async function moveSubsection(record: CostingSection, targetSection: string) {
@@ -672,7 +718,28 @@ export default function CataloguePage() {
                                     ) : (
                                         <div className="space-y-1">
                                             {subsections.map((subsection) => (
-                                                <div key={subsection.id} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/30">
+                                                <div
+                                                    key={subsection.id}
+                                                    onDragOver={(e) => {
+                                                        if (draggingSubsectionId == null || draggingSubsectionId === subsection.id) return
+                                                        const source = sections.find((section) => section.id === draggingSubsectionId)
+                                                        if (!source || source.section !== subsection.section) return
+                                                        e.preventDefault()
+                                                        e.stopPropagation()
+                                                        e.dataTransfer.dropEffect = "move"
+                                                        setDragOverSubsectionId(subsection.id)
+                                                    }}
+                                                    onDragLeave={() => setDragOverSubsectionId((current) => current === subsection.id ? null : current)}
+                                                    onDrop={(e) => {
+                                                        if (draggingSubsectionId == null) return
+                                                        const source = sections.find((section) => section.id === draggingSubsectionId)
+                                                        if (!source || source.section !== subsection.section) return
+                                                        e.preventDefault()
+                                                        e.stopPropagation()
+                                                        void reorderSubsection(draggingSubsectionId, subsection.id)
+                                                    }}
+                                                    className={"flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-muted/30 " + (dragOverSubsectionId === subsection.id ? "bg-primary/10 ring-1 ring-primary/30" : "")}
+                                                >
                                                     <button
                                                         type="button"
                                                         draggable
@@ -681,10 +748,10 @@ export default function CataloguePage() {
                                                             e.dataTransfer.effectAllowed = "move"
                                                             e.dataTransfer.setData("text/plain", String(subsection.id))
                                                         }}
-                                                        onDragEnd={() => { setDraggingSubsectionId(null); setDragOverSection(null) }}
+                                                        onDragEnd={() => { setDraggingSubsectionId(null); setDragOverSection(null); setDragOverSubsectionId(null) }}
                                                         className="cursor-grab active:cursor-grabbing text-muted-foreground/55 hover:text-foreground shrink-0"
-                                                        title="Drag to another section"
-                                                        aria-label={`Move ${subsection.subsection} to another section`}
+                                                        title="Drag to reorder, or move to another section"
+                                                        aria-label={`Reorder ${subsection.subsection} or move it to another section`}
                                                     >
                                                         <GripVertical className="size-3.5" />
                                                     </button>
