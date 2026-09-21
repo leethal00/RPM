@@ -136,6 +136,8 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const [draggingLineId, setDraggingLineId] = useState<string | null>(null)
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
     const [dragOverLineId, setDragOverLineId] = useState<string | null>(null)
+    const [jobStatus, setJobStatus] = useState<string>("draft")
+    const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null }>>({})
     const syncingArgon = useRef(false)
 
     // Keep one catalogue Argon/Filler line equal to the combined welding hours.
@@ -203,15 +205,34 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data: ls, error }, { data: secs }, { data: sups }] = await Promise.all([
+            const [{ data: ls, error }, { data: secs }, { data: sups }, { data: jobRow }] = await Promise.all([
                 supabase.from("costing_lines").select("*").eq("item_id", item.id),
                 supabase.from("costing_sections").select("*"),
                 supabase.from("costing_suppliers").select("name").order("name"),
+                supabase.from("costing_jobs").select("status").eq("id", jobId).single(),
             ])
             if (!active) return
             if (error) toast.error(error.message)
             const loaded = (ls as CostingLine[]) || []
             setLines(loaded)
+            setJobStatus(String(jobRow?.status || "draft"))
+            const materialIds = Array.from(new Set(loaded.map((line) => line.material_id).filter(Boolean) as string[]))
+            if (materialIds.length > 0) {
+                const { data: currentMaterials, error: materialError } = await supabase
+                    .from("materials")
+                    .select("id,unit_cost,date_last_checked")
+                    .in("id", materialIds)
+                if (materialError) toast.error("Could not check current catalogue prices: " + materialError.message)
+                else {
+                    const current = Object.fromEntries(((currentMaterials || []) as Array<{ id: string; unit_cost: number; date_last_checked: string | null }>).map((material) => [
+                        material.id,
+                        { unit_cost: Number(material.unit_cost || 0), date_last_checked: material.date_last_checked ?? null },
+                    ]))
+                    setCatalogueCosts(current)
+                }
+            } else {
+                setCatalogueCosts({})
+            }
             if (loaded.some(isWeldingTime)) await syncArgonFromWelding(loaded)
             if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
@@ -307,6 +328,42 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         }
         const updated = next.find((line) => line.id === id)
         if ((original && isWeldingTime(original)) || (updated && isWeldingTime(updated))) await syncArgonFromWelding(next)
+    }
+
+    const isQuoteStage = !["in_progress", "complete", "invoiced", "cancelled"].includes(jobStatus)
+    const changedCatalogueLines = lines.filter((line) => {
+        if (!isQuoteStage || !line.material_id) return false
+        const current = catalogueCosts[line.material_id]
+        return current != null && Math.abs(Number(line.unit_cost) - Number(current.unit_cost)) > 0.005
+    })
+
+    async function updateLineToCatalogue(line: CostingLine) {
+        if (!line.material_id) return
+        const current = catalogueCosts[line.material_id]
+        if (!current) return
+        await patchLine(line.id, { unit_cost: current.unit_cost })
+        toast.success("Updated " + (line.description || "line") + " to current catalogue price")
+    }
+
+    async function updateAllCataloguePrices() {
+        if (changedCatalogueLines.length === 0) return
+        const updates = changedCatalogueLines.map((line) => ({
+            id: line.id,
+            unit_cost: catalogueCosts[line.material_id as string].unit_cost,
+        }))
+        setLines((current) => current.map((line) => {
+            const update = updates.find((candidate) => candidate.id === line.id)
+            return update ? { ...line, unit_cost: update.unit_cost } : line
+        }))
+        const results = await Promise.all(
+            updates.map((update) => supabase.from("costing_lines").update({ unit_cost: update.unit_cost }).eq("id", update.id))
+        )
+        const error = results.find((result) => result.error)?.error
+        if (error) {
+            toast.error("Could not update all catalogue prices: " + error.message)
+            return
+        }
+        toast.success(updates.length + " catalogue price" + (updates.length === 1 ? "" : "s") + " updated")
     }
 
     // Type-ahead pick on a line: fill it from a catalogue material (keep its section/subsection).
@@ -481,6 +538,22 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             <datalist id={SUPPLIER_LIST_ID}>
                 {suppliers.map((s) => <option key={s} value={s} />)}
             </datalist>
+
+            {changedCatalogueLines.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-2.5 text-sm dark:border-amber-800/70 dark:bg-amber-950/20 sm:flex-row sm:items-center">
+                    <div className="min-w-0 flex-1">
+                        <div className="font-medium text-amber-900 dark:text-amber-200">
+                            {changedCatalogueLines.length} catalogue price{changedCatalogueLines.length === 1 ? " has" : "s have"} changed since this quote was priced
+                        </div>
+                        <div className="text-xs text-amber-800/80 dark:text-amber-300/80">
+                            Existing quote prices have been preserved. Review the highlighted lines below, or update them all to today&apos;s catalogue pricing.
+                        </div>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void updateAllCataloguePrices()}>
+                        Update all prices
+                    </Button>
+                </div>
+            )}
 
             {/* Add-item type-ahead — builds sections/subsections from what you pick */}
             <div className="flex items-center gap-2">
@@ -706,7 +779,22 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                                 </button>
                                                             )}
                                                         </td>
-                                                        <td className="px-2 py-1"><NumCell value={l.unit_cost} onCommit={(v) => patchLine(l.id, { unit_cost: v ?? 0 })} /></td>
+                                                        <td className="px-2 py-1">
+                                                            <NumCell value={l.unit_cost} onCommit={(v) => patchLine(l.id, { unit_cost: v ?? 0 })} />
+                                                            {l.material_id && catalogueCosts[l.material_id] && Math.abs(Number(l.unit_cost) - Number(catalogueCosts[l.material_id].unit_cost)) > 0.005 && isQuoteStage && (
+                                                                <div className="mt-0.5 flex items-center justify-end gap-1 whitespace-nowrap text-[10px]">
+                                                                    <span className="text-amber-700 dark:text-amber-300">Now {nz(catalogueCosts[l.material_id].unit_cost)}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => void updateLineToCatalogue(l)}
+                                                                        className="text-primary hover:underline"
+                                                                        title="Update this line to the current catalogue price"
+                                                                    >
+                                                                        Update
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </td>
                                                         <td className="px-2 py-1"><NumCell value={l.markup} step="0.05" onCommit={(v) => patchLine(l.id, { markup: v ?? 0 })} /></td>
                                                         <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
                                                         <td className="px-2 py-1 text-right tabular-nums">{nz(lineSell(l))}</td>
