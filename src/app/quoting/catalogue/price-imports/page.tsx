@@ -99,9 +99,25 @@ export default function SupplierPriceImportsPage() {
     }, [materials, supplier])
 
     async function loadMaterials() {
-        const { data, error } = await supabase.from("materials").select("*").eq("active", true).order("supplier").order("description")
-        if (error) throw error
-        const list = (data ?? []) as Material[]
+        const pageSize = 1000
+        const list: Material[] = []
+        let from = 0
+
+        while (true) {
+            const { data, error } = await supabase
+                .from("materials")
+                .select("*")
+                .eq("active", true)
+                .order("supplier")
+                .order("description")
+                .range(from, from + pageSize - 1)
+            if (error) throw error
+            const batch = (data ?? []) as Material[]
+            list.push(...batch)
+            if (batch.length < pageSize) break
+            from += pageSize
+        }
+
         setMaterials(list)
         return list
     }
@@ -130,9 +146,30 @@ export default function SupplierPriceImportsPage() {
         return { material: null, reason: "No existing RPM item matched", status: "skipped" as const }
     }
 
+    async function parseUploadedFile(file: File) {
+        const lower = file.name.toLowerCase()
+        if (lower.endsWith(".csv")) {
+            return { format: "csv", records: parseCsv(await file.text()), warning: "" }
+        }
+
+        const form = new FormData()
+        form.append("file", file)
+        const response = await fetch("/api/catalogue/price-import/parse", { method: "POST", body: form })
+        const body = await response.json()
+        if (!response.ok) throw new Error(body?.error || "Could not parse supplier price list")
+        return {
+            format: String(body?.format || ""),
+            records: (body?.records || []) as Record<string, string>[],
+            warning: String(body?.warning || ""),
+        }
+    }
+
     async function handleFile(file: File) {
         if (!supplier.trim()) return toast.error("Choose the supplier first")
-        if (!file.name.toLowerCase().endsWith(".csv")) return toast.error("CSV files are supported in this stage")
+        const lower = file.name.toLowerCase()
+        if (![".csv", ".xlsx", ".xls", ".pdf"].some((extension) => lower.endsWith(extension))) {
+            return toast.error("Upload a CSV, Excel or PDF supplier price list")
+        }
 
         setLoading(true)
         try {
@@ -140,18 +177,25 @@ export default function SupplierPriceImportsPage() {
             const pool = catalogue.filter((material) => (material.supplier ?? "").trim().toLowerCase() === supplier.trim().toLowerCase())
             if (pool.length === 0) throw new Error(`No existing RPM catalogue items are assigned to ${supplier}`)
 
-            const records = parseCsv(await file.text())
+            const parsed = await parseUploadedFile(file)
+            const forceReview = parsed.format === "pdf"
             const nextRows: ImportRow[] = []
-            records.forEach((record, index) => {
+            parsed.records.forEach((record, index) => {
                 const code = pickField(record, ["code", "item code", "sku", "stock code", "product code", "part number"])
                 const description = pickField(record, ["description", "product description", "product", "item", "name"])
-                const priceText = pickField(record, ["unit cost", "cost", "net price", "price", "trade price", "your price", "nett"])
+                const priceText = pickField(record, ["unit cost", "cost", "eac price", "net price", "price", "trade price", "your price", "nett"])
                 const price = parseMoney(priceText)
-                if (!description || price == null) return
+                if ((!description && !code) || price == null) return
 
                 const match = findExistingMatch(code, description, pool)
                 let status: ImportRow["status"] = match.status
                 let reason = match.reason
+
+                if (forceReview && match.material) {
+                    status = "review"
+                    reason = `${reason}; PDF extraction — confirm before applying`
+                }
+
                 if (match.material && Number(match.material.unit_cost) > 0) {
                     const oldPrice = Number(match.material.unit_cost)
                     const movement = Math.abs(price - oldPrice) / oldPrice
@@ -162,9 +206,9 @@ export default function SupplierPriceImportsPage() {
                 }
 
                 nextRows.push({
-                    rowNo: index + 2,
+                    rowNo: Number(record.__row) || index + 2,
                     code,
-                    description,
+                    description: description || code,
                     price,
                     matchId: match.material?.id ?? null,
                     status,
@@ -172,9 +216,10 @@ export default function SupplierPriceImportsPage() {
                 })
             })
 
-            if (nextRows.length === 0) throw new Error("No usable rows found. The CSV needs description and price columns.")
+            if (nextRows.length === 0) throw new Error("No usable price rows were found in this file.")
             setRows(nextRows)
             setFilename(file.name)
+            if (parsed.warning) toast.info(parsed.warning)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Could not read price list")
         } finally {
@@ -185,6 +230,12 @@ export default function SupplierPriceImportsPage() {
     function changeMatch(rowNo: number, matchId: string) {
         setRows((current) => current.map((row) => row.rowNo === rowNo
             ? { ...row, matchId: matchId || null, status: matchId ? "ready" : "skipped", reason: matchId ? "Manually matched" : "No existing RPM item selected" }
+            : row))
+    }
+
+    function approveRow(rowNo: number) {
+        setRows((current) => current.map((row) => row.rowNo === rowNo && row.matchId
+            ? { ...row, status: "ready", reason: row.reason.replace(/; PDF extraction — confirm before applying/g, "") }
             : row))
     }
 
@@ -229,7 +280,7 @@ export default function SupplierPriceImportsPage() {
                     icon={FileSpreadsheet}
                     kicker="Catalogue"
                     title="Supplier Price Imports"
-                    description="Upload supplier CSV price lists and update existing RPM catalogue items only."
+                    description="Upload supplier CSV, Excel or PDF price lists and update existing RPM catalogue items only."
                     actions={<Button variant="outline" asChild><Link href="/quoting/catalogue"><ArrowLeft className="mr-1.5 size-4" /> Catalogue</Link></Button>}
                 />
 
@@ -250,9 +301,9 @@ export default function SupplierPriceImportsPage() {
 
                         <label className={`flex min-h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 text-center ${supplier.trim() ? "cursor-pointer hover:bg-muted/40" : "cursor-not-allowed opacity-50"}`}>
                             <Upload className="mb-2 size-6 text-muted-foreground" />
-                            <span className="text-sm font-medium">Upload supplier CSV</span>
-                            <span className="mt-1 text-xs text-muted-foreground">Unmatched supplier products are skipped.</span>
-                            <input type="file" accept=".csv,text/csv" className="hidden" disabled={!supplier.trim() || loading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.currentTarget.value = "" }} />
+                            <span className="text-sm font-medium">Upload supplier price list</span>
+                            <span className="mt-1 text-xs text-muted-foreground">CSV, Excel or PDF. Unmatched supplier products are skipped.</span>
+                            <input type="file" accept=".csv,.xlsx,.xls,.pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" className="hidden" disabled={!supplier.trim() || loading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.currentTarget.value = "" }} />
                         </label>
                     </section>
 
@@ -261,7 +312,7 @@ export default function SupplierPriceImportsPage() {
                             <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground">
                                 <FileSpreadsheet className="mx-auto mb-3 size-8 opacity-50" />
                                 <p className="text-sm font-medium text-foreground">No price list loaded</p>
-                                <p className="mt-1 text-xs">Choose a supplier and upload a CSV.</p>
+                                <p className="mt-1 text-xs">Choose a supplier and upload a CSV, Excel or PDF price list.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -299,7 +350,14 @@ export default function SupplierPriceImportsPage() {
                                                             <div className="mt-1 text-[11px] text-muted-foreground">{row.reason}</div>
                                                         </td>
                                                         <td className="px-3 py-2 tabular-nums">{currentMatch ? `$${Number(currentMatch.unit_cost).toFixed(2)}` : "—"}</td>
-                                                        <td className="px-3 py-2"><span className="text-xs">{row.status === "ready" ? "Ready" : row.status === "review" ? "Review" : "Skipped"}</span></td>
+                                                        <td className="px-3 py-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs">{row.status === "ready" ? "Ready" : row.status === "review" ? "Review" : "Skipped"}</span>
+                                                                {row.status === "review" && row.matchId && (
+                                                                    <button type="button" onClick={() => approveRow(row.rowNo)} className="text-xs text-primary hover:underline">Approve</button>
+                                                                )}
+                                                            </div>
+                                                        </td>
                                                     </tr>
                                                 )
                                             })}
