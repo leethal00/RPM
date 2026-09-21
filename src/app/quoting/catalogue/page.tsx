@@ -120,14 +120,41 @@ export default function CataloguePage() {
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data, error }, { data: sectionData, error: sectionError }] = await Promise.all([
-                supabase.from("materials").select("*").order("supplier").order("section").order("description"),
-                supabase.from("costing_sections").select("*").order("sort").order("section"),
-            ])
+            const pageSize = 1000
+            const allMaterials: Material[] = []
+            let from = 0
+            let materialError: { message?: string } | null = null
+
+            while (true) {
+                const { data, error } = await supabase
+                    .from("materials")
+                    .select("*")
+                    .order("supplier")
+                    .order("section")
+                    .order("description")
+                    .range(from, from + pageSize - 1)
+
+                if (error) {
+                    materialError = error
+                    break
+                }
+
+                const batch = (data as Material[]) || []
+                allMaterials.push(...batch)
+                if (batch.length < pageSize) break
+                from += pageSize
+            }
+
+            const { data: sectionData, error: sectionError } = await supabase
+                .from("costing_sections")
+                .select("*")
+                .order("sort")
+                .order("section")
+
             if (!active) return
-            if (error) toast.error(error.message)
+            if (materialError) toast.error(materialError.message || "Could not load catalogue items")
             if (sectionError) toast.error(sectionError.message)
-            setMaterials((data as Material[]) || [])
+            setMaterials(allMaterials)
             setSections((sectionData as CostingSection[]) || [])
             setLoading(false)
         })()
