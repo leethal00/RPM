@@ -22,6 +22,17 @@ type ImportRow = {
     reason: string
 }
 
+type NewMaterialDraft = {
+    rowNo: number
+    description: string
+    code: string
+    supplier: string
+    section: string
+    subsection: string
+    unit: string
+    default_markup: number
+}
+
 function normalise(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9.]+/g, " ").replace(/\s+/g, " ").trim()
 }
@@ -92,6 +103,8 @@ export default function SupplierPriceImportsPage() {
         subsection: "",
     })
     const [savingMaterial, setSavingMaterial] = useState(false)
+    const [newMaterialDraft, setNewMaterialDraft] = useState<NewMaterialDraft | null>(null)
+    const [addingMaterial, setAddingMaterial] = useState(false)
 
     const suppliers = useMemo(() => {
         const names: string[] = []
@@ -135,6 +148,100 @@ export default function SupplierPriceImportsPage() {
     async function ensureMaterials() {
         if (materials.length > 0) return materials
         return loadMaterials()
+    }
+
+    function suggestNewMaterial(row: ImportRow) {
+        const source = row.description
+        const lower = source.toLowerCase().replace(/×/g, "x")
+        const dimensionTokens = normalise(source).split(" ").filter((token) => /\d+x\d+|\d+\.\d+|\d+mm|ua\d+/i.test(token))
+        const familyWords = ["equal angle", "unequal angle", "shs", "rhs", "channel", "flat bar", "round tube", "square tube", "sheet", "plate"]
+        const family = familyWords.find((word) => lower.includes(word)) ?? ""
+
+        let best: Material | null = null
+        let bestScore = -1
+        for (const material of supplierMaterials) {
+            const candidate = material.description.toLowerCase()
+            let score = 0
+            if (family && candidate.includes(family)) score += 8
+            for (const token of dimensionTokens) {
+                if (normalise(material.description).includes(normalise(token))) score += 2
+            }
+            if (material.subsection && family) {
+                const sub = material.subsection.toLowerCase()
+                if ((family.includes("angle") && sub.includes("angle")) ||
+                    ((family === "shs" || family === "rhs") && sub.includes("extrusion")) ||
+                    ((family === "sheet" || family === "plate") && sub.includes("sheet"))) score += 3
+            }
+            if (score > bestScore) {
+                best = material
+                bestScore = score
+            }
+        }
+
+        const ua = source.match(/\b(UA\d+)\b/i)?.[1]?.toUpperCase()
+        const dims3 = source.match(/\b(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)\b/i)
+        const length = source.match(/\b(\d+(?:\.\d+)?)\s*m\b/i)?.[1]
+        const sheet = source.match(/\b(\d+(?:\.\d+)?)\s*mm\s*[xX]\s*(\d{3,4})\s*[xX]\s*(\d{3,4}).*?\b(50\d\d|60\d\d|70\d\d)\b(?:.*?\b(H\d{2}|T\d)\b)?/i)
+
+        let description = source
+        if (ua && dims3) {
+            const dims = String(Number(dims3[1])) + "x" + String(Number(dims3[2])) + "x" + String(Number(dims3[3]))
+            const perLength = length ? ", per " + String(Number(length)) + "m" : ""
+            if (lower.includes("equal angle") && !lower.includes("unequal")) description = "Aluminium Equal angle " + ua + " " + dims + perLength
+            else if (lower.includes("unequal angle")) description = "Aluminium Un-Equal angle " + ua + " " + dims + perLength
+            else if (lower.includes("shs")) description = "Aluminium SHS " + ua + " " + dims + perLength
+            else if (lower.includes("rhs")) description = "Aluminium RHS " + ua + " " + dims + perLength
+            else if (lower.includes("channel")) description = "Aluminium Channel " + ua + " " + dims + perLength
+            else if (lower.includes("flat")) description = "Aluminium Flat Bar " + ua + " " + dims + perLength
+        } else if (sheet) {
+            const thickness = Number(sheet[1])
+            const a = Number(sheet[2])
+            const b = Number(sheet[3])
+            const alloy = sheet[4]
+            const temper = sheet[5]?.toUpperCase()
+            const pe = /\bpe\b|film/i.test(source) ? ", PE" : ""
+            description = "Aluminium " + thickness + "mm " + Math.max(a,b) + " " + Math.min(a,b) + " " + alloy + (temper ? " " + temper : "") + pe
+        }
+
+        setNewMaterialDraft({
+            rowNo: row.rowNo,
+            description,
+            code: row.code,
+            supplier: supplier.trim(),
+            section: best?.section || "Materials",
+            subsection: best?.subsection || "",
+            unit: best?.unit || "",
+            default_markup: Number(best?.default_markup ?? 0.5),
+        })
+    }
+
+    async function addSuggestedMaterial(row: ImportRow) {
+        if (!newMaterialDraft || newMaterialDraft.rowNo !== row.rowNo) return
+        if (!newMaterialDraft.description.trim()) return toast.error("Description is required")
+        setAddingMaterial(true)
+        const payload = {
+            code: newMaterialDraft.code.trim() || null,
+            description: newMaterialDraft.description.trim(),
+            supplier: newMaterialDraft.supplier.trim() || supplier.trim(),
+            unit: newMaterialDraft.unit.trim() || null,
+            unit_cost: row.price,
+            default_markup: Number(newMaterialDraft.default_markup || 0.5),
+            section: newMaterialDraft.section.trim() || "Materials",
+            subsection: newMaterialDraft.subsection.trim() || null,
+            date_last_checked: new Date().toISOString().slice(0, 10),
+            active: true,
+        }
+        const { data, error } = await supabase.from("materials").insert(payload).select("*").single()
+        setAddingMaterial(false)
+        if (error) return toast.error(error.message)
+
+        const created = data as Material
+        setMaterials((current) => [...current, created])
+        setRows((current) => current.map((candidate) => candidate.rowNo === row.rowNo
+            ? { ...candidate, matchId: created.id, status: "ready", reason: "New RPM catalogue item approved from supplier price list" }
+            : candidate))
+        setNewMaterialDraft(null)
+        toast.success("New RPM catalogue item added")
     }
 
     function findExistingMatch(code: string, description: string, pool: Material[]) {
@@ -476,7 +583,7 @@ export default function SupplierPriceImportsPage() {
                     icon={FileSpreadsheet}
                     kicker="Catalogue"
                     title="Supplier Price Imports"
-                    description="Upload supplier CSV, Excel or PDF price lists and update existing RPM catalogue items only."
+                    description="Upload supplier CSV, Excel or PDF price lists, update existing RPM catalogue items, and approve new items when needed."
                     actions={<Button variant="outline" asChild><Link href="/quoting/catalogue"><ArrowLeft className="mr-1.5 size-4" /> Catalogue</Link></Button>}
                 />
 
@@ -529,7 +636,7 @@ export default function SupplierPriceImportsPage() {
                             <Upload className={`mb-2 size-6 ${dragActive ? "text-primary" : "text-muted-foreground"}`} />
                             <span className="text-sm font-medium">{dragActive ? "Drop price list here" : "Upload supplier price list"}</span>
                             <span className="mt-1 text-xs text-muted-foreground">Drag & drop or click to browse · CSV, Excel or PDF</span>
-                            <span className="mt-0.5 text-[11px] text-muted-foreground">Unmatched supplier products are skipped.</span>
+                            <span className="mt-0.5 text-[11px] text-muted-foreground">Unmatched products can be skipped or approved as new RPM catalogue items.</span>
                             <input type="file" accept=".csv,.xlsx,.xls,.pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" className="hidden" disabled={!supplier.trim() || loading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.currentTarget.value = "" }} />
                         </label>
                     </section>
@@ -585,6 +692,9 @@ export default function SupplierPriceImportsPage() {
                                                                 {row.status !== "skipped" && (
                                                                     <button type="button" onClick={() => skipRow(row.rowNo)} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">Skip this row</button>
                                                                 )}
+                                                                {!currentMatch && (
+                                                                    <button type="button" onClick={() => suggestNewMaterial(row)} className="text-[11px] text-primary hover:underline">Suggest new RPM item</button>
+                                                                )}
                                                             </div>
                                                             {currentMatch && editingMaterialId === currentMatch.id && (
                                                                 <div className="mt-2 grid gap-2 rounded-md border bg-muted/20 p-2">
@@ -601,6 +711,32 @@ export default function SupplierPriceImportsPage() {
                                                                     <div className="flex justify-end gap-2">
                                                                         <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingMaterialId(null)}>Cancel</Button>
                                                                         <Button type="button" size="sm" className="h-7 text-xs" disabled={savingMaterial} onClick={() => void saveMaterialEdit()}>{savingMaterial ? "Saving..." : "Save RPM item"}</Button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {!currentMatch && newMaterialDraft?.rowNo === row.rowNo && (
+                                                                <div className="mt-2 grid gap-2 rounded-md border border-primary/30 bg-primary/5 p-2">
+                                                                    <div>
+                                                                        <div className="text-[11px] font-medium">Suggested new RPM catalogue item</div>
+                                                                        <div className="text-[10px] text-muted-foreground">Based on similar existing supplier items. Review before adding.</div>
+                                                                    </div>
+                                                                    <Input value={newMaterialDraft.description} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, description: event.target.value })} className="h-8 text-xs" placeholder="Description" />
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <Input value={newMaterialDraft.code} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, code: event.target.value })} className="h-8 text-xs" placeholder="Supplier code" />
+                                                                        <Input value={newMaterialDraft.supplier} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, supplier: event.target.value })} className="h-8 text-xs" placeholder="Supplier" />
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <Input value={newMaterialDraft.section} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, section: event.target.value })} className="h-8 text-xs" placeholder="Section" />
+                                                                        <Input value={newMaterialDraft.subsection} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, subsection: event.target.value })} className="h-8 text-xs" placeholder="Subsection" />
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <Input value={newMaterialDraft.unit} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, unit: event.target.value })} className="h-8 text-xs" placeholder="Unit" />
+                                                                        <Input type="number" step="0.01" value={newMaterialDraft.default_markup} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, default_markup: Number(event.target.value) })} className="h-8 text-xs" placeholder="Markup" />
+                                                                    </div>
+                                                                    <div className="text-[11px] text-muted-foreground">Initial cost: <span className="font-medium text-foreground">${row.price.toFixed(2)}</span></div>
+                                                                    <div className="flex justify-end gap-2">
+                                                                        <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setNewMaterialDraft(null)}>Cancel</Button>
+                                                                        <Button type="button" size="sm" className="h-7 text-xs" disabled={addingMaterial} onClick={() => void addSuggestedMaterial(row)}>{addingMaterial ? "Adding..." : "Approve & add item"}</Button>
                                                                     </div>
                                                                 </div>
                                                             )}
