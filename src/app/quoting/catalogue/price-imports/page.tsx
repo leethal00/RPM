@@ -139,11 +139,57 @@ export default function SupplierPriceImportsPage() {
         const byDescription = pool.find((material) => normalise(material.description) === descriptionKey)
         if (byDescription) return { material: byDescription, reason: "Exact description", status: "ready" as const }
 
+        // Supplier descriptions and RPM BOM descriptions often use different wording.
+        // A supplier profile/code embedded in either description (e.g. UA1110) is a much
+        // stronger identifier than general description similarity.
+        const identifierPattern = /\\b(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\\d)[a-z]{1,6}[-_.]?\\d[a-z0-9-_.]*\\b/gi
+        const supplierIdentifiers = Array.from(new Set(
+            `${code} ${description}`.match(identifierPattern)?.map((value) => normalise(value).replace(/\\s/g, "")) ?? []
+        ))
+
+        for (const identifier of supplierIdentifiers) {
+            const identifierMatches = pool.filter((material) => {
+                const haystack = normalise(`${material.code ?? ""} ${material.description}`).replace(/\\s/g, "")
+                return haystack.includes(identifier)
+            })
+            if (identifierMatches.length === 1) {
+                return { material: identifierMatches[0], reason: `Supplier identifier ${identifier.toUpperCase()}`, status: "ready" as const }
+            }
+        }
+
         const candidates = pool.filter((material) => {
             const rpm = normalise(material.description)
             return descriptionKey.length >= 5 && (rpm.includes(descriptionKey) || descriptionKey.includes(rpm))
         })
         if (candidates.length === 1) return { material: candidates[0], reason: "Close description match", status: "review" as const }
+
+        // Fall back to meaningful word/spec overlap. Keep this as review-only so RPM
+        // never silently applies a price based on a fuzzy description.
+        const ignored = new Set(["aluminium", "aluminum", "mill", "finish", "per", "each", "length", "m", "mf", "6060t5", "6063t5"])
+        const tokens = (value: string) => new Set(
+            normalise(value).split(" ").filter((token) => token.length >= 2 && !ignored.has(token))
+        )
+        const supplierTokens = tokens(description)
+        let best: { material: Material; score: number } | null = null
+        let secondScore = 0
+
+        for (const material of pool) {
+            const rpmTokens = tokens(material.description)
+            const shared = [...supplierTokens].filter((token) => rpmTokens.has(token))
+            if (shared.length === 0) continue
+            const score = shared.length / Math.max(1, Math.min(supplierTokens.size, rpmTokens.size))
+            if (!best || score > best.score) {
+                secondScore = best?.score ?? 0
+                best = { material, score }
+            } else if (score > secondScore) {
+                secondScore = score
+            }
+        }
+
+        if (best && best.score >= 0.55 && best.score - secondScore >= 0.15) {
+            return { material: best.material, reason: "Likely description/spec match", status: "review" as const }
+        }
+
         return { material: null, reason: "No existing RPM item matched", status: "skipped" as const }
     }
 
