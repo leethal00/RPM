@@ -172,6 +172,91 @@ export default function SupplierPriceImportsPage() {
         })
         if (candidates.length === 1) return { material: candidates[0], reason: "Close description match", status: "review" as const }
 
+        // Structured spec matching for supplier descriptions that use different word/order
+        // conventions to RPM. Example:
+        // "6mm X 1200 X 2400 Plate 5052 H32 50um PE Film"
+        // should strongly suggest "Aluminium 6mm 2400 1200 5052 H34, PE"
+        // even though the dimensions are reversed and temper differs.
+        const extractSpec = (value: string) => {
+            const lower = value.toLowerCase().replace(/×/g, "x")
+            const thicknessMatch = lower.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*mm\b/)
+            const dimensionMatch = lower.match(/\b(\d{3,4})\s*[x ]\s*(\d{3,4})\b/)
+            const alloyMatch = lower.match(/\b(50\d\d|60\d\d|70\d\d)\b/)
+            const temperMatch = lower.match(/\b(h\d{2}|t\d)\b/)
+            const hasPe = /\bpe\b|poly(?:ethylene)?\s*film|protective\s*film/.test(lower)
+            const hasPlateOrSheet = /\bplate\b|\bsheet\b|aluminium\s+\d+(?:\.\d+)?mm/.test(lower)
+
+            const dimensions = dimensionMatch
+                ? [Number(dimensionMatch[1]), Number(dimensionMatch[2])].sort((a, b) => a - b)
+                : []
+
+            return {
+                thickness: thicknessMatch ? Number(thicknessMatch[1]) : null,
+                dimensions,
+                alloy: alloyMatch?.[1] ?? null,
+                temper: temperMatch?.[1]?.toUpperCase() ?? null,
+                hasPe,
+                hasPlateOrSheet,
+            }
+        }
+
+        const supplierSpec = extractSpec(description)
+        if (supplierSpec.hasPlateOrSheet && supplierSpec.thickness != null && supplierSpec.dimensions.length === 2) {
+            const scored = pool.map((material) => {
+                const rpmSpec = extractSpec(material.description)
+                let score = 0
+                const reasons: string[] = []
+
+                if (rpmSpec.thickness === supplierSpec.thickness) {
+                    score += 40
+                    reasons.push("thickness")
+                } else {
+                    return { material, score: -1, reasons }
+                }
+
+                if (
+                    rpmSpec.dimensions.length === 2 &&
+                    rpmSpec.dimensions[0] === supplierSpec.dimensions[0] &&
+                    rpmSpec.dimensions[1] === supplierSpec.dimensions[1]
+                ) {
+                    score += 35
+                    reasons.push("sheet size")
+                }
+
+                if (supplierSpec.alloy && rpmSpec.alloy === supplierSpec.alloy) {
+                    score += 20
+                    reasons.push("alloy")
+                }
+
+                if (supplierSpec.hasPe && rpmSpec.hasPe) {
+                    score += 5
+                    reasons.push("PE")
+                }
+
+                if (supplierSpec.temper && rpmSpec.temper) {
+                    if (supplierSpec.temper === rpmSpec.temper) {
+                        score += 8
+                        reasons.push("temper")
+                    } else {
+                        score -= 3
+                        reasons.push("temper differs")
+                    }
+                }
+
+                return { material, score, reasons }
+            }).filter((candidate) => candidate.score >= 0).sort((a, b) => b.score - a.score)
+
+            const best = scored[0]
+            const second = scored[1]
+            if (best && best.score >= 75 && (!second || best.score - second.score >= 10)) {
+                return {
+                    material: best.material,
+                    reason: `Likely spec match (${best.reasons.join(", ")})`,
+                    status: "review" as const,
+                }
+            }
+        }
+
         // Fall back to meaningful word/spec overlap. Keep this as review-only so RPM
         // never silently applies a price based on a fuzzy description.
         const ignored = new Set(["aluminium", "aluminum", "mill", "finish", "per", "each", "length", "m", "mf", "6060t5", "6063t5"])
