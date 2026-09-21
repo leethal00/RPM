@@ -56,8 +56,16 @@ export async function updateSession(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    // Public routes that don't require authentication
-    const publicPaths = ['/login', '/forgot-password', '/reset-password']
+    // Public routes that don't require authentication.
+    // Xero webhook/callback requests arrive server-to-server without an RPM session cookie;
+    // webhook security is handled by the endpoint's Xero signature validation.
+    const publicPaths = [
+        '/login',
+        '/forgot-password',
+        '/reset-password',
+        '/api/xero/webhook',
+        '/api/xero/callback',
+    ]
     const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
     // Protected route logic
