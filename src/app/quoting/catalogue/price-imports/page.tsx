@@ -82,6 +82,7 @@ export default function SupplierPriceImportsPage() {
     const [filename, setFilename] = useState("")
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
+    const [dragActive, setDragActive] = useState(false)
 
     const suppliers = useMemo(() => {
         const names: string[] = []
@@ -299,10 +300,41 @@ export default function SupplierPriceImportsPage() {
                             <datalist id="price-import-suppliers">{suppliers.map((name) => <option key={name} value={name} />)}</datalist>
                         </div>
 
-                        <label className={`flex min-h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 text-center ${supplier.trim() ? "cursor-pointer hover:bg-muted/40" : "cursor-not-allowed opacity-50"}`}>
-                            <Upload className="mb-2 size-6 text-muted-foreground" />
-                            <span className="text-sm font-medium">Upload supplier price list</span>
-                            <span className="mt-1 text-xs text-muted-foreground">CSV, Excel or PDF. Unmatched supplier products are skipped.</span>
+                        <label
+                            onDragEnter={(event) => {
+                                event.preventDefault()
+                                if (supplier.trim() && !loading) setDragActive(true)
+                            }}
+                            onDragOver={(event) => {
+                                event.preventDefault()
+                                if (supplier.trim() && !loading) {
+                                    event.dataTransfer.dropEffect = "copy"
+                                    setDragActive(true)
+                                }
+                            }}
+                            onDragLeave={(event) => {
+                                event.preventDefault()
+                                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+                            }}
+                            onDrop={(event) => {
+                                event.preventDefault()
+                                setDragActive(false)
+                                if (!supplier.trim() || loading) return
+                                const file = event.dataTransfer.files?.[0]
+                                if (file) void handleFile(file)
+                            }}
+                            className={`flex min-h-32 flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 text-center transition-colors ${
+                                !supplier.trim()
+                                    ? "cursor-not-allowed opacity-50"
+                                    : dragActive
+                                      ? "cursor-copy border-primary bg-primary/10"
+                                      : "cursor-pointer hover:bg-muted/40"
+                            }`}
+                        >
+                            <Upload className={`mb-2 size-6 ${dragActive ? "text-primary" : "text-muted-foreground"}`} />
+                            <span className="text-sm font-medium">{dragActive ? "Drop price list here" : "Upload supplier price list"}</span>
+                            <span className="mt-1 text-xs text-muted-foreground">Drag & drop or click to browse · CSV, Excel or PDF</span>
+                            <span className="mt-0.5 text-[11px] text-muted-foreground">Unmatched supplier products are skipped.</span>
                             <input type="file" accept=".csv,.xlsx,.xls,.pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" className="hidden" disabled={!supplier.trim() || loading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.currentTarget.value = "" }} />
                         </label>
                     </section>
