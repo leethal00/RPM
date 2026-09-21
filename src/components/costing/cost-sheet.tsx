@@ -182,6 +182,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                 markup: catalogueItem.default_markup,
                 watts: catalogueItem.watts ?? null,
                 wt_factor: catalogueItem.mtr_weight ?? null,
+                catalogue_unit_cost_snapshot: catalogueItem.unit_cost,
                 sort,
             }).select("*").single()
             if (error) return toast.error(`Could not add Argon/Filler: ${error.message}`)
@@ -264,6 +265,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             job_id: jobId, item_id: item.id, section: sec, subsection, material_id: m?.id ?? null,
             description: m?.description ?? "", supplier: m?.supplier ?? null,
             qty: qty != null ? qty : (m ? 1 : 0), unit_cost: m?.unit_cost ?? 0, markup: m?.default_markup ?? 0.5, watts: m?.watts ?? null, sort: maxSort + 1,
+            catalogue_unit_cost_snapshot: m?.unit_cost ?? null,
             // Steel carries a per-unit weight (kg/m or kg/sheet) — seed the galvanising weight calc.
             wt_factor: m?.mtr_weight ?? null,
         }
@@ -334,14 +336,15 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
     const changedCatalogueLines = lines.filter((line) => {
         if (!isQuoteStage || !line.material_id) return false
         const current = catalogueCosts[line.material_id]
-        return current != null && Math.abs(Number(line.unit_cost) - Number(current.unit_cost)) > 0.005
+        const snapshot = line.catalogue_unit_cost_snapshot
+        return current != null && snapshot != null && Math.abs(Number(snapshot) - Number(current.unit_cost)) > 0.005
     })
 
     async function updateLineToCatalogue(line: CostingLine) {
         if (!line.material_id) return
         const current = catalogueCosts[line.material_id]
         if (!current) return
-        await patchLine(line.id, { unit_cost: current.unit_cost })
+        await patchLine(line.id, { unit_cost: current.unit_cost, catalogue_unit_cost_snapshot: current.unit_cost })
         toast.success("Updated " + (line.description || "line") + " to current catalogue price")
     }
 
@@ -350,13 +353,14 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
         const updates = changedCatalogueLines.map((line) => ({
             id: line.id,
             unit_cost: catalogueCosts[line.material_id as string].unit_cost,
+            catalogue_unit_cost_snapshot: catalogueCosts[line.material_id as string].unit_cost,
         }))
         setLines((current) => current.map((line) => {
             const update = updates.find((candidate) => candidate.id === line.id)
-            return update ? { ...line, unit_cost: update.unit_cost } : line
+            return update ? { ...line, unit_cost: update.unit_cost, catalogue_unit_cost_snapshot: update.catalogue_unit_cost_snapshot } : line
         }))
         const results = await Promise.all(
-            updates.map((update) => supabase.from("costing_lines").update({ unit_cost: update.unit_cost }).eq("id", update.id))
+            updates.map((update) => supabase.from("costing_lines").update({ unit_cost: update.unit_cost, catalogue_unit_cost_snapshot: update.catalogue_unit_cost_snapshot }).eq("id", update.id))
         )
         const error = results.find((result) => result.error)?.error
         if (error) {
@@ -368,7 +372,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
 
     // Type-ahead pick on a line: fill it from a catalogue material (keep its section/subsection).
     function fillLineFromMaterial(line: CostingLine, m: Material) {
-        patchLine(line.id, { description: m.description, supplier: m.supplier, unit_cost: m.unit_cost, markup: m.default_markup, material_id: m.id })
+        patchLine(line.id, { description: m.description, supplier: m.supplier, unit_cost: m.unit_cost, markup: m.default_markup, material_id: m.id, catalogue_unit_cost_snapshot: m.unit_cost })
     }
 
     async function removeLine(id: string) {
@@ -402,7 +406,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
             is_labour: line.section === "Labour",
         }).select("id").single()
         if (error) return toast.error(error.message)
-        await patchLine(line.id, { material_id: (data as { id: string }).id })
+        await patchLine(line.id, { material_id: (data as { id: string }).id, catalogue_unit_cost_snapshot: Number(line.unit_cost) })
         toast.success("Saved to catalogue")
     }
 
@@ -781,7 +785,7 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             <NumCell value={l.unit_cost} onCommit={(v) => patchLine(l.id, { unit_cost: v ?? 0 })} />
-                                                            {l.material_id && catalogueCosts[l.material_id] && Math.abs(Number(l.unit_cost) - Number(catalogueCosts[l.material_id].unit_cost)) > 0.005 && isQuoteStage && (
+                                                            {l.material_id && catalogueCosts[l.material_id] && l.catalogue_unit_cost_snapshot != null && Math.abs(Number(l.catalogue_unit_cost_snapshot) - Number(catalogueCosts[l.material_id].unit_cost)) > 0.005 && isQuoteStage && (
                                                                 <div className="mt-0.5 flex items-center justify-end gap-1 whitespace-nowrap text-[10px]">
                                                                     <span className="text-amber-700 dark:text-amber-300">Now {nz(catalogueCosts[l.material_id].unit_cost)}</span>
                                                                     <button
