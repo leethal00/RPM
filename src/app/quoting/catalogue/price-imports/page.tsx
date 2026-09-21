@@ -212,17 +212,24 @@ export default function SupplierPriceImportsPage() {
         }
 
         const ua = source.match(/\b(UA\d+)\b/i)?.[1]?.toUpperCase()
-        const dims3 = source.match(/\b(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)\b/i)
-        const length = source.match(/\b(\d+(?:\.\d+)?)\s*m\b/i)?.[1]
+        const dims3 = source.match(/\b(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)\s*(?:mm)?\b/i)
+        const lengthMatches = Array.from(source.matchAll(/\b(\d+(?:\.\d+)?)\s*m\b/gi))
+        const length = lengthMatches.length > 0 ? lengthMatches[lengthMatches.length - 1][1] : null
         const sheet = source.match(/\b(\d+(?:\.\d+)?)\s*mm\s*[xX]\s*(\d{3,4})\s*[xX]\s*(\d{3,4}).*?\b(50\d\d|60\d\d|70\d\d)\b(?:.*?\b(H\d{2}|T\d)\b)?/i)
 
         let description = source
         if (ua && dims3) {
-            const dims = String(Number(dims3[1])) + "x" + String(Number(dims3[2])) + "x" + String(Number(dims3[3]))
+            const a = Number(dims3[1])
+            const b = Number(dims3[2])
+            const wall = Number(dims3[3])
+            const dims = String(a) + "x" + String(b) + "x" + String(wall)
             const perLength = length ? ", per " + String(Number(length)) + "m" : ""
-            if (lower.includes("equal angle") && !lower.includes("unequal")) description = "Aluminium Equal angle " + ua + " " + dims + perLength
-            else if (lower.includes("unequal angle")) description = "Aluminium Un-Equal angle " + ua + " " + dims + perLength
-            else if (lower.includes("shs")) description = "Aluminium SHS " + ua + " " + dims + perLength
+
+            if (lower.includes("angle")) {
+                description = a === b
+                    ? "Aluminium Equal angle " + ua + " " + dims + perLength
+                    : "Aluminium Un-Equal angle " + ua + " " + dims + perLength
+            } else if (lower.includes("shs")) description = "Aluminium SHS " + ua + " " + dims + perLength
             else if (lower.includes("rhs")) description = "Aluminium RHS " + ua + " " + dims + perLength
             else if (lower.includes("channel")) description = "Aluminium Channel " + ua + " " + dims + perLength
             else if (lower.includes("flat")) description = "Aluminium Flat Bar " + ua + " " + dims + perLength
