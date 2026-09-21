@@ -278,7 +278,7 @@ export default function JobCardPage() {
             <div className="space-y-[2.5mm]">
               {quoteItems.length ? quoteItems.map((item) => (
                 <div key={item.id} className="space-y-[.8mm] text-[12px]">
-                  <div><strong>Qty:</strong> {prettyQty(item.qty || 1)}</div>
+                  <div><strong>Qty:</strong> {prettyQty(item.build_qty ?? item.qty ?? 1)}</div>
                   {item.size && <div><strong>Size:</strong> {item.size}</div>}
                   {item.details && <div className="whitespace-pre-wrap">{item.details}</div>}
                   {item.delivery && <div>{deliveryLabel(item.delivery)}</div>}
