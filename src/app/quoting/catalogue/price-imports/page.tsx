@@ -103,6 +103,7 @@ export default function SupplierPriceImportsPage() {
         subsection: "",
     })
     const [savingMaterial, setSavingMaterial] = useState(false)
+    const [catalogueSections, setCatalogueSections] = useState<Array<{ section: string; subsection: string | null; sort: number }>>([])
     const [newMaterialDraft, setNewMaterialDraft] = useState<NewMaterialDraft | null>(null)
     const [addingMaterial, setAddingMaterial] = useState(false)
 
@@ -145,12 +146,44 @@ export default function SupplierPriceImportsPage() {
         return list
     }
 
+    async function loadCatalogueSections() {
+        if (catalogueSections.length > 0) return catalogueSections
+        const { data, error } = await supabase
+            .from("costing_sections")
+            .select("section,subsection,sort")
+            .order("sort")
+            .order("section")
+        if (error) {
+            toast.error(error.message)
+            return []
+        }
+        const list = (data ?? []) as Array<{ section: string; subsection: string | null; sort: number }>
+        setCatalogueSections(list)
+        return list
+    }
+
     async function ensureMaterials() {
         if (materials.length > 0) return materials
         return loadMaterials()
     }
 
+    function subsectionOptions(sectionName: string) {
+        return Array.from(new Set(
+            catalogueSections
+                .filter((item) => item.section === sectionName && item.subsection)
+                .sort((a, b) => a.sort - b.sort)
+                .map((item) => item.subsection as string)
+        ))
+    }
+
+    const sectionOptions = Array.from(new Set(
+        catalogueSections
+            .sort((a, b) => a.sort - b.sort)
+            .map((item) => item.section)
+    ))
+
     function suggestNewMaterial(row: ImportRow) {
+        void loadCatalogueSections()
         const source = row.description
         const lower = source.toLowerCase().replace(/×/g, "x")
         const dimensionTokens = normalise(source).split(" ").filter((token) => /\d+x\d+|\d+\.\d+|\d+mm|ua\d+/i.test(token))
@@ -494,6 +527,7 @@ export default function SupplierPriceImportsPage() {
     }
 
     function startEditMaterial(material: Material) {
+        void loadCatalogueSections()
         setEditingMaterialId(material.id)
         setEditMaterial({
             description: material.description || "",
@@ -705,8 +739,23 @@ export default function SupplierPriceImportsPage() {
                                                                         <Input value={editMaterial.supplier} onChange={(event) => setEditMaterial({ ...editMaterial, supplier: event.target.value })} className="h-8 text-xs" placeholder="Supplier" />
                                                                     </div>
                                                                     <div className="grid grid-cols-2 gap-2">
-                                                                        <Input value={editMaterial.section} onChange={(event) => setEditMaterial({ ...editMaterial, section: event.target.value })} className="h-8 text-xs" placeholder="Section" />
-                                                                        <Input value={editMaterial.subsection} onChange={(event) => setEditMaterial({ ...editMaterial, subsection: event.target.value })} className="h-8 text-xs" placeholder="Subsection" />
+                                                                        <select
+                                                                            value={editMaterial.section}
+                                                                            onChange={(event) => setEditMaterial({ ...editMaterial, section: event.target.value, subsection: "" })}
+                                                                            className="h-8 rounded-md border bg-background px-2 text-xs"
+                                                                        >
+                                                                            <option value="">Select section</option>
+                                                                            {sectionOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                                                                        </select>
+                                                                        <select
+                                                                            value={editMaterial.subsection}
+                                                                            onChange={(event) => setEditMaterial({ ...editMaterial, subsection: event.target.value })}
+                                                                            className="h-8 rounded-md border bg-background px-2 text-xs"
+                                                                            disabled={!editMaterial.section}
+                                                                        >
+                                                                            <option value="">No subsection</option>
+                                                                            {subsectionOptions(editMaterial.section).map((name) => <option key={name} value={name}>{name}</option>)}
+                                                                        </select>
                                                                     </div>
                                                                     <div className="flex justify-end gap-2">
                                                                         <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingMaterialId(null)}>Cancel</Button>
@@ -726,8 +775,23 @@ export default function SupplierPriceImportsPage() {
                                                                         <Input value={newMaterialDraft.supplier} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, supplier: event.target.value })} className="h-8 text-xs" placeholder="Supplier" />
                                                                     </div>
                                                                     <div className="grid grid-cols-2 gap-2">
-                                                                        <Input value={newMaterialDraft.section} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, section: event.target.value })} className="h-8 text-xs" placeholder="Section" />
-                                                                        <Input value={newMaterialDraft.subsection} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, subsection: event.target.value })} className="h-8 text-xs" placeholder="Subsection" />
+                                                                        <select
+                                                                            value={newMaterialDraft.section}
+                                                                            onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, section: event.target.value, subsection: "" })}
+                                                                            className="h-8 rounded-md border bg-background px-2 text-xs"
+                                                                        >
+                                                                            <option value="">Select section</option>
+                                                                            {sectionOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                                                                        </select>
+                                                                        <select
+                                                                            value={newMaterialDraft.subsection}
+                                                                            onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, subsection: event.target.value })}
+                                                                            className="h-8 rounded-md border bg-background px-2 text-xs"
+                                                                            disabled={!newMaterialDraft.section}
+                                                                        >
+                                                                            <option value="">No subsection</option>
+                                                                            {subsectionOptions(newMaterialDraft.section).map((name) => <option key={name} value={name}>{name}</option>)}
+                                                                        </select>
                                                                     </div>
                                                                     <div className="grid grid-cols-2 gap-2">
                                                                         <Input value={newMaterialDraft.unit} onChange={(event) => setNewMaterialDraft({ ...newMaterialDraft, unit: event.target.value })} className="h-8 text-xs" placeholder="Unit" />
