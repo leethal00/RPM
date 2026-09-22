@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import pdfParse from "pdf-parse"
+import { parseMulfordPdf } from "@/lib/catalogue/mulford-price-list"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -158,8 +159,9 @@ export async function POST(request: NextRequest) {
         }
 
         if (lower.endsWith(".pdf")) {
-            const parsed = await pdfParse(buffer)
-            const records = parsePdfText(parsed.text || "")
+            const mulfordRecords = await parseMulfordPdf(buffer, pdfParse)
+            const parsed = mulfordRecords ? null : await pdfParse(buffer)
+            const records = mulfordRecords ?? parsePdfText(parsed?.text || "")
             if (records.length === 0) {
                 return NextResponse.json({
                     error: "No usable price rows were extracted from this PDF. It may be a scanned/image PDF or use a table layout that needs a supplier-specific parser.",
@@ -168,7 +170,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
                 format: "pdf",
                 records,
-                warning: "PDF prices are extracted from document text and must be reviewed before applying.",
+                warning: mulfordRecords
+                    ? "Mulford table rows were extracted with colour, gauge, finish and sheet-size distinctions. Confirm review items before applying."
+                    : "PDF prices are extracted from document text and must be reviewed before applying.",
             })
         }
 

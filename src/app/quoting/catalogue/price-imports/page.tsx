@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client"
 import { ArrowLeft, FileSpreadsheet, Upload } from "lucide-react"
 import { toast } from "sonner"
 import type { Material } from "@/types/database"
+import { findExactMulfordMatch } from "@/lib/catalogue/mulford-matching"
 
 type ImportRow = {
     rowNo: number
@@ -295,6 +296,13 @@ export default function SupplierPriceImportsPage() {
         const byDescription = pool.find((material) => normalise(material.description) === descriptionKey)
         if (byDescription) return { material: byDescription, reason: "Exact description", status: "ready" as const }
 
+        if (/^mulfords?$/i.test(supplier.trim())) {
+            const mulfordMatch = findExactMulfordMatch(description, pool)
+            if (mulfordMatch) {
+                return { material: mulfordMatch, reason: "Exact Mulford product variant", status: "ready" as const }
+            }
+        }
+
         // Supplier descriptions and RPM BOM descriptions often use different wording.
         // A supplier profile/code embedded in either description (e.g. UA1110) is a much
         // stronger identifier than general description similarity.
@@ -479,7 +487,7 @@ export default function SupplierPriceImportsPage() {
                 let status: ImportRow["status"] = match.status
                 let reason = match.reason
 
-                if (forceReview && match.material) {
+                if (forceReview && match.material && match.reason !== "Exact Mulford product variant") {
                     status = "review"
                     reason = `${reason}; PDF extraction — confirm before applying`
                 }
