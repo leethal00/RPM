@@ -178,8 +178,8 @@ export default function CostingJobDetailPage() {
                                 ) : null}
                                 {["approved", "in_progress", "complete", "invoiced"].includes(job.status) && (
                                     <Button asChild variant="outline" size="sm" className="gap-1.5 h-9">
-                                        <Link href={`/quoting/${id}/job-card`} target="_blank">
-                                            <FileText className="size-3.5" /> Job card
+                                        <Link href={`/quoting/${id}/job-pack`}>
+                                            <FileText className="size-3.5" /> Job pack
                                         </Link>
                                     </Button>
                                 )}
