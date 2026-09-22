@@ -14,11 +14,10 @@ import {
 } from "@/components/ui/dialog"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
-import { NumCell, TextCell, SupplierCell } from "@/components/costing/cells"
+import { NumCell, TextCell } from "@/components/costing/cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import type { CostingSection, Material } from "@/types/database"
 
-const SUPPLIER_LIST_ID = "catalogue-suppliers-dl"
 const today = () => new Date().toISOString().slice(0, 10)
 
 interface ColMeta { key: string; label: string; width: number; min: number; align?: "right"; title?: string }
@@ -92,6 +91,7 @@ function ColHeader({ col, width, onMove, onResize }: {
 export default function CataloguePage() {
     const supabase = useMemo(() => createClient(), [])
     const [materials, setMaterials] = useState<Material[]>([])
+    const [supplierDirectory, setSupplierDirectory] = useState<string[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [supplier, setSupplier] = useState("all")
@@ -145,26 +145,27 @@ export default function CataloguePage() {
                 from += pageSize
             }
 
-            const { data: sectionData, error: sectionError } = await supabase
-                .from("costing_sections")
-                .select("*")
-                .order("sort")
-                .order("section")
+            const [{ data: sectionData, error: sectionError }, { data: supplierData, error: supplierError }] = await Promise.all([
+                supabase.from("costing_sections").select("*").order("sort").order("section"),
+                supabase.from("supplier_directory").select("name").eq("active", true).order("name"),
+            ])
 
             if (!active) return
             if (materialError) toast.error(materialError.message || "Could not load catalogue items")
             if (sectionError) toast.error(sectionError.message)
+            if (supplierError) toast.error(supplierError.message)
             setMaterials(allMaterials)
             setSections((sectionData as CostingSection[]) || [])
+            setSupplierDirectory((supplierData ?? []).map((row: { name: string }) => row.name))
             setLoading(false)
         })()
         return () => { active = false }
     }, [supabase])
 
-    const suppliers = useMemo(
-        () => Array.from(new Set(materials.map((m) => m.supplier).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
-        [materials]
-    )
+    const suppliers = useMemo(() => {
+        const inUse = materials.map((m) => m.supplier).filter(Boolean) as string[]
+        return Array.from(new Set([...supplierDirectory, ...inUse])).sort((a, b) => a.localeCompare(b))
+    }, [materials, supplierDirectory])
     const sectionNames = useMemo(() => {
         const defined = sections.map((s) => s.section)
         const inUse = materials.map((m) => m.section).filter(Boolean)
@@ -431,7 +432,20 @@ export default function CataloguePage() {
         switch (key) {
             case "code": return <TextCell value={m.code ?? ""} placeholder="—" onCommit={(v) => patch(m.id, { code: v || null })} />
             case "description": return <TextCell value={m.description} placeholder="Description" onCommit={(v) => patch(m.id, { description: v })} />
-            case "supplier": return <SupplierCell value={m.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => patch(m.id, { supplier: v || null })} />
+            case "supplier": return (
+                <select
+                    value={m.supplier ?? ""}
+                    onChange={(e) => patch(m.id, { supplier: e.target.value || null })}
+                    className="w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
+                    aria-label={`Supplier for ${m.description || "catalogue item"}`}
+                >
+                    <option value="">—</option>
+                    {m.supplier && !supplierDirectory.includes(m.supplier) && (
+                        <option value={m.supplier}>{m.supplier} (not in Supplier Directory)</option>
+                    )}
+                    {supplierDirectory.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+            )
             case "section": return (
                 <select
                     value={m.section ?? "Materials"}
@@ -553,8 +567,6 @@ export default function CataloguePage() {
                     </TabsList>
 
                     <TabsContent value="catalogue" className="mt-2">
-                        <datalist id={SUPPLIER_LIST_ID}>{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
-
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                     <div className="relative flex-1 min-w-[260px] max-w-md">
                         <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
