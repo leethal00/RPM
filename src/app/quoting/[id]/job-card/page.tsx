@@ -178,10 +178,14 @@ export default function JobCardPage() {
     if (!job) return
     const oldTitle = document.title
     const clientName = [job.clients?.name, job.stores?.name].filter(Boolean).join(" ") || "Ad-hoc"
-    const jobNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
-    document.title = [jobNumber, clientName, job.title].filter(Boolean).join(" - ")
+    const baseJobNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
+    const buildItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE && item.mode === "build")
+    const activeBuildIndex = itemId ? buildItems.findIndex((item) => item.id === itemId) : -1
+    const displayJobNumber = activeBuildIndex >= 0 && baseJobNumber ? `${baseJobNumber}-${activeBuildIndex + 1}` : baseJobNumber
+    const activeBuildName = activeBuildIndex >= 0 ? buildItems[activeBuildIndex]?.name : null
+    document.title = [displayJobNumber, activeBuildName || job.title].filter(Boolean).join(" - ")
     return () => { document.title = oldTitle }
-  }, [job])
+  }, [job, items, itemId])
 
   if (loading) return <div className="p-10 text-sm text-muted-foreground">Loading job card...</div>
   if (!job) return <div className="p-10 text-sm text-muted-foreground">Job not found.</div>
@@ -203,7 +207,10 @@ export default function JobCardPage() {
   const title = j.production_title || job.title
   const details = j.production_details ?? job.details ?? ""
   const customer = [job.clients?.name, j.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
-  const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
+  const baseNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
+  const buildItems = allQuoteItems.filter((item) => item.mode === "build")
+  const activeBuildIndex = activeItem ? buildItems.findIndex((item) => item.id === activeItem.id) : -1
+  const number = activeBuildIndex >= 0 && baseNumber ? `${baseNumber}-${activeBuildIndex + 1}` : baseNumber
   const contact = j.production_contact_name || j.quote_contact || job.contact_name || j.stores?.manager_name || ""
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
