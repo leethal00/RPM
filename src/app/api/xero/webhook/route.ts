@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto"
 import { after, NextRequest, NextResponse } from "next/server"
 import { getValidXero, XERO_API, xeroHeaders } from "@/lib/xero"
-import { syncOpenQuotesForReferences } from "@/lib/xero-job-sync"
+import { syncOpenQuotesForInvoices, type XeroRow } from "@/lib/xero-job-sync"
 
 export const dynamic = "force-dynamic"
 
@@ -39,24 +39,24 @@ async function processInvoiceEvents(invoiceEvents: XeroWebhookEvent[]) {
       return
     }
 
-    const references: string[] = []
+    const invoices: XeroRow[] = []
     for (const event of invoiceEvents) {
       if (event.tenantId && event.tenantId !== xero.tenantId) continue
       try {
         const invoiceResult = await xeroJson(`${XERO_API}/Invoices/${event.resourceId}`, xero.accessToken, xero.tenantId)
-        const invoice = invoiceResult?.Invoices?.[0]
+        const invoice = invoiceResult?.Invoices?.[0] as XeroRow | undefined
         if (!invoice || String(invoice.Type || "").toUpperCase() !== "ACCREC") continue
-        const reference = String(invoice.Reference || "").trim()
-        if (reference) references.push(reference)
+        invoices.push(invoice)
       } catch (error) {
         console.error("Xero webhook invoice lookup failed", event.resourceId, error)
       }
     }
 
-    const results = await syncOpenQuotesForReferences(references)
+    const results = await syncOpenQuotesForInvoices(invoices)
     const activated = results.filter((result) => result.ok && result.changedToJob)
     console.info("Xero webhook processed", {
       events: invoiceEvents.length,
+      invoices: invoices.length,
       matched: results.length,
       activated: activated.length,
     })
@@ -84,9 +84,6 @@ export async function POST(req: NextRequest) {
     (event) => String(event.eventCategory || "").toUpperCase() === "INVOICE" && event.resourceId
   )
 
-  // Xero requires a very fast 2xx acknowledgement. Do the Xero API/database work
-  // after the response so slow token refreshes or invoice lookups cannot make
-  // Xero mark the webhook delivery as timed out and retry it for 24 hours.
   if (invoiceEvents.length) after(() => processInvoiceEvents(invoiceEvents))
 
   return NextResponse.json({ ok: true, accepted: invoiceEvents.length })
