@@ -207,15 +207,15 @@ export default function JobCardPage() {
   const title = j.production_title || job.title
   const details = j.production_details ?? job.details ?? ""
   const customer = [job.clients?.name, j.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
-  const baseNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
+  const allQuoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+  const activeItem = itemId ? allQuoteItems.find((item) => item.id === itemId) || null : null
   const buildItems = allQuoteItems.filter((item) => item.mode === "build")
   const activeBuildIndex = activeItem ? buildItems.findIndex((item) => item.id === activeItem.id) : -1
+  const baseNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
   const number = activeBuildIndex >= 0 && baseNumber ? `${baseNumber}-${activeBuildIndex + 1}` : baseNumber
   const contact = j.production_contact_name || j.quote_contact || job.contact_name || j.stores?.manager_name || ""
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
-  const allQuoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
-  const activeItem = itemId ? allQuoteItems.find((item) => item.id === itemId) || null : null
   const quoteItems = activeItem ? [activeItem] : allQuoteItems
   const materialRows = bomLines.filter((line) => {
     if (activeItem && line.item_id !== activeItem.id) return false
