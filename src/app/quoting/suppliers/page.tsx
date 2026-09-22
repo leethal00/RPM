@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
-import { Building2, Edit2, Plus, Search } from "lucide-react"
+import { Building2, Edit2, Package2, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
+import type { Material } from "@/types/database"
 
 type Supplier = {
     id: string
@@ -47,6 +48,7 @@ const emptyForm = {
 export default function SuppliersPage() {
     const supabase = useMemo(() => createClient(), [])
     const [suppliers, setSuppliers] = useState<Supplier[]>([])
+    const [materials, setMaterials] = useState<Material[]>([])
     const [search, setSearch] = useState("")
     const [editing, setEditing] = useState<Supplier | null>(null)
     const [form, setForm] = useState(emptyForm)
@@ -58,12 +60,42 @@ export default function SuppliersPage() {
         setSuppliers((data ?? []) as Supplier[])
     }
 
-    useEffect(() => { void loadSuppliers() }, [])
+    async function loadMaterials() {
+        const pageSize = 1000
+        const list: Material[] = []
+        let from = 0
+        while (true) {
+            const { data, error } = await supabase
+                .from("materials")
+                .select("*")
+                .eq("active", true)
+                .order("supplier")
+                .order("description")
+                .range(from, from + pageSize - 1)
+            if (error) return toast.error(error.message)
+            const batch = (data ?? []) as Material[]
+            list.push(...batch)
+            if (batch.length < pageSize) break
+            from += pageSize
+        }
+        setMaterials(list)
+    }
+
+    useEffect(() => {
+        void Promise.all([loadSuppliers(), loadMaterials()])
+    }, [])
 
     const filtered = suppliers.filter((supplier) => {
         const haystack = [supplier.name, ...(supplier.aliases || []), supplier.contact_name || "", supplier.account_number || ""].join(" ").toLowerCase()
         return haystack.includes(search.trim().toLowerCase())
     })
+
+    function itemsForSupplier(supplier: Supplier) {
+        const names = new Set([supplier.name, ...(supplier.aliases || [])].map((value) => value.trim().toLowerCase()))
+        return materials.filter((material) => names.has((material.supplier || "").trim().toLowerCase()))
+    }
+
+    const editingItems = editing ? itemsForSupplier(editing) : []
 
     function editSupplier(supplier?: Supplier) {
         if (!supplier) {
@@ -135,7 +167,7 @@ export default function SuppliersPage() {
                         <div className="overflow-hidden rounded-lg border bg-card">
                             <table className="w-full text-sm">
                                 <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
-                                    <tr><th className="px-3 py-2">Supplier</th><th className="px-3 py-2">Contact</th><th className="px-3 py-2">Account</th><th className="px-3 py-2">Status</th><th className="w-12" /></tr>
+                                    <tr><th className="px-3 py-2">Supplier</th><th className="px-3 py-2">Contact</th><th className="px-3 py-2">Account</th><th className="px-3 py-2">Items</th><th className="px-3 py-2">Status</th><th className="w-12" /></tr>
                                 </thead>
                                 <tbody>
                                     {filtered.map((supplier) => (
@@ -143,6 +175,7 @@ export default function SuppliersPage() {
                                             <td className="px-3 py-2"><div className="font-medium">{supplier.name}</div>{supplier.aliases?.length > 0 && <div className="text-xs text-muted-foreground">Also: {supplier.aliases.join(", ")}</div>}</td>
                                             <td className="px-3 py-2"><div>{supplier.contact_name || "—"}</div><div className="text-xs text-muted-foreground">{supplier.email || supplier.phone || ""}</div></td>
                                             <td className="px-3 py-2">{supplier.account_number || "—"}</td>
+                                            <td className="px-3 py-2 tabular-nums">{itemsForSupplier(supplier).length}</td>
                                             <td className="px-3 py-2">{supplier.active ? "Active" : "Inactive"}</td>
                                             <td className="px-2 py-2"><Button variant="ghost" size="icon" onClick={() => editSupplier(supplier)}><Edit2 className="size-4" /></Button></td>
                                         </tr>
@@ -168,6 +201,42 @@ export default function SuppliersPage() {
                             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active supplier</label>
                             <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => editSupplier()}>Clear</Button><Button type="submit" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Add supplier"}</Button></div>
                         </form>
+
+                        {editing && (
+                            <div className="mt-5 border-t pt-4">
+                                <div className="mb-2">
+                                    <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Package2 className="size-4" /> Catalogue items</h3>
+                                    <p className="text-xs text-muted-foreground">{editingItems.length} active item{editingItems.length === 1 ? "" : "s"} supplied by {editing.name}</p>
+                                </div>
+                                {editingItems.length === 0 ? (
+                                    <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">No active catalogue items are linked to this supplier yet.</div>
+                                ) : (
+                                    <div className="max-h-[360px] overflow-auto rounded-md border">
+                                        <table className="w-full text-xs">
+                                            <thead className="sticky top-0 bg-muted">
+                                                <tr className="text-left text-muted-foreground">
+                                                    <th className="px-2 py-2">Item</th>
+                                                    <th className="px-2 py-2">Subsection</th>
+                                                    <th className="px-2 py-2 text-right">Cost</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {editingItems.map((material) => (
+                                                    <tr key={material.id} className="border-t align-top">
+                                                        <td className="px-2 py-2">
+                                                            <div className="font-medium">{material.description}</div>
+                                                            {material.code && <div className="text-[11px] text-muted-foreground">{material.code}</div>}
+                                                        </td>
+                                                        <td className="px-2 py-2 text-muted-foreground">{material.subsection || "—"}</td>
+                                                        <td className="px-2 py-2 text-right tabular-nums">{"$" + Number(material.unit_cost || 0).toFixed(2)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </section>
                 </div>
             </PageShell>
