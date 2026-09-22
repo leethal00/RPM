@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -131,6 +131,8 @@ function inferDepartments(title: string, details: string, lines: BomLine[]) {
 export default function JobCardPage() {
   const supabase = useMemo(() => createClient(), [])
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+  const itemId = searchParams.get("item")
   const [job, setJob] = useState<CostingJob | null>(null)
   const [items, setItems] = useState<JobItem[]>([])
   const [bomLines, setBomLines] = useState<BomLine[]>([])
@@ -163,12 +165,14 @@ export default function JobCardPage() {
         setJob(nextJob)
         setItems((itemData || []) as JobItem[])
         setBomLines(nextLines)
-        setSelectedDepartments(inferDepartments(nextJob.production_title || nextJob.title || "", nextJob.production_details ?? nextJob.details ?? "", nextLines))
+        const departmentLines = itemId ? nextLines.filter((line) => line.item_id === itemId) : nextLines
+        const selectedItem = ((itemData || []) as JobItem[]).find((item) => item.id === itemId)
+        setSelectedDepartments(inferDepartments(selectedItem?.name || nextJob.production_title || nextJob.title || "", selectedItem?.details ?? nextJob.production_details ?? nextJob.details ?? "", departmentLines))
         setLoading(false)
       }
     })()
     return () => { live = false }
-  }, [supabase, id])
+  }, [supabase, id, itemId])
 
   useEffect(() => {
     if (!job) return
@@ -203,8 +207,11 @@ export default function JobCardPage() {
   const contact = j.production_contact_name || j.quote_contact || job.contact_name || j.stores?.manager_name || ""
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
-  const quoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+  const allQuoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+  const activeItem = itemId ? allQuoteItems.find((item) => item.id === itemId) || null : null
+  const quoteItems = activeItem ? [activeItem] : allQuoteItems
   const materialRows = bomLines.filter((line) => {
+    if (activeItem && line.item_id !== activeItem.id) return false
     const meta = materialMeta(line)
     if (!line.description?.trim()) return false
     if (meta?.is_labour || /labou?r/i.test(line.section || "")) return false
