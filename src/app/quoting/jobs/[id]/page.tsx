@@ -147,7 +147,7 @@ export default function ActiveJobDetailPage() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openEdit}>
             <Pencil className="size-3.5"/> Edit
           </Button>
-          <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-card`} target="_blank"><FileText className="size-3.5"/> Job card</Link></Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-pack`}><FileText className="size-3.5"/> Job pack</Link></Button>
           <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
             <Trash2 className="size-3.5"/> {deletingJob ? "Deleting…" : "Delete Job"}
           </Button>
