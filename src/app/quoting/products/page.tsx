@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, ChevronRight, Package2, Download, RefreshCw, Search } from "lucide-react"
+import { Plus, Trash2, ChevronRight, Package2, Download, RefreshCw, Search, Copy } from "lucide-react"
 import { toast } from "sonner"
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -38,6 +38,7 @@ export default function ProductsPage() {
     const [xeroError, setXeroError] = useState("")
     const [search, setSearch] = useState("")
     const [importingId, setImportingId] = useState<string | null>(null)
+    const [copyingId, setCopyingId] = useState<string | null>(null)
 
     useEffect(() => {
         let active = true
@@ -118,6 +119,23 @@ export default function ProductsPage() {
         router.push(`/quoting/${templateId}/item/${(data as CostingItem).id}`)
     }
 
+    async function duplicateProduct(product: CostingItem) {
+        if (copyingId || !templateId) return
+        setCopyingId(product.id)
+        try {
+            const { data: newId, error } = await supabase.rpc("duplicate_library_product", { src_item: product.id })
+            if (error) throw error
+            if (!newId) throw new Error("No product was created")
+            toast.success(`Copied "${product.name || "product"}"`)
+            router.push(`/quoting/${templateId}/item/${newId}`)
+        } catch (error) {
+            const message = error && typeof error === "object" && "message" in error ? String(error.message) : String(error)
+            toast.error(`Could not copy product: ${message}`)
+        } finally {
+            setCopyingId(null)
+        }
+    }
+
     async function confirmDelete() {
         if (!deleteTarget) return
         const id = deleteTarget.id
@@ -164,7 +182,7 @@ export default function ProductsPage() {
                                             <th className="font-medium px-2 py-2.5 w-28 text-right">Cost</th>
                                             <th className="font-medium px-2 py-2.5 w-28 text-right">Sell</th>
                                             <th className="font-medium px-2 py-2.5 w-16 text-right">Margin</th>
-                                            <th className="w-24"></th>
+                                            <th className="w-40"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -186,6 +204,10 @@ export default function ProductsPage() {
                                                     <td className="px-2 py-3">
                                                         <div className="flex items-center justify-end gap-1">
                                                             <span className="inline-flex items-center gap-0.5 text-xs text-primary">Edit <ChevronRight className="size-3.5" /></span>
+                                                            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" title={`Copy ${p.name || "product"}`}
+                                                                disabled={copyingId !== null} onClick={(e) => { e.stopPropagation(); duplicateProduct(p) }}>
+                                                                <Copy className="size-3.5" /> {copyingId === p.id ? "Copying…" : "Copy"}
+                                                            </Button>
                                                             <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}
                                                                 className="text-muted-foreground hover:text-destructive p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete product">
                                                                 <Trash2 className="size-3.5" />
