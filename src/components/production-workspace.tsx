@@ -10,10 +10,12 @@ import { Briefcase, Clock, Package, ArrowLeft, RefreshCw } from "lucide-react"
 
 type ProductionJob = { id: string; title: string; job_number: string | null; status: string; completion_date: string | null; estimated_hours: number | null; actual_hours: number; progress: number }
 type Line = { id: string; material_id: string | null; description: string; qty: number; unit: string | null; section: string }
+type BomNote = { item_id: string; name: string; notes: string }
 type Workspace = {
     department: string | null; department_id: string; jobs: ProductionJob[];
     job?: ProductionJob & { instructions: string; details: string | null; job_lead_name: string | null };
     lines?: Line[];
+    bom_notes?: BomNote[];
     time?: { id: string; work_date: string; hours: number; description: string; own: boolean }[];
     actuals?: { id: string; order_date: string; description: string; qty: number; unit: string; own: boolean; costing_line_id: string | null }[];
 }
@@ -34,9 +36,17 @@ export function ProductionWorkspace() {
     const [progress, setProgress] = useState(0)
     const load = useCallback(async () => {
         setLoading(true); setError("")
-        const result = await createClient().rpc("production_workspace", { p_job_id: jobId })
+        const client = createClient()
+        const [result, notesResult] = await Promise.all([
+            client.rpc("production_workspace", { p_job_id: jobId }),
+            jobId ? client.rpc("production_bom_notes", { p_job_id: jobId }) : Promise.resolve(null),
+        ])
         if (result.error) { setData(null); setError(result.error.message) }
-        else { setData(result.data as Workspace); setProgress(result.data.job?.progress ?? 0) }
+        else {
+            if (notesResult?.error) setError(notesResult.error.message)
+            setData({ ...(result.data as Workspace), bom_notes: (notesResult?.data as BomNote[] | null) ?? [] })
+            setProgress(result.data.job?.progress ?? 0)
+        }
         setLoading(false)
     }, [jobId])
     useEffect(() => {
@@ -92,6 +102,7 @@ export function ProductionWorkspace() {
             <Button variant="ghost" onClick={()=>{setJobId(null);setNotice("")}}><ArrowLeft className="size-4"/>All department jobs</Button>
             <section className={panel}><div className="flex flex-wrap justify-between gap-3"><div><p className="text-sm text-muted-foreground">{job.job_number}</p><h2 className="text-2xl font-semibold">{job.title}</h2></div><p className="text-sm">Complete by <strong>{job.completion_date || "not set"}</strong></p></div><p className="mt-2 text-sm text-muted-foreground">Job lead: {job.job_lead_name || "not set"}</p>
                 <h3 className="mt-5 font-semibold">Workshop instructions</h3><p className="mt-2 whitespace-pre-wrap text-sm">{job.instructions || job.details || "No workshop instructions have been added."}</p>
+                {!!data.bom_notes?.length && <div className="mt-4 border-t pt-4"><h3 className="font-semibold">Internal BOM notes</h3><div className="mt-2 space-y-3">{data.bom_notes.map(note => <div key={note.item_id} className="rounded-md bg-muted/40 px-3 py-2 text-sm"><p className="font-medium">{note.name}</p><p className="mt-1 whitespace-pre-wrap">{note.notes}</p></div>)}</div></div>}
                 <div className="mt-5 border-t pt-4"><p className="font-medium">{hours.toFixed(2)} h actual{job.estimated_hours !== null ? ` / ${job.estimated_hours} h estimated` : " · department estimate not set"}</p><p className="mt-1 text-xs text-muted-foreground">Department totals. Progress is recorded separately from time spent.</p><div className="mt-3 flex items-end gap-3"><div><Label htmlFor="progress">Progress (%)</Label><Input id="progress" type="number" min={0} max={100} step={1} value={progress} onChange={e=>setProgress(Number(e.target.value))} disabled={!writable || saving} className="mt-1 w-24"/></div><Button onClick={()=>void save("progress",{progress})} disabled={!writable || saving}>Save progress</Button></div></div>
             </section>
             {!writable && <p className="rounded-lg bg-muted p-3 text-sm">This job is closed. Existing records are available to review.</p>}

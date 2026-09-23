@@ -217,6 +217,19 @@ export default function ItemCostSheetPage() {
                             </div>
                         </div>
 
+                        {item.mode === "build" && (
+                            <div className="rounded-lg border border-border/60 px-2.5 py-2">
+                                <label htmlFor="bom-internal-notes" className="block text-[11px] font-medium text-muted-foreground">
+                                    Internal notes · staff only
+                                </label>
+                                <textarea id="bom-internal-notes" defaultValue={item.internal_notes ?? ""}
+                                    placeholder="Production instructions, purchasing notes or costing assumptions"
+                                    onBlur={(e) => { if (e.target.value !== (item.internal_notes ?? "")) void patchItem({ internal_notes: e.target.value || null }) }}
+                                    className="mt-1 min-h-[54px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
+                                <p className="mt-1 text-[11px] text-muted-foreground">Saved with this BOM for the job team. Excluded from customer documents and Xero.</p>
+                            </div>
+                        )}
+
                         {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
                             <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
                                 Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.

@@ -5,6 +5,7 @@ export type InvoiceItem = {
   name: string
   size?: string | null
   details?: string | null
+  internal_notes?: string | null
   delivery?: string | null
   sign_code?: string | null
   mode?: string | null
