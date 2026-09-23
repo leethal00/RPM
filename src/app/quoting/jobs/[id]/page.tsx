@@ -19,6 +19,7 @@ import { ItemsList } from "@/components/costing/items-list"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { TimeEntries } from "@/components/costing/time-entries"
+import { JobXeroInvoice } from "@/components/costing/job-xero-invoice"
 import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
 
@@ -49,6 +50,7 @@ export default function ActiveJobDetailPage() {
   const [editQuotedBy, setEditQuotedBy] = useState("")
   const [editJobLead, setEditJobLead] = useState("")
   const [teamMembers, setTeamMembers] = useState<string[]>([])
+  const [canManageXero, setCanManageXero] = useState(false)
   const [savingJob, setSavingJob] = useState(false)
   const [deletingJob, setDeletingJob] = useState(false)
 
@@ -66,9 +68,14 @@ export default function ActiveJobDetailPage() {
 
   useEffect(() => {
     async function fetchTeamMembers() {
-      const { data: team } = await supabase.from("users").select("name,email").order("name")
-      const teamRows = (team || []) as Array<{ name: string | null; email: string | null }>
+      const [{ data: team }, { data: auth }] = await Promise.all([
+        supabase.from("users").select("id,name,email,role").order("name"),
+        supabase.auth.getUser(),
+      ])
+      const teamRows = (team || []) as Array<{ id: string; name: string | null; email: string | null; role: string | null }>
       setTeamMembers(Array.from(new Set(teamRows.map((member) => member.name?.trim() || member.email?.split("@")[0]).filter(Boolean) as string[])))
+      const role = teamRows.find((member) => member.id === auth.user?.id)?.role
+      setCanManageXero(role === "super_admin" || role === "rodier_admin")
     }
     void fetchTeamMembers()
   }, [supabase])
@@ -148,6 +155,7 @@ export default function ActiveJobDetailPage() {
             <Pencil className="size-3.5"/> Edit
           </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-pack`}><FileText className="size-3.5"/> Job pack</Link></Button>
+          {canManageXero && <JobXeroInvoice job={job} onChanged={() => mutate()} />}
           <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
             <Trash2 className="size-3.5"/> {deletingJob ? "Deleting…" : "Delete Job"}
           </Button>
@@ -156,6 +164,7 @@ export default function ActiveJobDetailPage() {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1 text-xs text-muted-foreground">
         {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
+        {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
         <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
         <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
         <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
@@ -197,3 +206,4 @@ export default function ActiveJobDetailPage() {
     </>}
   </PageShell></DashboardLayout>
 }
+
