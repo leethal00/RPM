@@ -79,7 +79,7 @@ async function access() {
 
 async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
-    admin.from("costing_jobs").select("id,title,reference,details,contact_name,status,is_template,job_number,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
+    admin.from("costing_jobs").select("id,title,reference,details,contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
     admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
     admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
   ])
@@ -94,7 +94,7 @@ async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, incl
   const proposedLines = includeLines
     ? buildXeroInvoiceLines((items || []) as InvoiceItem[], (costs || []) as InvoiceCostLine[], intro)
     : []
-  return { job, proposedLines }
+  return { job, proposedLines, clientName: client?.name || "" }
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -104,6 +104,17 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const { admin, xero } = granted
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
+    const contactSearch = req.nextUrl.searchParams.get("contactSearch")?.trim()
+    if (contactSearch !== undefined) {
+      const { job, clientName } = await jobAndLines(admin, id, false)
+      if (job.xero_invoice_id || job.xero_invoice_number || job.xero_quote_id) return NextResponse.json({ error: "This job is already connected to Xero." }, { status: 409 })
+      if (!clientName) return NextResponse.json({ error: "Select a customer on the RPM job before creating an invoice." }, { status: 400 })
+      if (contactSearch.length < 2) return NextResponse.json({ contacts: [], clientName })
+      const where = encodeURIComponent(`Name.Contains("${contactSearch.slice(0, 80).replaceAll('"', '\\"')}")`)
+      const result = await xeroJson(XERO_API + "/Contacts?where=" + where, xero.accessToken, xero.tenantId)
+      const contacts = ((result?.Contacts || []) as Array<{ ContactID?: string; Name?: string }>).filter((contact) => contact.ContactID && contact.Name).map((contact) => ({ id: contact.ContactID, name: contact.Name }))
+      return NextResponse.json({ contacts, clientName })
+    }
     const number = req.nextUrl.searchParams.get("number")?.trim()
     const { job, proposedLines } = await jobAndLines(admin, id, !number)
     const identifier = number || job.xero_invoice_id
@@ -125,8 +136,35 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const { admin, xero } = granted
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
-    const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedUpdatedAt?: string }
+    const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedUpdatedAt?: string; contactId?: string }
     const { job, proposedLines } = await jobAndLines(admin, id, body.action !== "link")
+
+    if (body.action === "create") {
+      if (job.xero_invoice_id || job.xero_invoice_number || job.xero_quote_id) return NextResponse.json({ error: "This job is already connected to Xero. Refresh the job before continuing." }, { status: 409 })
+      const contactId = String(body.contactId || "").trim()
+      if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(contactId)) return NextResponse.json({ error: "Select a Xero customer." }, { status: 400 })
+      const contactResult = await xeroJson(XERO_API + "/Contacts/" + encodeURIComponent(contactId), xero.accessToken, xero.tenantId)
+      const contact = contactResult?.Contacts?.[0] as { ContactID?: string } | undefined
+      if (contact?.ContactID !== contactId) return NextResponse.json({ error: "The selected Xero customer could not be found." }, { status: 409 })
+      if (!proposedLines.length) return NextResponse.json({ error: "Add job details before creating a Xero invoice." }, { status: 400 })
+      const result = await xeroJson(XERO_API + "/Invoices", xero.accessToken, xero.tenantId, {
+        method: "POST",
+        headers: { "Idempotency-Key": "rpm-job-invoice-" + id },
+        body: JSON.stringify({ Invoices: [{ Type: "ACCREC", Status: "DRAFT", Contact: { ContactID: contactId }, Reference: job.reference?.trim() || job.title.trim(), LineItems: proposedLines }] }),
+      })
+      const created = result?.Invoices?.[0] as XeroInvoice | undefined
+      const validation = created?.ValidationErrors?.map((row) => row.Message).filter(Boolean).join("; ")
+      if (created?.HasErrors || validation || !created?.InvoiceID || !created.InvoiceNumber) throw new Error(validation || "Xero did not return an invoice ID and number. Check Xero before trying again.")
+      const { data: saved, error: saveError } = await admin.from("costing_jobs").update({
+        xero_invoice_id: created.InvoiceID,
+        xero_invoice_number: created.InvoiceNumber,
+        job_number: created.InvoiceNumber,
+        xero_invoice_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", id).is("xero_invoice_id", null).is("xero_invoice_number", null).select("id").maybeSingle()
+      if (saveError || !saved) throw new Error("Xero created " + created.InvoiceNumber + ", but RPM could not save the link. Use Link existing Xero invoice to connect that number; do not create another invoice.")
+      return NextResponse.json({ ok: true, invoice: summary(created) })
+    }
 
     if (body.action === "link") {
       const number = String(body.invoiceNumber || "").trim()

@@ -17,14 +17,16 @@ import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import type { Client, Store, CostingJob } from "@/types/database"
 import { costingJobSchema, getValidationErrors } from "@/lib/validations"
+import { siteDisplayName } from "@/lib/site-name"
 
 interface CostingJobFormProps {
     onSuccess: (jobId?: string) => void
     onCancel: () => void
     job?: CostingJob
+    createAsJob?: boolean
 }
 
-export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps) {
+export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }: CostingJobFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
 
@@ -63,6 +65,14 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         const name = newStoreName.trim()
         if (!name) return
         if (formData.client_id === "none") return toast.error("Pick a client first, then add its site")
+        const clientName = clients.find((client) => client.id === formData.client_id)?.name || ""
+        const duplicate = stores.find((store) => store.client_id === formData.client_id && siteDisplayName(store.name, clientName).toLowerCase() === siteDisplayName(name, clientName).toLowerCase())
+        if (duplicate) {
+            setFormData((current) => ({ ...current, store_id: duplicate.id }))
+            setAddingStore(false); setNewStoreName("")
+            toast.info("Existing site selected")
+            return
+        }
         const { data, error } = await supabase.from("stores").insert({ name, client_id: formData.client_id }).select("id, name, client_id").single()
         if (error) return toast.error(error.message)
         setStores((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
@@ -99,6 +109,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (createAsJob && formData.client_id === "none") return toast.error("Select a customer for this job")
         setLoading(true)
 
         const result = costingJobSchema.safeParse(formData)
@@ -125,6 +136,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         if (job) {
             payload.id = job.id
         } else {
+            payload.status = createAsJob ? "in_progress" : "quote"
             payload.created_by = userData.user?.id
             payload.quoted_by = userData.user?.id
         }
@@ -148,7 +160,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
         }
 
         setLoading(false)
-        toast.success(job ? "Quote updated" : "Quote created")
+        toast.success(job ? "Quote updated" : createAsJob ? "Job created" : "Quote created")
         onSuccess(data?.id)
     }
 
@@ -217,7 +229,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="client_id" className="text-xs font-medium text-muted-foreground">Client (optional)</Label>
+                        <Label htmlFor="client_id" className="text-xs font-medium text-muted-foreground">Client {createAsJob ? "(required for Xero)" : "(optional)"}</Label>
                         {addingClient ? (
                             <div className="flex gap-1.5">
                                 <Input autoFocus value={newClientName} placeholder="New client name"
@@ -283,7 +295,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                                         <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
                                     ) : (
                                         clientStores.map((s) => (
-                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                            <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, clients.find((client) => client.id === formData.client_id)?.name || "")}</SelectItem>
                                         ))
                                     )}
                                 </SelectContent>
@@ -293,21 +305,21 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="contact_name" className="text-xs font-medium text-muted-foreground">Quote contact (optional)</Label>
+                    <Label htmlFor="contact_name" className="text-xs font-medium text-muted-foreground">{createAsJob ? "Job contact (optional)" : "Quote contact (optional)"}</Label>
                     <Input
                         id="contact_name"
                         placeholder="e.g. Moshik Yunus"
                         value={formData.contact_name}
                         onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
                     />
-                    <p className="text-[11px] text-muted-foreground">Shown as “Contact: …” in the introductory line of the Xero quote.</p>
+                    <p className="text-[11px] text-muted-foreground">Shown as “Contact: …” in the introductory line of the Xero {createAsJob ? "invoice" : "quote"}.</p>
                 </div>
 
                 <div className="grid gap-2">
-                    <Label htmlFor="details" className="text-xs font-medium text-muted-foreground">Details — shown near the top of the Xero quote</Label>
+                    <Label htmlFor="details" className="text-xs font-medium text-muted-foreground">Details — shown near the top of the Xero {createAsJob ? "invoice" : "quote"}</Label>
                     <Textarea
                         id="details"
-                        placeholder="Scope / notes for this quote…"
+                        placeholder={`Scope / notes for this ${createAsJob ? "job" : "quote"}…`}
                         className="min-h-[90px]"
                         value={formData.details}
                         onChange={(e) => setFormData({ ...formData, details: e.target.value })}
@@ -321,7 +333,7 @@ export function CostingJobForm({ onSuccess, onCancel, job }: CostingJobFormProps
                     {loading ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{job ? "Saving…" : "Creating…"}</>
                     ) : (
-                        job ? "Save Changes" : "Create Quote"
+                        job ? "Save Changes" : createAsJob ? "Create Job" : "Create Quote"
                     )}
                 </Button>
             </div>

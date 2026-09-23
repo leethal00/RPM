@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowUpDown, Briefcase, Download, RotateCcw, Search } from "lucide-react"
+import { ArrowUpDown, Briefcase, Download, Plus, RotateCcw, Search } from "lucide-react"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
 import { PageShell } from "@/components/page-shell"
@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/page-header"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { toast } from "sonner"
 import { SiteForm } from "@/components/site-form"
+import { CostingJobForm } from "@/components/costing-job-form"
 import { siteDisplayName } from "@/lib/site-name"
 import type { Client, CostingJob, Store } from "@/types/database"
 
@@ -159,6 +160,7 @@ export default function ActiveJobsPage() {
     const { order, widths, move, setWidth, reset } = useColumnLayout("jobs-columns-v1", JOB_COLUMN_LAYOUT)
 
     const [importOpen, setImportOpen] = useState(false)
+    const [newJobOpen, setNewJobOpen] = useState(false)
     const [creatingSite, setCreatingSite] = useState(false)
     const [invoiceSearch, setInvoiceSearch] = useState("")
     const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -449,6 +451,7 @@ export default function ActiveJobsPage() {
                             <option value="cancelled">Cancelled</option>
                         </select>
                     )}
+                    <Button size="sm" className="h-8 gap-1.5" onClick={() => setNewJobOpen(true)}><Plus className="size-3.5"/> New job</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openImport}><Download className="size-3.5"/> Import from Xero</Button>
                     <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={resetFilters}>Clear filters</Button>
                     <span className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "job" : "jobs"}</span>
@@ -499,11 +502,21 @@ export default function ActiveJobsPage() {
                     </div>
                 )}
 
+                <Dialog open={newJobOpen} onOpenChange={setNewJobOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                            <DialogTitle>New job</DialogTitle>
+                            <DialogDescription>Create the job in RPM. You can then create its draft Xero invoice and receive an INV number from the job page.</DialogDescription>
+                        </DialogHeader>
+                        <CostingJobForm createAsJob onSuccess={(jobId) => { setNewJobOpen(false); mutate(); if (jobId) router.push(`/quoting/jobs/${jobId}`) }} onCancel={() => setNewJobOpen(false)} />
+                    </DialogContent>
+                </Dialog>
+
                 <Dialog open={importOpen} onOpenChange={setImportOpen}>
                     <DialogContent className="sm:max-w-[680px]">
                         <DialogHeader>
                             <DialogTitle>{creatingSite ? "Create new site" : "Import a Xero invoice as a job"}</DialogTitle>
-                            {!creatingSite && <DialogDescription>Use this only for specific existing jobs that were created in Xero before RPM. Future jobs can continue through the normal RPM quote workflow.</DialogDescription>}
+                            {!creatingSite && <DialogDescription>Use this when the invoice already exists in Xero. Start new work with New job instead.</DialogDescription>}
                         </DialogHeader>
 
                         {creatingSite ? (

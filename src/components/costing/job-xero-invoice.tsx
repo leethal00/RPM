@@ -22,12 +22,56 @@ type Preview = {
 
 export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged: () => void }) {
   const [open, setOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [contactSearch, setContactSearch] = useState(job.clients?.name || "")
+  const [contacts, setContacts] = useState<Array<{ id: string; name: string }>>([])
+  const [contactId, setContactId] = useState("")
+  const [contactBusy, setContactBusy] = useState(false)
   const [number, setNumber] = useState(job.xero_invoice_number || "")
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const linked = !!job.xero_invoice_id
   const baseUrl = "/api/xero/invoices/" + encodeURIComponent(job.id)
+
+  async function findContacts(search = contactSearch) {
+    setContactBusy(true)
+    setError("")
+    setContacts([])
+    setContactId("")
+    try {
+      const response = await fetch(baseUrl + "?contactSearch=" + encodeURIComponent(search.trim()), { cache: "no-store" })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || "Could not find Xero customers.")
+      setContacts(body.contacts || [])
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not find Xero customers.")
+    } finally {
+      setContactBusy(false)
+    }
+  }
+
+  async function createInvoice() {
+    if (!contactId) return
+    setBusy(true)
+    setError("")
+    try {
+      const response = await fetch(baseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", contactId }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || "Could not create the Xero invoice.")
+      toast.success("Draft Xero invoice " + body.invoice.invoiceNumber + " created and linked to this job")
+      setCreateOpen(false)
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create the Xero invoice.")
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function showPreview() {
     setBusy(true)
@@ -75,9 +119,41 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
   }
 
   return <>
+    {!linked && !job.xero_quote_id && <Button size="sm" className="h-8" onClick={() => { setCreateOpen(true); setError(""); setContactSearch(job.clients?.name || ""); void findContacts(job.clients?.name || "") }}>
+      Create Xero invoice
+    </Button>}
     <Button variant="outline" size="sm" className="h-8" onClick={() => { setOpen(true); setError(""); setPreview(null); setNumber(job.xero_invoice_number || "") }}>
       {linked ? "Update Xero invoice" : "Link existing Xero invoice"}
     </Button>
+    <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>Create draft Xero invoice</DialogTitle>
+          <DialogDescription>Xero will assign an INV number. RPM will link it to this job and add its current selling item lines. You can update the draft from RPM as the job changes.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="font-medium">{job.title}</div>
+          <div className="text-muted-foreground">RPM customer: {job.clients?.name || "No customer selected"}{job.stores?.name ? " · " + job.stores.name : ""}</div>
+          <div className="flex gap-2">
+            <Input aria-label="Search Xero customers" placeholder="Search Xero customers" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void findContacts() }} />
+            <Button variant="secondary" disabled={contactBusy || contactSearch.trim().length < 2} onClick={() => void findContacts()}>{contactBusy ? "Searching…" : "Search"}</Button>
+          </div>
+          <label className="block space-y-1">
+            <span>Xero customer</span>
+            <select className="h-9 w-full rounded-md border border-input bg-background px-3" value={contactId} onChange={(event) => setContactId(event.target.value)}>
+              <option value="">Select the matching Xero customer</option>
+              {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
+            </select>
+          </label>
+          {!contactBusy && contactSearch.trim().length >= 2 && !contacts.length && !error && <p className="text-muted-foreground">No matching Xero customers. Try the site name or another part of the customer name.</p>}
+          {error && <p role="alert" className="text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+          <Button onClick={() => void createInvoice()} disabled={busy || !contactId}>{busy ? "Creating…" : "Create draft invoice"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
