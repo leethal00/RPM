@@ -449,7 +449,12 @@ function JobHeader({
 
       <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
         <div className="text-[8.5px] font-bold leading-none">Job No.</div>
-        <div className="mt-[1mm] text-[36px] font-black leading-none tracking-tight" style={{ color: GREEN }}>{number}</div>
+        <div
+          className="mt-[1mm] font-black leading-none tracking-tight whitespace-nowrap"
+          style={{ color: GREEN, fontSize: number.length <= 4 ? "36px" : number.length <= 6 ? "30px" : "25px" }}
+        >
+          {number}
+        </div>
       </div>
     </div>
   )
