@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
         storeId?: string | null
         title?: string | null
         completionDate?: string | null
+        invoiceId?: string | null
     }
 
     const invoiceNumber = String(body.invoiceNumber || "").trim()
@@ -144,8 +145,18 @@ export async function POST(req: NextRequest) {
 
         const invoice = await getInvoice(invoiceNumber)
         if (!invoice) return NextResponse.json({ error: `Invoice ${invoiceNumber} was not found in Xero.` }, { status: 404 })
+        if (!invoice.InvoiceID || invoice.InvoiceNumber !== invoiceNumber || (body.invoiceId && body.invoiceId !== invoice.InvoiceID)) {
+            return NextResponse.json({ error: "The Xero invoice changed since lookup. Find it again before importing." }, { status: 409 })
+        }
         if (String(invoice.Status || "").toUpperCase() === "VOIDED") {
             return NextResponse.json({ error: `Invoice ${invoiceNumber} is voided in Xero.` }, { status: 400 })
+        }
+
+        if (body.storeId) {
+            if (!body.clientId) return NextResponse.json({ error: "Select a customer for this site." }, { status: 400 })
+            const { data: site, error: siteError } = await admin.from("stores").select("id,client_id").eq("id", body.storeId).maybeSingle()
+            if (siteError) throw siteError
+            if (!site || site.client_id !== body.clientId) return NextResponse.json({ error: "The selected site does not belong to this customer." }, { status: 400 })
         }
 
         const title = String(body.title || "").trim() || String(invoice.Reference || "").trim() || invoiceNumber

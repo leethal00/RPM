@@ -18,6 +18,7 @@ import {
 import type { Region, Client, Store, ClientBrand } from "@/types/database"
 import { siteSchema, getValidationErrors } from "@/lib/validations"
 import { BrandChip, brandsFromStore } from "@/components/brand-chip"
+import { normalizedSiteName } from "@/lib/site-name"
 
 interface GeocodeSuggestion {
     display_name: string
@@ -27,16 +28,19 @@ interface GeocodeSuggestion {
 
 interface SiteFormProps {
     site?: Store
-    onSuccess: () => void
+    initialClientId?: string
+    initialClientName?: string
+    lockClient?: boolean
+    onSuccess: (siteId?: string) => void
     onCancel: () => void
 }
 
-export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
+export function SiteForm({ site, initialClientId, initialClientName, lockClient = false, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [regions, setRegions] = useState<Region[]>([])
     const [customers, setCustomers] = useState<Client[]>([])
-    const [clientId, setClientId] = useState<string>(site?.client_id || "")
+    const [clientId, setClientId] = useState<string>(site?.client_id || initialClientId || "")
 
     // Brands available for the currently-selected customer, plus the current selection
     const [availableBrands, setAvailableBrands] = useState<ClientBrand[]>([])
@@ -143,7 +147,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
             setCustomers(data || [])
 
             // If creating new and no client selected, default to first
-            if (!site?.id && !clientId && data?.[0]) {
+            if (!site?.id && !initialClientId && !clientId && data?.[0]) {
                 setClientId(data[0].id)
             }
         }
@@ -237,6 +241,29 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         let storeId = site?.id
         let error
 
+        if (!site?.id) {
+            const customerName = customers.find((customer) => customer.id === clientId)?.name || initialClientName || ""
+            const { data: existingSites, error: lookupError } = await supabase
+                .from('stores')
+                .select('id,name,address')
+                .eq('client_id', clientId)
+            if (lookupError) {
+                toast.error(lookupError.message)
+                setLoading(false)
+                return
+            }
+            const existing = (existingSites as Pick<Store, "id" | "name" | "address">[] | null)?.find((candidate) =>
+                normalizedSiteName(candidate.name, customerName) === normalizedSiteName(formData.name, customerName)
+                && String(candidate.address || "").trim().toLocaleLowerCase() === formData.address.trim().toLocaleLowerCase()
+            )
+            if (existing) {
+                toast.info("This site already exists; selected the existing site.")
+                onSuccess(existing.id)
+                setLoading(false)
+                return
+            }
+        }
+
         if (site?.id) {
             const { error: updateError } = await supabase
                 .from('stores')
@@ -275,7 +302,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
         }
 
         toast.success(site?.id ? "Site updated successfully" : "Site added successfully")
-        onSuccess()
+        onSuccess(storeId)
         setLoading(false)
     }
 
@@ -295,7 +322,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                     />
                 </div>
 
-                <div className="grid gap-2">
+                {!lockClient && <div className="grid gap-2">
                     <Label htmlFor="customer" className="text-xs font-medium text-muted-foreground">
                         Customer <span className="text-red-500">*</span>
                     </Label>
@@ -313,7 +340,7 @@ export function SiteForm({ site, onSuccess, onCancel }: SiteFormProps) {
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
+                </div>}
 
                 <div className="grid gap-2">
                     <Label htmlFor="region" className="text-xs font-medium text-muted-foreground">Region</Label>

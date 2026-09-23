@@ -18,6 +18,8 @@ import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { toast } from "sonner"
+import { SiteForm } from "@/components/site-form"
+import { siteDisplayName } from "@/lib/site-name"
 import type { Client, CostingJob, Store } from "@/types/database"
 
 const PAGE_SIZE = 20
@@ -157,13 +159,14 @@ export default function ActiveJobsPage() {
     const { order, widths, move, setWidth, reset } = useColumnLayout("jobs-columns-v1", JOB_COLUMN_LAYOUT)
 
     const [importOpen, setImportOpen] = useState(false)
+    const [creatingSite, setCreatingSite] = useState(false)
     const [invoiceSearch, setInvoiceSearch] = useState("")
     const [preview, setPreview] = useState<ImportPreview | null>(null)
     const [importError, setImportError] = useState<string | null>(null)
     const [lookingUp, setLookingUp] = useState(false)
     const [importing, setImporting] = useState(false)
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
-    const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
+    const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id" | "address">[]>([])
     const [selectedClient, setSelectedClient] = useState("none")
     const [selectedStore, setSelectedStore] = useState("none")
     const [importTitle, setImportTitle] = useState("")
@@ -275,6 +278,10 @@ export default function ActiveJobsPage() {
     const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
     const jobs = sortedJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const clientStores = selectedClient === "none" ? [] : stores.filter((store) => store.client_id === selectedClient)
+    const selectedClientName = clients.find((client) => client.id === selectedClient)?.name || ""
+    const siteLabels = clientStores.map((store) => ({ store, label: siteDisplayName(store.name, selectedClientName) }))
+    const siteLabelCounts = new Map<string, number>()
+    for (const { label } of siteLabels) siteLabelCounts.set(label, (siteLabelCounts.get(label) || 0) + 1)
     const totalColumnWeight = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0) || 1
 
     function changeView(next: JobView) {
@@ -319,16 +326,29 @@ export default function ActiveJobsPage() {
 
     async function openImport() {
         setImportOpen(true)
+        setCreatingSite(false)
         setPreview(null)
         setImportError(null)
         if (!clients.length || !stores.length) {
             const [{ data: clientRows }, { data: storeRows }] = await Promise.all([
                 supabase.from("clients").select("id,name").order("name"),
-                supabase.from("stores").select("id,name,client_id").order("name"),
+                supabase.from("stores").select("id,name,client_id,address").order("name"),
             ])
             setClients((clientRows || []) as Pick<Client, "id" | "name">[])
-            setStores((storeRows || []) as Pick<Store, "id" | "name" | "client_id">[])
+            setStores((storeRows || []) as Pick<Store, "id" | "name" | "client_id" | "address">[])
         }
+    }
+
+    async function siteCreated(siteId?: string) {
+        const { data, error } = await supabase.from("stores").select("id,name,client_id,address").eq("client_id", selectedClient).order("name")
+        if (error) {
+            setImportError(`Site saved, but the site list could not refresh: ${error.message}`)
+            setCreatingSite(false)
+            return
+        }
+        setStores((current) => [...current.filter((store) => store.client_id !== selectedClient), ...((data || []) as Pick<Store, "id" | "name" | "client_id" | "address">[])])
+        if (siteId) setSelectedStore(siteId)
+        setCreatingSite(false)
     }
 
     async function lookupInvoice() {
@@ -365,6 +385,7 @@ export default function ActiveJobsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     invoiceNumber: preview.invoiceNumber,
+                    invoiceId: preview.invoiceId,
                     clientId: selectedClient === "none" ? null : selectedClient,
                     storeId: selectedStore === "none" ? null : selectedStore,
                     title: importTitle.trim() || preview.reference || preview.invoiceNumber,
@@ -481,10 +502,20 @@ export default function ActiveJobsPage() {
                 <Dialog open={importOpen} onOpenChange={setImportOpen}>
                     <DialogContent className="sm:max-w-[680px]">
                         <DialogHeader>
-                            <DialogTitle>Import a Xero invoice as a job</DialogTitle>
-                            <DialogDescription>Use this only for specific existing jobs that were created in Xero before RPM. Future jobs can continue through the normal RPM quote workflow.</DialogDescription>
+                            <DialogTitle>{creatingSite ? "Create new site" : "Import a Xero invoice as a job"}</DialogTitle>
+                            {!creatingSite && <DialogDescription>Use this only for specific existing jobs that were created in Xero before RPM. Future jobs can continue through the normal RPM quote workflow.</DialogDescription>}
                         </DialogHeader>
 
+                        {creatingSite ? (
+                            <SiteForm
+                                key={selectedClient}
+                                initialClientId={selectedClient}
+                                initialClientName={selectedClientName}
+                                lockClient
+                                onSuccess={(siteId) => { void siteCreated(siteId) }}
+                                onCancel={() => setCreatingSite(false)}
+                            />
+                        ) : <>
                         <div className="space-y-4">
                             <div className="flex gap-2">
                                 <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void lookupInvoice() }} placeholder="Invoice number, e.g. INV-7569" />
@@ -522,10 +553,13 @@ export default function ActiveJobsPage() {
                                         </select>
                                     </div>
                                     <div className="grid gap-2">
-                                        <Label>Site</Label>
-                                        <select value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "none"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <Label htmlFor="import-site">Site</Label>
+                                            <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "none"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
+                                        </div>
+                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "none"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
                                             <option value="none">No site</option>
-                                            {clientStores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                                            {siteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
                                     </div>
                                     <div className="grid gap-2">
@@ -540,6 +574,7 @@ export default function ActiveJobsPage() {
                             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
                             <Button onClick={importInvoice} disabled={!preview || importing}>{importing ? "Importing…" : "Import as Job"}</Button>
                         </DialogFooter>
+                        </>}
                     </DialogContent>
                 </Dialog>
             </PageShell>
