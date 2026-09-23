@@ -127,11 +127,12 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,contact_name,adjusted_total,status,xero_quote_id,client_id,store_id,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,contact_name,adjusted_total,status,xero_quote_id,xero_invoice_id,client_id,store_id,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
     if (jobError || !job) return NextResponse.json({ error: "Quote not found" }, { status: 404 })
+    if (job.xero_invoice_id) return NextResponse.json({ error: "This job is linked to a Xero invoice. Update that invoice from the job instead." }, { status: 409 })
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([

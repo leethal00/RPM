@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
+import { isStaffAdmin } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -15,6 +16,7 @@ type XeroLineItem = {
 type XeroInvoice = {
     InvoiceID?: string | null
     InvoiceNumber?: string | null
+    Type?: string | null
     Reference?: string | null
     DateString?: string | null
     DueDateString?: string | null
@@ -73,6 +75,8 @@ export async function GET(req: NextRequest) {
 
     try {
         const admin = xeroAdmin()
+        const { data: profile } = await admin.from("users").select("role").eq("id", auth.user.id).single()
+        if (!isStaffAdmin(profile?.role)) return NextResponse.json({ error: "Only Rodier administrators can import Xero invoices." }, { status: 403 })
         const { data: existing } = await admin
             .from("costing_jobs")
             .select("id,job_number,title")
@@ -85,9 +89,14 @@ export async function GET(req: NextRequest) {
 
         const invoice = await getInvoice(invoiceNumber)
         if (!invoice) return NextResponse.json({ error: `Invoice ${invoiceNumber} was not found in Xero.` }, { status: 404 })
-        if (String(invoice.Status || "").toUpperCase() === "VOIDED") {
-            return NextResponse.json({ error: `Invoice ${invoiceNumber} is voided in Xero.` }, { status: 400 })
+        if (!invoice.InvoiceID || invoice.InvoiceNumber !== invoiceNumber) {
+            return NextResponse.json({ error: "The Xero invoice could not be identified. Find it again." }, { status: 409 })
         }
+        if (invoice.Type !== "ACCREC" || invoice.Status !== "DRAFT") {
+            return NextResponse.json({ error: "Only draft Xero sales invoices can be imported for later updates." }, { status: 400 })
+        }
+        const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
+        if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
         return NextResponse.json({ ok: true, invoice: preview(invoice) })
     } catch (error) {
@@ -133,6 +142,8 @@ export async function POST(req: NextRequest) {
     if (!invoiceNumber) return NextResponse.json({ error: "Invoice number is required." }, { status: 400 })
 
     const admin = xeroAdmin()
+    const { data: profile } = await admin.from("users").select("role").eq("id", auth.user.id).single()
+    if (!isStaffAdmin(profile?.role)) return NextResponse.json({ error: "Only Rodier administrators can import Xero invoices." }, { status: 403 })
     let createdJobId: string | null = null
 
     try {
@@ -148,9 +159,11 @@ export async function POST(req: NextRequest) {
         if (!invoice.InvoiceID || invoice.InvoiceNumber !== invoiceNumber || (body.invoiceId && body.invoiceId !== invoice.InvoiceID)) {
             return NextResponse.json({ error: "The Xero invoice changed since lookup. Find it again before importing." }, { status: 409 })
         }
-        if (String(invoice.Status || "").toUpperCase() === "VOIDED") {
-            return NextResponse.json({ error: `Invoice ${invoiceNumber} is voided in Xero.` }, { status: 400 })
+        if (invoice.Type !== "ACCREC" || invoice.Status !== "DRAFT") {
+            return NextResponse.json({ error: "Only draft Xero sales invoices can be imported for later updates." }, { status: 400 })
         }
+        const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
+        if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
         if (body.storeId) {
             if (!body.clientId) return NextResponse.json({ error: "Select a customer for this site." }, { status: 400 })
@@ -170,6 +183,7 @@ export async function POST(req: NextRequest) {
                 store_id: body.storeId || null,
                 qty: 1,
                 status: "in_progress",
+                xero_invoice_id: invoice.InvoiceID,
                 xero_invoice_number: invoiceNumber,
                 completion_date: body.completionDate || null,
                 is_template: false,

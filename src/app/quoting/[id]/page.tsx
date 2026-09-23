@@ -157,12 +157,12 @@ export default function CostingJobDetailPage() {
                                 )}
                             </div>
                             <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-                                {!job.xero_quote_id ? (
+                                {!job.xero_quote_id && !job.xero_invoice_id && !isJobStage ? (
                                     <Button size="sm" className="h-9 gap-1.5" onClick={sendToXero} disabled={sendingXero}>
                                         {sendingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                                         {sendingXero ? "Sending..." : "Send to Xero"}
                                     </Button>
-                                ) : !isJobStage ? (
+                                ) : job.xero_quote_id && !isJobStage ? (
                                     <>
                                         {job.status === "quoted" && (
                                             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={updateXero} disabled={updatingXero}>
