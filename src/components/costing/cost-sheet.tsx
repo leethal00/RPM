@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Plus, Trash2, Package, ChevronUp, ChevronDown, BookmarkPlus, Scale, Check, X, RotateCcw, GripVertical } from "lucide-react"
 import { toast } from "sonner"
 import { MaterialPicker } from "./material-picker"
@@ -130,6 +132,10 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const [lines, setLines] = useState<CostingLine[]>([])
     const [subOrder, setSubOrder] = useState<Record<string, number>>({})
     const [suppliers, setSuppliers] = useState<string[]>([])
+    const [inactiveSuppliers, setInactiveSuppliers] = useState<string[]>([])
+    const [addingSupplierFor, setAddingSupplierFor] = useState<CostingLine | null>(null)
+    const [newSupplierName, setNewSupplierName] = useState("")
+    const [savingSupplier, setSavingSupplier] = useState(false)
     const [definedSections, setDefinedSections] = useState<string[]>(DEFAULT_SECTIONS)
     const [loading, setLoading] = useState(true)
     const [pickerSection, setPickerSection] = useState<string | null>(null)
@@ -212,14 +218,15 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data: ls, error }, { data: secs }, { data: sups }, { data: jobRow }] = await Promise.all([
+            const [{ data: ls, error }, { data: secs }, { data: sups, error: supplierError }, { data: jobRow }] = await Promise.all([
                 supabase.from("costing_lines").select("*").eq("item_id", item.id),
                 supabase.from("costing_sections").select("*"),
-                supabase.from("costing_suppliers").select("name").order("name"),
+                supabase.from("supplier_directory").select("name,active").order("name"),
                 supabase.from("costing_jobs").select("status").eq("id", jobId).single(),
             ])
             if (!active) return
             if (error) toast.error(error.message)
+            if (supplierError) toast.error(`Could not load suppliers: ${supplierError.message}`)
             const loaded = (ls as CostingLine[]) || []
             setLines(loaded)
             setJobStatus(String(jobRow?.status || "draft"))
@@ -249,7 +256,9 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             if (loadedSections.length > 0) {
                 setDefinedSections(Array.from(new Set(loadedSections.sort((a, b) => a.sort - b.sort).map((s) => s.section))))
             }
-            setSuppliers(((sups as { name: string }[]) || []).map((s) => s.name))
+            const directory = (sups as { name: string; active: boolean }[]) || []
+            setSuppliers(directory.filter((supplier) => supplier.active).map((supplier) => supplier.name))
+            setInactiveSuppliers(directory.filter((supplier) => !supplier.active).map((supplier) => supplier.name))
             setLoading(false)
         })()
         return () => { active = false }
@@ -393,13 +402,41 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         if (removed && isWeldingTime(removed)) await syncArgonFromWelding(next)
     }
 
-    // Set a line's supplier and remember any new supplier name for reuse.
-    async function commitSupplier(line: CostingLine, value: string) {
+    // BOM suggestions and newly entered names share the Supplier Directory.
+    async function commitSupplier(line: CostingLine, value: string): Promise<boolean> {
         const name = value.trim()
-        patchLine(line.id, { supplier: name || null })
-        if (name && !suppliers.includes(name)) {
-            setSuppliers((p) => [...p, name].sort((a, b) => a.localeCompare(b)))
-            await supabase.from("costing_suppliers").insert({ name })   // unique conflict is harmless
+        if (!name) {
+            await patchLine(line.id, { supplier: null })
+            return true
+        }
+        const existing = suppliers.find((supplier) => supplier.toLowerCase() === name.toLowerCase())
+        if (existing) {
+            await patchLine(line.id, { supplier: existing })
+            return true
+        }
+        if (inactiveSuppliers.some((supplier) => supplier.toLowerCase() === name.toLowerCase())) {
+            toast.error("This supplier is inactive. Activate it on the Suppliers page first.")
+            return false
+        }
+        const { error } = await supabase.from("supplier_directory").insert({ name, active: true })
+        if (error) {
+            toast.error(`Could not add supplier: ${error.message}`)
+            return false
+        }
+        setSuppliers((current) => [...current, name].sort((a, b) => a.localeCompare(b)))
+        await patchLine(line.id, { supplier: name })
+        return true
+    }
+
+    async function addSupplier(event: React.FormEvent) {
+        event.preventDefault()
+        if (!addingSupplierFor || !newSupplierName.trim()) return
+        setSavingSupplier(true)
+        const saved = await commitSupplier(addingSupplierFor, newSupplierName)
+        setSavingSupplier(false)
+        if (saved) {
+            setAddingSupplierFor(null)
+            setNewSupplierName("")
         }
     }
 
@@ -549,6 +586,18 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             <datalist id={SUPPLIER_LIST_ID}>
                 {suppliers.map((s) => <option key={s} value={s} />)}
             </datalist>
+            <Dialog open={addingSupplierFor !== null} onOpenChange={(open) => { if (!open) { setAddingSupplierFor(null); setNewSupplierName("") } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add supplier</DialogTitle>
+                        <DialogDescription>Add a supplier to the shared Supplier Directory and select it for this BOM line.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={addSupplier} className="space-y-4">
+                        <Input autoFocus aria-label="Supplier name" placeholder="Supplier name" value={newSupplierName} onChange={(event) => setNewSupplierName(event.target.value)} />
+                        <DialogFooter><Button type="submit" disabled={savingSupplier || !newSupplierName.trim()}>{savingSupplier ? "Adding..." : "Add supplier"}</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {changedCatalogueLines.length > 0 && (
                 <div className="flex flex-col gap-2 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-2.5 text-sm dark:border-amber-800/70 dark:bg-amber-950/20 sm:flex-row sm:items-center">
@@ -771,7 +820,12 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                             </div>
                                                         </td>
                                                         <td className="px-2 py-1">
-                                                            <SupplierCell value={l.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => commitSupplier(l, v)} />
+                                                            <div className="flex items-center gap-0.5">
+                                                                <SupplierCell value={l.supplier ?? ""} placeholder="—" listId={SUPPLIER_LIST_ID} onCommit={(v) => commitSupplier(l, v)} />
+                                                                <button type="button" className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" title="Add supplier" aria-label={`Add supplier for ${l.description || "BOM line"}`} onClick={() => { setAddingSupplierFor(l); setNewSupplierName("") }}>
+                                                                    <Plus className="size-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />
