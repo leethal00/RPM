@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
+import { effectiveBuildSell } from "@/lib/costing/pricing"
 
 export const dynamic = "force-dynamic"
 const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
@@ -158,8 +159,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                     const sell = line.unit_sell_override != null ? Number(line.unit_sell_override) : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
                     return sum + Number(line.qty || 0) * sell
                 }, 0)
-                const override = Number(item.unit_price || 0)
-                unitAmount = override > 0 ? override : calculated
+                unitAmount = effectiveBuildSell(calculated, item.unit_price)
             }
             return {
                 Description: quoteItemDescription(item),

@@ -15,6 +15,7 @@ import {
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import type { CostingItem, CostingLine } from "@/types/database"
+import { effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -78,10 +79,9 @@ export default function ProductsPage() {
         if (p.mode === "simple") return { cost: Number(p.unit_cost), sell: Number(p.unit_price) }
         const ls = lines.filter((l) => l.item_id === p.id)
         const calculatedSell = ls.reduce((s, l) => s + lineSell(l), 0)
-        const override = Number(p.unit_price || 0)
         return {
             cost: ls.reduce((s, l) => s + lineCost(l), 0),
-            sell: override > 0 ? override : calculatedSell,
+            sell: effectiveBuildSell(calculatedSell, p.unit_price),
         }
     }
 
@@ -170,7 +170,7 @@ export default function ProductsPage() {
                                     <tbody>
                                         {products.map((p) => {
                                             const t = totals(p)
-                                            const m = t.sell > 0 ? 1 - t.cost / t.sell : 0
+                                            const m = sellMargin(t.cost, t.sell)
                                             return (
                                                 <tr key={p.id} onClick={() => router.push(`/quoting/${templateId}/item/${p.id}`)}
                                                     className="border-t border-border/60 cursor-pointer hover:bg-muted/30 transition-colors group">

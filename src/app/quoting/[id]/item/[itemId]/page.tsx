@@ -50,9 +50,13 @@ export default function ItemCostSheetPage() {
     const isTemplate = !!job?.is_template
 
     async function patchItem(patch: Partial<CostingItem>) {
+        const previous = item
         setItem((prev) => (prev ? { ...prev, ...patch } : prev))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", itemId)
-        if (error) console.error(error)
+        if (error) {
+            setItem(previous)
+            toast.error(`Could not save item: ${error.message}`)
+        }
     }
 
     async function saveAsProduct() {
@@ -188,7 +192,8 @@ export default function ItemCostSheetPage() {
                             </div>
                         )}
 
-                        <CostSheet jobId={jobId} item={item} />
+                        <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
+                            onFinalSellChange={(price) => patchItem({ unit_price: price })} />
 
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 mt-0.5 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

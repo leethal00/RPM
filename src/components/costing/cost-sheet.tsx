@@ -9,6 +9,7 @@ import { MaterialPicker } from "./material-picker"
 import { MaterialCombobox } from "./material-combobox"
 import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
+import { effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
@@ -119,7 +120,12 @@ function CostColumnHeader({ column, width, onResize }: {
 
 // Scoped to a single item's BOM. Lines carry both job_id (for job-level rollups)
 // and item_id (this item).
-export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem }) {
+export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }: {
+    jobId: string
+    item: CostingItem
+    isProduct?: boolean
+    onFinalSellChange?: (price: number) => void
+}) {
     const supabase = useMemo(() => createClient(), [])
     const [lines, setLines] = useState<CostingLine[]>([])
     const [subOrder, setSubOrder] = useState<Record<string, number>>({})
@@ -479,8 +485,9 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
 
     // ── totals (per one of this item) ───────────────────────────
     const cost = lines.reduce((s, l) => s + lineCost(l), 0)
-    const sell = lines.reduce((s, l) => s + lineSell(l), 0)
-    const margin = sell > 0 ? 1 - cost / sell : 0
+    const calculatedSell = lines.reduce((s, l) => s + lineSell(l), 0)
+    const finalSell = effectiveBuildSell(calculatedSell, item.unit_price)
+    const margin = sellMargin(cost, finalSell)
     const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
     // Galvanising must only use items in the Steel section, even when other materials carry weights.
@@ -876,15 +883,54 @@ export function CostSheet({ jobId, item }: { jobId: string; item: CostingItem })
 
             {/* Item totals (per one of this item) */}
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className={`grid grid-cols-2 gap-4 ${isProduct ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
                     <Tile label="Cost" value={nz(cost)} />
-                    <Tile label="Sell" value={nz(sell)} />
+                    <Tile label={isProduct ? "Calculated Sell" : "Sell"} value={nz(isProduct ? calculatedSell : finalSell)} />
+                    {isProduct && <div>
+                        <label htmlFor="final-sell" className="text-xs text-muted-foreground">Final Sell</label>
+                        <div className="mt-0.5 flex items-center gap-1">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <input
+                                id="final-sell"
+                                key={`${item.unit_price}-${calculatedSell.toFixed(2)}`}
+                                type="number"
+                                min="0.01"
+                                max="9999999999.99"
+                                step="0.01"
+                                defaultValue={finalSell.toFixed(2)}
+                                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur() }}
+                                onBlur={(event) => {
+                                    const raw = event.currentTarget.value.trim()
+                                    if (!raw) {
+                                        if (Number(item.unit_price) > 0) onFinalSellChange?.(0)
+                                        event.currentTarget.value = calculatedSell.toFixed(2)
+                                        return
+                                    }
+                                    const value = Number(raw)
+                                    if (!Number.isFinite(value) || value < 0.01 || value > 9999999999.99) {
+                                        toast.error("Enter a Final Sell price above $0")
+                                        event.currentTarget.value = finalSell.toFixed(2)
+                                        return
+                                    }
+                                    const rounded = Math.round(value * 100) / 100
+                                    if (rounded !== finalSell || Number(item.unit_price) > 0) onFinalSellChange?.(rounded)
+                                    event.currentTarget.value = rounded.toFixed(2)
+                                }}
+                                aria-label="Final Sell price"
+                                className="min-w-0 w-full max-w-28 rounded border border-input bg-background px-2 py-1 text-base font-semibold tabular-nums outline-none focus:border-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                        </div>
+                        {Number(item.unit_price) > 0 && <button type="button" onClick={() => onFinalSellChange?.(0)}
+                            className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
+                            <RotateCcw className="size-3" /> Use calculated price
+                        </button>}
+                    </div>}
                     <Tile label="Margin" value={pct(margin)} />
                     <Tile label="Total hours" value={totalHours.toFixed(2)} />
                 </div>
                 {(itemQty !== 1 || showWeights) && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border/60">
-                        {itemQty !== 1 && <Tile label={`Line total (× ${itemQty})`} value={nz(sell * itemQty)} />}
+                        {itemQty !== 1 && <Tile label={`Line total (× ${itemQty})`} value={nz(finalSell * itemQty)} />}
                         {showWeights && <Tile label="Total weight" value={`${totalWeight.toFixed(1)} kg`} />}
                     </div>
                 )}

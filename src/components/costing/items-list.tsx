@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NumCell, TextCell } from "./cells"
 import type { CostingJob, CostingItem, CostingLine } from "@/types/database"
+import { effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
@@ -89,10 +90,9 @@ export function ItemsList({ job }: { job: CostingJob }) {
         if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
         const ls = lines.filter(l => l.item_id === it.id)
         const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
-        const override = Number(it.unit_price || 0)
         return {
             cost: ls.reduce((a, l) => a + lineCost(l), 0),
-            sell: override > 0 ? override : calculatedSell,
+            sell: effectiveBuildSell(calculatedSell, it.unit_price),
         }
     }
 
@@ -133,7 +133,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const jobCost = rows.reduce((a, r) => a + r.totalCost, 0)
     const jobSell = rows.reduce((a, r) => a + r.totalSell, 0)
     const profit = jobSell - jobCost
-    const margin = jobSell > 0 ? 1 - jobCost / jobSell : 0
+    const margin = sellMargin(jobCost, jobSell)
 
     async function patchItem(id: string, patch: Partial<CostingItem>) {
         setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i))
