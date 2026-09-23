@@ -283,16 +283,33 @@ export default function JobCardPage() {
   )
 
   return (
-    <div className="min-h-screen bg-neutral-900/90 print:bg-white text-black">
+    <div className="job-card-page min-h-screen bg-neutral-900/90 print:bg-white text-black">
       <style>{`
-        @page { size: A4 portrait; margin: 0; }
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         @media print {
-          html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+          @page { size: A4 portrait; margin: 0; }
+          html, body {
+            width: 210mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .job-card-page { width: 210mm; min-height: 0; margin: 0; padding: 0; }
           .no-print { display: none !important; }
-          .sheet { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; }
+          .sheet, .sheet * { box-sizing: border-box; }
+          .sheet {
+            width: 210mm;
+            height: 297mm;
+            min-height: 0;
+            margin: 0 !important;
+            padding: 6mm 10mm;
+            box-shadow: none !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            break-after: page;
+            page-break-after: always;
+          }
           .sheet:last-child { break-after: auto; page-break-after: auto; }
-          .safety-sheet { break-before: page; page-break-before: always; }
         }
       `}</style>
 
@@ -438,7 +455,7 @@ export default function JobCardPage() {
 
 function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`sheet box-border mx-auto my-6 min-h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
+    <div className={`sheet box-border mx-auto my-6 h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
       {children}
     </div>
   )
@@ -568,7 +585,7 @@ function JobGrid() {
 function MaterialsGrid({ lines }: { lines: BomLine[] }) {
   const headers = ["Date", "Item / Description", "Qty", "Unit", "Notes"]
   const widths = ["9%", "44%", "9%", "9%", "29%"]
-  const blankRows = Math.max(3, 6 - lines.length)
+  const blankRows = Math.max(0, 6 - lines.length)
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
