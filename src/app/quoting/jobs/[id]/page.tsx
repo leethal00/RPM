@@ -156,7 +156,6 @@ export default function ActiveJobDetailPage() {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1 text-xs text-muted-foreground">
         {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
-        {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
         <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
         <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
         <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
