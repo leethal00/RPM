@@ -52,7 +52,7 @@ export function TextCell({ value, onCommit, placeholder }: {
 // Supplier cell: free text + autocomplete from a shared <datalist> (see listId).
 export function SupplierCell({ value, onCommit, listId, placeholder }: {
     value: string
-    onCommit: (v: string) => void
+    onCommit: (v: string) => boolean | Promise<boolean>
     listId: string
     placeholder?: string
 }) {
@@ -61,7 +61,11 @@ export function SupplierCell({ value, onCommit, listId, placeholder }: {
             key={value}
             type="text" defaultValue={value} placeholder={placeholder} list={listId}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
-            onBlur={(e) => { if (e.target.value !== value) onCommit(e.target.value) }}
+            onBlur={async (e) => {
+                if (e.target.value === value) return
+                const input = e.currentTarget
+                if (await onCommit(input.value) === false) input.value = value
+            }}
             className={cls}
         />
     )
