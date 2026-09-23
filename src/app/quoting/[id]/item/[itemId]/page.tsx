@@ -217,6 +217,15 @@ export default function ItemCostSheetPage() {
                             </div>
                         </div>
 
+                        {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
+                            <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
+                                Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
+                            </div>
+                        )}
+
+                        <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
+                            onFinalSellChange={(price) => patchItem({ unit_price: price })} />
+
                         {isTemplate && (
                             <div className="rounded-lg border border-border/60 p-3">
                                 <div className="mb-2 text-sm font-medium">Product image for job card</div>
@@ -241,15 +250,6 @@ export default function ItemCostSheetPage() {
                                 <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. This image appears on job cards made from this product.</p>
                             </div>
                         )}
-
-                        {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
-                            <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
-                                Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
-                            </div>
-                        )}
-
-                        <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
-                            onFinalSellChange={(price) => patchItem({ unit_price: price })} />
 
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1.5 mt-0.5 border-t border-border/60">
                             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
