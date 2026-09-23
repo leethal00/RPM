@@ -86,6 +86,7 @@ type JobItem = {
   size: string | null
   details: string | null
   delivery: string | null
+  internal_notes: string | null
   sort: number | null
   image_path: string | null
 }
@@ -176,7 +177,7 @@ export default function JobCardPage() {
           .single(),
         supabase
           .from("costing_items")
-          .select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort,image_path")
+          .select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,internal_notes,sort,image_path")
           .eq("job_id", id)
           .order("sort"),
         supabase
@@ -245,6 +246,7 @@ export default function JobCardPage() {
   const phone = j.stores?.manager_phone || ""
   const requiredBy = j.completion_date || j.due_date || null
   const quoteItems = activeItem ? [activeItem] : allQuoteItems
+  const internalBomNotes = quoteItems.filter((item) => item.mode === "build" && item.internal_notes?.trim())
   const materialRows = bomLines.filter((line) => {
     if (activeItem && line.item_id !== activeItem.id) return false
     const meta = materialMeta(line)
@@ -350,7 +352,20 @@ export default function JobCardPage() {
         </div>
 
         <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
-          <Box title="ADDITIONAL NOTES / ISSUES" className="h-[44mm]" />
+          <Box title="ADDITIONAL NOTES / ISSUES" className="min-h-[44mm]">
+            {internalBomNotes.length > 0 && (
+              <div className="break-words border-l-[1.5mm] border-[#155f4c] bg-[#eef2f1] px-[2mm] py-[1.5mm] text-[10.5px] leading-[1.2]">
+                <div className="font-black" style={{ color: GREEN }}>INTERNAL BOM NOTES</div>
+                <div className="mt-[1mm] space-y-[1.5mm]">
+                  {internalBomNotes.map((item) => (
+                    <div key={item.id} className="whitespace-pre-wrap">
+                      <span className="font-bold">{item.name}: </span>{item.internal_notes?.trim()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Box>
           <Box title="JOB STATUS (tick)" className="h-[38mm]">
             <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />
           </Box>
