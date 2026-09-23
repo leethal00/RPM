@@ -24,6 +24,8 @@ const unitSell = (l: CostingLine) => l.unit_sell_override != null ? Number(l.uni
 const lineSell = (l: CostingLine) => Number(l.qty) * unitSell(l)
 
 type XeroProduct = { id: string; code: string; name: string; description: string; sell: number; cost: number }
+type ProductTypeFilter = "all" | CostingItem["mode"]
+type ProductSort = "name-asc" | "name-desc" | "updated-desc" | "cost-asc" | "cost-desc" | "sell-asc" | "sell-desc" | "margin-asc" | "margin-desc"
 
 export default function ProductsPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -36,7 +38,10 @@ export default function ProductsPage() {
     const [xeroItems, setXeroItems] = useState<XeroProduct[]>([])
     const [xeroLoading, setXeroLoading] = useState(false)
     const [xeroError, setXeroError] = useState("")
-    const [search, setSearch] = useState("")
+    const [productSearch, setProductSearch] = useState("")
+    const [productType, setProductType] = useState<ProductTypeFilter>("all")
+    const [productSort, setProductSort] = useState<ProductSort>("name-asc")
+    const [xeroSearch, setXeroSearch] = useState("")
     const [importingId, setImportingId] = useState<string | null>(null)
     const [copyingId, setCopyingId] = useState<string | null>(null)
 
@@ -76,15 +81,43 @@ export default function ProductsPage() {
         }
     }
 
-    function totals(p: CostingItem) {
-        if (p.mode === "simple") return { cost: Number(p.unit_cost), sell: Number(p.unit_price) }
-        const ls = lines.filter((l) => l.item_id === p.id)
-        const calculatedSell = ls.reduce((s, l) => s + lineSell(l), 0)
-        return {
-            cost: ls.reduce((s, l) => s + lineCost(l), 0),
-            sell: effectiveBuildSell(calculatedSell, p.unit_price),
+    const productRows = useMemo(() => {
+        const linesByItem = new Map<string, CostingLine[]>()
+        for (const line of lines) {
+            if (!line.item_id) continue
+            const itemLines = linesByItem.get(line.item_id) ?? []
+            itemLines.push(line)
+            linesByItem.set(line.item_id, itemLines)
         }
-    }
+        return products.map((product) => {
+            const itemLines = linesByItem.get(product.id) ?? []
+            const cost = product.mode === "simple" ? Number(product.unit_cost) : itemLines.reduce((sum, line) => sum + lineCost(line), 0)
+            const calculatedSell = itemLines.reduce((sum, line) => sum + lineSell(line), 0)
+            const sell = product.mode === "simple" ? Number(product.unit_price) : effectiveBuildSell(calculatedSell, product.unit_price)
+            return { product, cost, sell, margin: sellMargin(cost, sell) }
+        })
+    }, [products, lines])
+
+    const visibleProducts = useMemo(() => {
+        const query = productSearch.trim().toLowerCase()
+        return productRows.filter(({ product }) => {
+            if (productType !== "all" && product.mode !== productType) return false
+            return !query || [product.name, product.sign_code, product.size, product.details]
+                .some((value) => (value ?? "").toLowerCase().includes(query))
+        }).sort((a, b) => {
+            switch (productSort) {
+                case "name-desc": return b.product.name.localeCompare(a.product.name)
+                case "updated-desc": return (b.product.updated_at || b.product.created_at || "").localeCompare(a.product.updated_at || a.product.created_at || "") || a.product.name.localeCompare(b.product.name)
+                case "cost-asc": return a.cost - b.cost || a.product.name.localeCompare(b.product.name)
+                case "cost-desc": return b.cost - a.cost || a.product.name.localeCompare(b.product.name)
+                case "sell-asc": return a.sell - b.sell || a.product.name.localeCompare(b.product.name)
+                case "sell-desc": return b.sell - a.sell || a.product.name.localeCompare(b.product.name)
+                case "margin-asc": return a.margin - b.margin || a.product.name.localeCompare(b.product.name)
+                case "margin-desc": return b.margin - a.margin || a.product.name.localeCompare(b.product.name)
+                default: return a.product.name.localeCompare(b.product.name)
+            }
+        })
+    }, [productRows, productSearch, productType, productSort])
 
     async function addProduct() {
         if (!templateId) return
@@ -146,7 +179,7 @@ export default function ProductsPage() {
     }
 
     const rpmNames = new Set(products.map((p) => (p.name || "").trim().toLowerCase()).filter(Boolean))
-    const q = search.trim().toLowerCase()
+    const q = xeroSearch.trim().toLowerCase()
     const filteredXero = xeroItems.filter((x) => !q || `${x.code} ${x.name} ${x.description}`.toLowerCase().includes(q))
 
     return (
@@ -165,14 +198,38 @@ export default function ProductsPage() {
                 ) : (
                     <>
                         <div className="border border-border/60 rounded-lg overflow-x-auto mt-6">
-                            <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between gap-3">
+                            <div className="px-4 py-3 border-b border-border/60 flex flex-wrap items-center justify-between gap-3">
                                 <div>
                                     <h2 className="text-sm font-semibold">RPM Products</h2>
                                     <p className="text-xs text-muted-foreground mt-0.5">These are the permanent BOM-backed products used first by quote autocomplete.</p>
                                 </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="relative w-56">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                                        <Input aria-label="Search RPM products" className="h-8 pl-8 text-xs" placeholder="Search products..." value={productSearch} onChange={(event) => setProductSearch(event.target.value)} />
+                                    </div>
+                                    <select aria-label="Filter RPM products by type" value={productType} onChange={(event) => setProductType(event.target.value as ProductTypeFilter)} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                                        <option value="all">All types</option>
+                                        <option value="build">Build</option>
+                                        <option value="simple">Simple</option>
+                                    </select>
+                                    <select aria-label="Sort RPM products" value={productSort} onChange={(event) => setProductSort(event.target.value as ProductSort)} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                                        <option value="name-asc">Name A–Z</option>
+                                        <option value="name-desc">Name Z–A</option>
+                                        <option value="updated-desc">Recently updated</option>
+                                        <option value="cost-asc">Cost: low to high</option>
+                                        <option value="cost-desc">Cost: high to low</option>
+                                        <option value="sell-asc">Sell: low to high</option>
+                                        <option value="sell-desc">Sell: high to low</option>
+                                        <option value="margin-asc">Margin: low to high</option>
+                                        <option value="margin-desc">Margin: high to low</option>
+                                    </select>
+                                </div>
                             </div>
                             {products.length === 0 ? (
                                 <div className="py-12 text-center text-sm text-muted-foreground">No RPM products yet.</div>
+                            ) : visibleProducts.length === 0 ? (
+                                <div className="py-12 text-center text-sm text-muted-foreground">No RPM products match your search or filter.</div>
                             ) : (
                                 <table className="w-full text-sm">
                                     <thead className="bg-muted/40 text-muted-foreground text-xs">
@@ -186,9 +243,7 @@ export default function ProductsPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {products.map((p) => {
-                                            const t = totals(p)
-                                            const m = sellMargin(t.cost, t.sell)
+                                        {visibleProducts.map(({ product: p, cost, sell, margin }) => {
                                             return (
                                                 <tr key={p.id} onClick={() => router.push(`/quoting/${templateId}/item/${p.id}`)}
                                                     className="border-t border-border/60 cursor-pointer hover:bg-muted/30 transition-colors group">
@@ -198,9 +253,9 @@ export default function ProductsPage() {
                                                             {p.mode === "build" ? "Build" : "Simple"}
                                                         </Badge>
                                                     </td>
-                                                    <td className="px-2 py-3 text-right tabular-nums text-muted-foreground">{nz(t.cost)}</td>
-                                                    <td className="px-2 py-3 text-right tabular-nums font-medium">{nz(t.sell)}</td>
-                                                    <td className="px-2 py-3 text-right tabular-nums text-muted-foreground">{pct(m)}</td>
+                                                    <td className="px-2 py-3 text-right tabular-nums text-muted-foreground">{nz(cost)}</td>
+                                                    <td className="px-2 py-3 text-right tabular-nums font-medium">{nz(sell)}</td>
+                                                    <td className="px-2 py-3 text-right tabular-nums text-muted-foreground">{pct(margin)}</td>
                                                     <td className="px-2 py-3">
                                                         <div className="flex items-center justify-end gap-1">
                                                             <span className="inline-flex items-center gap-0.5 text-xs text-primary">Edit <ChevronRight className="size-3.5" /></span>
@@ -232,7 +287,7 @@ export default function ProductsPage() {
                                     {xeroItems.length > 0 && (
                                         <div className="relative w-56">
                                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                                            <Input className="h-8 pl-8 text-xs" placeholder="Search Xero items..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                                            <Input className="h-8 pl-8 text-xs" placeholder="Search Xero items..." value={xeroSearch} onChange={(e) => setXeroSearch(e.target.value)} />
                                         </div>
                                     )}
                                     <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={loadXeroItems} disabled={xeroLoading}>
