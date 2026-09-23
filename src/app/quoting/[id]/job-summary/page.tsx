@@ -73,6 +73,13 @@ export default function JobSummaryPage() {
 
   const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
   const client = [job.clients?.name, job.stores?.name].filter(Boolean).join(" · ")
+  const buildItems = items.filter((item) => item.mode === "build")
+
+  const workshopRef = (item: Item) => {
+    if (item.mode !== "build" || !number) return ""
+    const index = buildItems.findIndex((buildItem) => buildItem.id === item.id)
+    return index >= 0 ? `${number}-${index + 1}` : ""
+  }
 
   return (
     <div className="min-h-screen bg-neutral-900/90 print:bg-white">
@@ -116,20 +123,22 @@ export default function JobSummaryPage() {
           <div className="h-[7mm] px-[2.5mm] py-[1.2mm] text-[12px] font-black text-white" style={{ background: GREEN }}>PROJECT ITEMS</div>
           <table className="w-full table-fixed border-collapse">
             <colgroup>
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "25%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "38%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "23%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "32%" }} />
+              <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
               <tr className="bg-[#eef2f1]">
-                {["Qty", "Item", "Size", "Description", "Type"].map((h) => <th key={h} className="border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-left text-[10.5px]">{h}</th>)}
+                {["Workshop Ref", "Qty", "Item", "Size", "Description", "Type"].map((h) => <th key={h} className="border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-left text-[10.5px]">{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="align-top">
+                  <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm] font-black" style={{ color: item.mode === "build" ? GREEN : undefined }}>{workshopRef(item)}</td>
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm] font-bold">{prettyQty(itemQty(item))}</td>
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm] font-bold">{item.name}</td>
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm]">{item.size || ""}</td>
@@ -140,7 +149,7 @@ export default function JobSummaryPage() {
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm]">{item.mode === "build" ? "BOM" : "Simple"}</td>
                 </tr>
               ))}
-              {!items.length && <tr><td colSpan={5} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
+              {!items.length && <tr><td colSpan={6} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
             </tbody>
           </table>
         </div>
