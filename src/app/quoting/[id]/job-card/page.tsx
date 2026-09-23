@@ -117,14 +117,39 @@ function deliveryLabel(value?: string | null) {
 }
 
 function inferDepartments(title: string, details: string, lines: BomLine[]) {
-  const routingText = `${title} ${details} ${lines.map((line) => `${line.section || ""} ${line.subsection || ""} ${line.description || ""}`).join(" ")}`.toLowerCase()
   const result = new Set<string>()
-  if (/\bcnc\b|router|routing|milling|lathe/.test(routingText)) result.add("CNC")
-  if (/steel|aluminium|aluminum|weld|metal|fabricat|bracket|shs|rhs/.test(routingText)) result.add("Metal")
-  if (/fabricat|assemble|assembly|fold|press|guillotine/.test(routingText)) result.add("Fab")
-  if (/illumin|electrical|\bled\b|light|wiring|power|transformer/.test(routingText)) result.add("Electrical")
-  if (/vinyl|graphic|print|laminat/.test(routingText)) result.add("Vinyl")
-  if (/servic|repair|site|install|maintenance/.test(routingText)) result.add("Install")
+
+  // Department names in the BOM section/subsection are the strongest signal.
+  const sectionText = lines
+    .map((line) => `${line.section || ""} ${line.subsection || ""}`)
+    .join(" ")
+    .toLowerCase()
+
+  if (/\bcnc\b|router|routing|milling|lathe/.test(sectionText)) result.add("CNC")
+  if (/metal|steel|aluminium|aluminum|weld|fabricat|bracket|shs|rhs/.test(sectionText)) result.add("Metal")
+  if (/\bfab\b|fabrication|assembly|assemble|fold|press|guillotine/.test(sectionText)) result.add("Fab")
+  if (/electrical|illumin|\bled\b|wiring|power|transformer/.test(sectionText)) result.add("Electrical")
+  if (/vinyl|graphic|print|laminat/.test(sectionText)) result.add("Vinyl")
+  if (/install|site work|service|repair|maintenance/.test(sectionText)) result.add("Install")
+
+  // Descriptions are only a fallback. Strip obvious exclusions so text such as
+  // "no allowance for vinyl work" does not incorrectly route the job to Vinyl.
+  const descriptiveText = `${title} ${details} ${lines.map((line) => line.description || "").join(" ")}`
+    .toLowerCase()
+    .replace(/no allowance for[^.\n]*/g, "")
+    .replace(/no [^.\n]*work/g, "")
+    .replace(/exclude(?:d|s|ing)?[^.\n]*/g, "")
+    .replace(/not included[^.\n]*/g, "")
+    .replace(/not required[^.\n]*/g, "")
+
+  if (/\bcnc\b|router|routing|milling|lathe/.test(descriptiveText)) result.add("CNC")
+  if (/steel|aluminium|aluminum|weld|metal|bracket|shs|rhs/.test(descriptiveText)) result.add("Metal")
+  if (/illumin|electrical|\bled\b|wiring|power|transformer/.test(descriptiveText)) result.add("Electrical")
+  if (/vinyl|graphic|print|laminat/.test(descriptiveText)) result.add("Vinyl")
+  if (/servic|repair|site work|install|maintenance/.test(descriptiveText)) result.add("Install")
+
+  // Do not infer Fab from generic words like "folded" or "fabricated" in a
+  // customer description; Fab should come from the BOM routing itself.
   return Array.from(result)
 }
 
