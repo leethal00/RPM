@@ -123,16 +123,15 @@ export default function JobSummaryPage() {
           <div className="h-[7mm] px-[2.5mm] py-[1.2mm] text-[12px] font-black text-white" style={{ background: GREEN }}>PROJECT ITEMS</div>
           <table className="w-full table-fixed border-collapse">
             <colgroup>
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "23%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "32%" }} />
+              <col style={{ width: "15%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "27%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "32%" }} />
             </colgroup>
             <thead>
               <tr className="bg-[#eef2f1]">
-                {["Workshop Ref", "Qty", "Item", "Size", "Description", "Type"].map((h) => <th key={h} className="border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-left text-[10.5px]">{h}</th>)}
+                {["Workshop Ref", "Qty", "Item", "Size", "Description"].map((h) => <th key={h} className="border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-left text-[10.5px]">{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -146,10 +145,9 @@ export default function JobSummaryPage() {
                     <div className="whitespace-pre-wrap">{item.details || ""}</div>
                     {item.delivery && <div className="mt-[1mm] text-neutral-600">{item.delivery}</div>}
                   </td>
-                  <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm]">{item.mode === "build" ? "BOM" : "Simple"}</td>
                 </tr>
               ))}
-              {!items.length && <tr><td colSpan={6} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
+              {!items.length && <tr><td colSpan={5} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
             </tbody>
           </table>
         </div>
