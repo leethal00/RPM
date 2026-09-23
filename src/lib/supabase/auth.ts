@@ -1,6 +1,7 @@
 import { createClient } from './server'
 
-export type UserRole = 'super_admin' | 'rodier_admin' | 'technician' | 'client_hq' | 'client_store'
+import type { UserRole } from '@/types/database'
+export type { UserRole } from '@/types/database'
 
 export async function getUserRole() {
     const supabase = await createClient()

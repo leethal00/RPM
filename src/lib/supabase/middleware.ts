@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { canOpenRoute, homeForRole, isProductionOperator } from '@/lib/permissions'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -66,7 +67,7 @@ export async function updateSession(request: NextRequest) {
         '/api/xero/webhook',
         '/api/xero/callback',
     ]
-    const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
+    const isPublicPath = publicPaths.some(path => request.nextUrl.pathname === path)
 
     // Protected route logic
     if (!user && !isPublicPath) {
@@ -76,13 +77,26 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
     }
 
+    const { data: profile } = user ? await supabase.from('users').select('role').eq('id', user.id).single() : { data: null }
+    if (user && (!isPublicPath || isProductionOperator(profile?.role)) && !canOpenRoute(profile?.role, request.nextUrl.pathname)) {
+        if (request.nextUrl.pathname.startsWith('/api/') || !profile?.role) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        }
+        const url = request.nextUrl.clone()
+        url.pathname = homeForRole(profile.role)
+        url.search = ''
+        const denied = NextResponse.redirect(url)
+        response.cookies.getAll().forEach(cookie => denied.cookies.set(cookie))
+        return denied
+    }
+
     const redirectAwayPaths = ['/login', '/forgot-password']
-    const shouldRedirectAway = redirectAwayPaths.some(path => request.nextUrl.pathname.startsWith(path))
+    const shouldRedirectAway = redirectAwayPaths.some(path => request.nextUrl.pathname === path)
 
     if (user && shouldRedirectAway) {
         // user is already logged in, redirect to home
         const url = request.nextUrl.clone()
-        url.pathname = '/'
+        url.pathname = homeForRole(profile?.role ?? null)
         return NextResponse.redirect(url)
     }
 

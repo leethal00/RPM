@@ -24,6 +24,7 @@ interface UserData {
     role: string;
     client_id?: string;
     developer_mode?: boolean;
+    department_id?: string | null;
     clients?: { name: string } | null;
 }
 
@@ -43,6 +44,8 @@ export function UserManager() {
     const [name, setName] = useState("")
     const [role, setRole] = useState("client_store")
     const [clientId, setClientId] = useState<string | null>("none")
+    const [departmentId, setDepartmentId] = useState("none")
+    const [departments, setDepartments] = useState<{id:string;name:string}[]>([])
     const [developerMode, setDeveloperMode] = useState(false)
 
     // Only the current super_admin can grant/revoke developer_mode, and the
@@ -88,7 +91,8 @@ export function UserManager() {
         fetchUsers()
         fetchClients()
         fetchCurrentUser()
-    }, [fetchUsers, fetchClients, fetchCurrentUser])
+        void supabase.from("departments").select("id,name").order("name").then(({data}: {data: {id:string;name:string}[] | null})=>setDepartments(data || []))
+    }, [fetchUsers, fetchClients, fetchCurrentUser, supabase])
 
     const openCreateDialog = () => {
         setEditingUserId(null)
@@ -98,6 +102,7 @@ export function UserManager() {
         setRole("client_store")
         setClientId("none")
         setDeveloperMode(false)
+        setDepartmentId("none")
         setIsDialogOpen(true)
     }
 
@@ -109,6 +114,7 @@ export function UserManager() {
         setRole(user.role || "client_store")
         setClientId(user.client_id || "none")
         setDeveloperMode(Boolean(user.developer_mode))
+        setDepartmentId(user.department_id || "none")
         setIsDialogOpen(true)
     }
 
@@ -117,7 +123,8 @@ export function UserManager() {
         setIsSaving(true)
 
         try {
-            const finalClientId = clientId === "none" ? null : clientId
+            if (role === "department_operator" && departmentId === "none") throw new Error("Select a department for this operator")
+            const finalClientId = role === "department_operator" || clientId === "none" ? null : clientId
 
             if (editingUserId) {
                 // Edit user in our table. developer_mode is only included in
@@ -128,6 +135,7 @@ export function UserManager() {
                     name,
                     role,
                     client_id: finalClientId,
+                    department_id: role === "department_operator" ? departmentId : null,
                     updated_at: new Date().toISOString(),
                 }
                 if (canEditDeveloperMode) updatePayload.developer_mode = developerMode
@@ -170,6 +178,7 @@ export function UserManager() {
                         name,
                         role,
                         client_id: finalClientId,
+                    department_id: role === "department_operator" ? departmentId : null,
                     })
 
                 if (dbError) {
@@ -349,6 +358,7 @@ export function UserManager() {
                                 <SelectContent>
                                     <SelectItem value="super_admin">Super Admin</SelectItem>
                                     <SelectItem value="rodier_admin">Rodier Admin</SelectItem>
+                                    <SelectItem value="department_operator">Department Operator (CNC / production)</SelectItem>
                                     <SelectItem value="technician">Technician</SelectItem>
                                     <SelectItem value="client_hq">Client HQ</SelectItem>
                                     <SelectItem value="client_store">Client Store</SelectItem>
@@ -357,6 +367,7 @@ export function UserManager() {
                         </div>
 
                         <div className="space-y-2">
+                            {role === "department_operator" && <div className="space-y-2"><Label htmlFor="department_id">Department</Label><select id="department_id" className="w-full rounded border p-2" value={departmentId} onChange={e=>setDepartmentId(e.target.value)} required><option value="none">Select department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="text-xs text-muted-foreground">Only assigned production jobs, time and material usage. No pricing or administration.</p></div>}
                             <Label htmlFor="client_id">Assign to Client (Optional)</Label>
                             <Select value={clientId || "none"} onValueChange={(val) => setClientId(val)}>
                                 <SelectTrigger>

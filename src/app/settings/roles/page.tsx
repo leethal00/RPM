@@ -16,6 +16,7 @@ interface RoleInfo {
 }
 
 const ROLES: RoleInfo[] = [
+    { role: "department_operator", label: "Department Operator", description: "Assigned production jobs, time and material usage. No sales, pricing or administration.", icon: Hammer, headcountHint: "CNC and future departments" },
     {
         role: "super_admin",
         label: "Super Admin",
@@ -64,10 +65,17 @@ interface Resource {
 
 const RESOURCES: Resource[] = [
     {
+        key: "production",
+        label: "Department production",
+        description: "Assigned approved jobs, non-priced materials, time, usage and department progress. Operators record their own actuals; administrators manage assignments.",
+        matrix: { department_operator: "own", super_admin: "full", rodier_admin: "full", technician: "none", client_hq: "none", client_store: "none" },
+    },
+    {
         key: "sites",
         label: "Sites Portfolio",
         description: "View, create, edit and delete site records.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -80,6 +88,7 @@ const RESOURCES: Resource[] = [
         label: "Assets",
         description: "View and manage site assets (signage, equipment, fittings).",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -92,6 +101,7 @@ const RESOURCES: Resource[] = [
         label: "Jobs / Faults",
         description: "Report, assign, progress and resolve maintenance tickets.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -104,6 +114,7 @@ const RESOURCES: Resource[] = [
         label: "Vendor Directory",
         description: "Manage external contractors and trade partners.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -116,6 +127,7 @@ const RESOURCES: Resource[] = [
         label: "HQ Projects",
         description: "Strategic capital projects spanning multiple jobs and sites.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "none",
@@ -128,6 +140,7 @@ const RESOURCES: Resource[] = [
         label: "Photos (standard)",
         description: "Photos uploaded against sites and assets that aren't flagged as internal.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -140,6 +153,7 @@ const RESOURCES: Resource[] = [
         label: "Photos (service-team only)",
         description: "Photos flagged \"internal_only\" at upload. Used for before/after shots and staff-only documentation.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "view",
@@ -152,6 +166,7 @@ const RESOURCES: Resource[] = [
         label: "User Management",
         description: "Create, edit and remove user accounts.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "view",
             technician: "none",
@@ -164,6 +179,7 @@ const RESOURCES: Resource[] = [
         label: "Customer Management",
         description: "Add new customers, manage their brands and logo library.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "none",
@@ -176,6 +192,7 @@ const RESOURCES: Resource[] = [
         label: "Portal Settings",
         description: "Regions, asset classifications, and other system-wide lists.",
         matrix: {
+            department_operator: "none",
             super_admin: "full",
             rodier_admin: "full",
             technician: "none",
@@ -188,6 +205,7 @@ const RESOURCES: Resource[] = [
         label: "AI Auto-Build",
         description: "Submit feature requests that automatically run the AI implementation workflow. Restricted further by the per-user developer_mode flag.",
         matrix: {
+            department_operator: "none",
             super_admin: "view",
             rodier_admin: "none",
             technician: "none",

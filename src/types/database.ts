@@ -1,11 +1,11 @@
-export type UserRole = 'super_admin' | 'rodier_admin' | 'technician' | 'client_hq' | 'client_store'
+export type UserRole = 'super_admin' | 'rodier_admin' | 'technician' | 'client_hq' | 'client_store' | 'department_operator'
 export type StoreStatus = 'active' | 'inactive' | 'maintenance'
 export type JobType = 'fault' | 'maintenance' | 'project'
 export type JobStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type CostingStatus = 'quote' | 'quoted' | 'approved' | 'in_progress' | 'complete' | 'invoiced' | 'cancelled'
 export interface Client { id: string; name: string; logo_url: string | null; primary_color: string | null; contact_email: string | null; active: boolean; created_at: string; updated_at: string }
-export interface UserProfile { id: string; email: string; name: string | null; role: UserRole; client_id: string | null; store_ids: string[]; avatar_url: string | null; developer_mode: boolean; created_at: string; updated_at: string }
+export interface UserProfile { id: string; email: string; name: string | null; role: UserRole; client_id: string | null; store_ids: string[]; avatar_url: string | null; developer_mode: boolean; department_id: string | null; created_at: string; updated_at: string }
 export interface Store { id: string; client_id: string; name: string; region: string | null; address: string | null; lat: number | null; lng: number | null; location_approximate: boolean; manager_name: string | null; manager_phone: string | null; rodier_account_manager_id: string | null; status: StoreStatus; site_type: string | null; site_category: string | null; maintenance_score: number | null; hours_of_operation: string | null; has_drive_thru: boolean; created_at: string; updated_at: string; assets?: Asset[]; jobs?: Job[]; projects?: Project[]; clients?: Client; site_photos?: SitePhoto[]; store_brands?: { brand_id: string; client_brands?: ClientBrand }[]; site_construction_drawings?: SiteConstructionDrawing[] }
 export interface ClientBrand { id: string; client_id: string; key: string; label: string; logo_url: string | null; color: string | null; display_order: number; created_at: string; updated_at: string }
 export interface AssetType { id: string; label: string; default_interval_days: number; icon_name: string | null; created_at: string }
