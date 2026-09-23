@@ -34,9 +34,10 @@ describe("production job card internal BOM notes", () => {
   it("shows each private note on the full job card", async () => {
     render(<JobCardPage />)
 
-    expect(await screen.findByText("Use the blue backing", { exact: false })).toBeInTheDocument()
+    const firstNote = await screen.findByText("Use the blue backing", { exact: false })
+    expect(firstNote).not.toHaveTextContent("Front sign")
     expect(screen.getByText("Keep this note private", { exact: false })).toBeInTheDocument()
-    expect(screen.getByText("INTERNAL BOM NOTES")).toBeInTheDocument()
+    expect(screen.queryByText("INTERNAL BOM NOTES")).not.toBeInTheDocument()
   })
 
   it("shows only the selected BOM item's note on its job card", async () => {

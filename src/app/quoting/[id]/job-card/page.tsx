@@ -353,18 +353,11 @@ export default function JobCardPage() {
 
         <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
           <Box title="ADDITIONAL NOTES / ISSUES" className="min-h-[44mm]">
-            {internalBomNotes.length > 0 && (
-              <div className="break-words border-l-[1.5mm] border-[#155f4c] bg-[#eef2f1] px-[2mm] py-[1.5mm] text-[10.5px] leading-[1.2]">
-                <div className="font-black" style={{ color: GREEN }}>INTERNAL BOM NOTES</div>
-                <div className="mt-[1mm] space-y-[1.5mm]">
-                  {internalBomNotes.map((item) => (
-                    <div key={item.id} className="whitespace-pre-wrap">
-                      <span className="font-bold">{item.name}: </span>{item.internal_notes?.trim()}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="space-y-[1.5mm] break-words text-[11.5px]">
+              {internalBomNotes.map((item) => (
+                <div key={item.id} className="whitespace-pre-wrap">{item.internal_notes?.trim()}</div>
+              ))}
+            </div>
           </Box>
           <Box title="JOB STATUS (tick)" className="h-[38mm]">
             <Checks items={["Cutting complete", "Fabrication complete", "Electrical complete", "Powder coat complete", "Ready for install", "Job complete"]} tight />

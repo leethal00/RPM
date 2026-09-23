@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus } from "lucide-react"
+import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus, FileText } from "lucide-react"
 import {
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -38,7 +39,7 @@ export default function ItemCostSheetPage() {
         let active = true
         ;(async () => {
             const [{ data: j }, { data: i }] = await Promise.all([
-                supabase.from("costing_jobs").select("id, title, is_template").eq("id", jobId).single(),
+                supabase.from("costing_jobs").select("id, title, is_template, status").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
             ])
             if (!active) return
@@ -50,6 +51,7 @@ export default function ItemCostSheetPage() {
     }, [supabase, jobId, itemId])
 
     const isTemplate = !!job?.is_template
+    const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
 
     async function patchItem(patch: Partial<CostingItem>) {
         const previous = item
@@ -122,15 +124,24 @@ export default function ItemCostSheetPage() {
     return (
         <DashboardLayout>
             <PageShell width="full" className="px-4 xl:px-6 gap-1.5 py-2.5">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
                         onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
                         <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
                     </Button>
                     {!isTemplate && !loading && item && item.mode === "build" && (
-                        <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
-                            <Package2 className="size-3" /> Save as product
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {isJobStage && (
+                                <Button asChild variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                                    <Link href={`/quoting/${jobId}/job-card?item=${itemId}`} target="_blank" rel="noopener noreferrer">
+                                        <FileText className="size-3" /> Job card
+                                    </Link>
+                                </Button>
+                            )}
+                            <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
+                                <Package2 className="size-3" /> Save as product
+                            </Button>
+                        </div>
                     )}
                 </div>
 
