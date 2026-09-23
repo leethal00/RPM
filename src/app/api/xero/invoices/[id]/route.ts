@@ -167,7 +167,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const validation = returned?.ValidationErrors?.map((row) => row.Message).filter(Boolean).join("; ")
       if (returned?.HasErrors || validation) throw new Error(validation || "Xero rejected the invoice update.")
       const after = await getInvoice(job.xero_invoice_id, xero.accessToken, xero.tenantId)
-      if (after?.InvoiceID !== job.xero_invoice_id || after.InvoiceNumber !== job.xero_invoice_number) {
+      if (!after || after.InvoiceID !== job.xero_invoice_id || after.InvoiceNumber !== job.xero_invoice_number) {
         throw new Error("Xero returned an unexpected invoice identity. Check the invoice in Xero before retrying.")
       }
       const { error: saveError } = await admin.from("costing_jobs").update({ xero_invoice_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id)
@@ -181,3 +181,4 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update the Xero invoice." }, { status: 400 })
   }
 }
+
