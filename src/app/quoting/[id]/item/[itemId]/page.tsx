@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { ArrowLeft, Layers, Package2, Copy, Check } from "lucide-react"
+import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus } from "lucide-react"
 import {
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -31,6 +31,8 @@ export default function ItemCostSheetPage() {
     const [jobs, setJobs] = useState<{ id: string; title: string }[] | null>(null)
     const [jobSearch, setJobSearch] = useState("")
     const [copying, setCopying] = useState(false)
+    const [uploadingImage, setUploadingImage] = useState(false)
+    const imageInput = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         let active = true
@@ -58,6 +60,35 @@ export default function ItemCostSheetPage() {
             toast.error(`Could not save item: ${error.message}`)
         }
     }
+
+    async function uploadProductImage(file: File) {
+        if (!isTemplate || !item || uploadingImage) return
+        const allowed: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" }
+        const extension = allowed[file.type]
+        if (!extension) return toast.error("Choose a PNG, JPG or WebP image")
+        if (file.size > 10 * 1024 * 1024) return toast.error("Image must be 10 MB or smaller")
+        setUploadingImage(true)
+        try {
+            const path = `products/${itemId}/${crypto.randomUUID()}.${extension}`
+            const { error: uploadError } = await supabase.storage.from("job-attachments")
+                .upload(path, file, { contentType: file.type, upsert: false })
+            if (uploadError) throw uploadError
+            const { error: saveError } = await supabase.from("costing_items")
+                .update({ image_path: path }).eq("id", itemId)
+            if (saveError) throw saveError
+            setItem((current) => current ? { ...current, image_path: path } : current)
+            toast.success("Product image saved")
+        } catch (error) {
+            toast.error(`Could not save image: ${error instanceof Error ? error.message : String(error)}`)
+        } finally {
+            setUploadingImage(false)
+            if (imageInput.current) imageInput.current.value = ""
+        }
+    }
+
+    const productImageUrl = item?.image_path
+        ? supabase.storage.from("job-attachments").getPublicUrl(item.image_path).data.publicUrl
+        : null
 
     async function saveAsProduct() {
         const { data: tpl } = await supabase.from("costing_jobs").select("id").eq("is_template", true).limit(1).maybeSingle()
@@ -186,6 +217,31 @@ export default function ItemCostSheetPage() {
                             </div>
                         </div>
 
+                        {isTemplate && (
+                            <div className="rounded-lg border border-border/60 p-3">
+                                <div className="mb-2 text-sm font-medium">Product image for job card</div>
+                                <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only"
+                                    aria-label="Choose product image" onChange={(event) => {
+                                        const file = event.target.files?.[0]
+                                        if (file) void uploadProductImage(file)
+                                    }} />
+                                <div tabIndex={0} role="button" aria-label="Drop or paste a product image"
+                                    onClick={() => imageInput.current?.click()}
+                                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); imageInput.current?.click() } }}
+                                    onDragOver={(event) => event.preventDefault()}
+                                    onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void uploadProductImage(file) }}
+                                    onPaste={(event) => { const file = Array.from(event.clipboardData.files)[0]; if (file) { event.preventDefault(); void uploadProductImage(file) } }}
+                                    className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border p-3 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                    {productImageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={productImageUrl} alt={item.name || "Product"} className="max-h-48 max-w-full object-contain" />
+                                    ) : <ImagePlus className="size-7 text-muted-foreground" aria-hidden="true" />}
+                                    <span className="text-sm text-muted-foreground">{uploadingImage ? "Uploading…" : productImageUrl ? "Click, drop or paste to replace the image" : "Click, drop or paste a screenshot here"}</span>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. This image appears on job cards made from this product.</p>
+                            </div>
+                        )}
+
                         {item.mode === "build" && item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
                             <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
                                 Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
@@ -255,3 +311,4 @@ export default function ItemCostSheetPage() {
         </DashboardLayout>
     )
 }
+

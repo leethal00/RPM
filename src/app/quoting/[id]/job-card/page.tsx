@@ -87,6 +87,7 @@ type JobItem = {
   details: string | null
   delivery: string | null
   sort: number | null
+  image_path: string | null
 }
 
 type BomLine = {
@@ -175,7 +176,7 @@ export default function JobCardPage() {
           .single(),
         supabase
           .from("costing_items")
-          .select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort")
+          .select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort,image_path")
           .eq("job_id", id)
           .order("sort"),
         supabase
@@ -234,6 +235,8 @@ export default function JobCardPage() {
   const customer = [job.clients?.name, j.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
   const allQuoteItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE)
   const activeItem = itemId ? allQuoteItems.find((item) => item.id === itemId) || null : null
+  const drawingPath = activeItem?.image_path || (!itemId ? allQuoteItems.find((item) => item.image_path)?.image_path : null)
+  const drawingUrl = drawingPath ? supabase.storage.from("job-attachments").getPublicUrl(drawingPath).data.publicUrl : null
   const buildItems = allQuoteItems.filter((item) => item.mode === "build")
   const activeBuildIndex = activeItem ? buildItems.findIndex((item) => item.id === activeItem.id) : -1
   const baseNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
@@ -328,8 +331,11 @@ export default function JobCardPage() {
             </div>
           </Box>
           <Box title="DRAWING / SKETCH" className="min-h-[60mm]">
-            <div className="flex min-h-[48mm] items-center justify-center border border-[#d5dfdc] text-center text-[10.5px] text-neutral-400">
-              Sketch here or attach manufacture drawings
+            <div className="flex h-[48mm] items-center justify-center overflow-hidden border border-[#d5dfdc] text-center text-[10.5px] text-neutral-400">
+              {drawingUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={drawingUrl} alt={`Drawing of ${activeItem?.name || "product"}`} className="h-full w-full object-contain" />
+              ) : "Sketch here or attach manufacture drawings"}
             </div>
           </Box>
         </div>
@@ -590,3 +596,4 @@ function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" 
     </div>
   )
 }
+
