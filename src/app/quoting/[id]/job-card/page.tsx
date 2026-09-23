@@ -596,4 +596,3 @@ function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" 
     </div>
   )
 }
-

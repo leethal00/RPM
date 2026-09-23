@@ -27,4 +27,3 @@ begin
 
   return new_item;
 end $function$;
-

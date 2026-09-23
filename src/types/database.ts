@@ -28,4 +28,3 @@ export interface SiteConstructionDrawing { id: string; store_id: string; drawing
 export interface SitePhotoAlbum { id: string; store_id: string; name: string; created_by: string | null; created_at: string; updated_at: string }
 export interface SitePhoto { id: string; store_id: string; album_id: string | null; url: string; caption: string | null; internal_only: boolean; is_primary: boolean; created_at: string; updated_at: string; album?: SitePhotoAlbum | null }
 export interface AssetPhoto { id: string; asset_id: string; url: string; caption: string | null; internal_only: boolean; is_thumbnail?: boolean; created_at: string }
-
