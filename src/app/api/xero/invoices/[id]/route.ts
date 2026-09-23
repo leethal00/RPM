@@ -76,7 +76,7 @@ async function access() {
   return { admin, xero }
 }
 
-async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string) {
+async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
     admin.from("costing_jobs").select("id,title,reference,details,contact_name,status,is_template,job_number,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
     admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
@@ -90,7 +90,9 @@ async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string) {
   const store = Array.isArray(job.stores) ? job.stores[0] : job.stores
   const site = [client?.name, store?.name].filter(Boolean).join(" ")
   const intro = [site ? site + ":" : null, job.details?.trim() || job.reference?.trim() || job.title.trim(), job.contact_name?.trim() ? "Contact: " + job.contact_name.trim() : null].filter(Boolean).join("\n")
-  const proposedLines = buildXeroInvoiceLines((items || []) as InvoiceItem[], (costs || []) as InvoiceCostLine[], intro)
+  const proposedLines = includeLines
+    ? buildXeroInvoiceLines((items || []) as InvoiceItem[], (costs || []) as InvoiceCostLine[], intro)
+    : []
   return { job, proposedLines }
 }
 
@@ -101,8 +103,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const { admin, xero } = granted
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
-    const { job, proposedLines } = await jobAndLines(admin, id)
     const number = req.nextUrl.searchParams.get("number")?.trim()
+    const { job, proposedLines } = await jobAndLines(admin, id, !number)
     const identifier = number || job.xero_invoice_id
     if (!identifier) return NextResponse.json({ error: "Enter an invoice number." }, { status: 400 })
     const invoice = await getInvoice(identifier, xero.accessToken, xero.tenantId)
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
     const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedUpdatedAt?: string }
-    const { job, proposedLines } = await jobAndLines(admin, id)
+    const { job, proposedLines } = await jobAndLines(admin, id, body.action !== "link")
 
     if (body.action === "link") {
       const number = String(body.invoiceNumber || "").trim()
@@ -179,4 +181,3 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update the Xero invoice." }, { status: 400 })
   }
 }
-
