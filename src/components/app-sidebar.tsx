@@ -31,7 +31,7 @@ const quotingItems = [
     { title: "Suppliers", url: "/quoting/suppliers", icon: Truck },
 ]
 
-export function AppSidebar() {
+export function AppSidebar({ activeQuotingItem }: { activeQuotingItem?: "/quoting/products" }) {
     const supabase = createClient(), router = useRouter(), pathname = usePathname()
     const [user, setUser] = React.useState<User | null>(null)
     const [profile, setProfile] = React.useState<UserProfile | null>(null)
@@ -42,7 +42,9 @@ export function AppSidebar() {
     const userName = profile?.name || user?.email?.split("@")[0] || "User", userEmail = user?.email || "user@example.com", userInitials = userName.substring(0, 2).toUpperCase()
     const isOperator = profile?.role === "department_operator"
     const isClientUser = profile?.role === "client_hq" || profile?.role === "client_store"
-    const isQuotingItemActive = (url: string) => url === "/quoting/time" ? pathname.startsWith("/quoting/time") : url === "/quoting/jobs" ? pathname.startsWith("/quoting/jobs") : url === "/quoting/products" ? pathname.startsWith("/quoting/products") : url === "/quoting/catalogue" ? pathname.startsWith("/quoting/catalogue") : url === "/quoting/suppliers" ? pathname.startsWith("/quoting/suppliers") : url === "/quoting" ? pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/jobs") && !pathname.startsWith("/quoting/time") && !pathname.startsWith("/quoting/products") && !pathname.startsWith("/quoting/catalogue") && !pathname.startsWith("/quoting/suppliers")) : pathname.startsWith(url)
+    const isQuotingItemActive = (url: string) => activeQuotingItem
+        ? url === activeQuotingItem
+        : url === "/quoting/time" ? pathname.startsWith("/quoting/time") : url === "/quoting/jobs" ? pathname.startsWith("/quoting/jobs") : url === "/quoting/products" ? pathname.startsWith("/quoting/products") : url === "/quoting/catalogue" ? pathname.startsWith("/quoting/catalogue") : url === "/quoting/suppliers" ? pathname.startsWith("/quoting/suppliers") : url === "/quoting" ? pathname === "/quoting" || (pathname.startsWith("/quoting/") && !pathname.startsWith("/quoting/jobs") && !pathname.startsWith("/quoting/time") && !pathname.startsWith("/quoting/products") && !pathname.startsWith("/quoting/catalogue") && !pathname.startsWith("/quoting/suppliers")) : pathname.startsWith(url)
 
     return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader className="border-b border-sidebar-border p-4"><div className="flex items-center gap-2 px-2"><div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Building2 className="size-4" /></div><div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden"><span className="font-semibold text-sidebar-foreground">RPM</span><span className="text-xs text-sidebar-foreground/60">Rodier Property</span></div></div></SidebarHeader>

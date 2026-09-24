@@ -15,8 +15,10 @@ import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 
 export default function DashboardLayout({
     children,
+    activeQuotingItem,
 }: {
     children: React.ReactNode
+    activeQuotingItem?: "/quoting/products"
 }) {
     const [sessionExpired, setSessionExpired] = useState(false)
     const pathname = usePathname()
@@ -51,7 +53,7 @@ export default function DashboardLayout({
     return (
         <TooltipProvider>
             <SidebarProvider>
-                <AppSidebar />
+                <AppSidebar activeQuotingItem={activeQuotingItem} />
                 <SidebarInset>
                     <header className="flex h-14 shrink-0 items-center justify-between border-b px-3 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-11">
                         <div className="flex items-center gap-2">

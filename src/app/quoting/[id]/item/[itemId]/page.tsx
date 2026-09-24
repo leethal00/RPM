@@ -122,7 +122,7 @@ export default function ItemCostSheetPage() {
     const filteredJobs = (jobs ?? []).filter((j) => j.title.toLowerCase().includes(jobSearch.trim().toLowerCase()))
 
     return (
-        <DashboardLayout>
+        <DashboardLayout activeQuotingItem={isTemplate ? "/quoting/products" : undefined}>
             <PageShell width="full" className="px-4 xl:px-6 gap-1.5 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
