@@ -79,7 +79,7 @@ async function access() {
 
 async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
-    admin.from("costing_jobs").select("id,title,reference,details,contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
+    admin.from("costing_jobs").select("id,title,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
     admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
     admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
   ])
@@ -90,7 +90,8 @@ async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, incl
   const client = Array.isArray(job.clients) ? job.clients[0] : job.clients
   const store = Array.isArray(job.stores) ? job.stores[0] : job.stores
   const site = [client?.name, store?.name ? siteDisplayName(store.name, client?.name || "") : null].filter(Boolean).join(" ")
-  const intro = [site ? site + ":" : null, job.details?.trim() || job.reference?.trim() || job.title.trim(), job.contact_name?.trim() ? "Contact: " + job.contact_name.trim() : null].filter(Boolean).join("\n")
+  const contact = (job.production_contact_name ?? job.contact_name)?.trim()
+  const intro = [site, (job.production_details ?? job.details)?.trim(), contact ? "Contact: " + contact : null].filter(Boolean).join("\n")
   const proposedLines = includeLines
     ? buildXeroInvoiceLines((items || []) as InvoiceItem[], (costs || []) as InvoiceCostLine[], intro)
     : []
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const result = await xeroJson(XERO_API + "/Invoices", xero.accessToken, xero.tenantId, {
         method: "POST",
         headers: { "Idempotency-Key": "rpm-job-invoice-" + id },
-        body: JSON.stringify({ Invoices: [{ Type: "ACCREC", Status: "DRAFT", Contact: { ContactID: contactId }, Reference: job.reference?.trim() || job.title.trim(), LineItems: proposedLines }] }),
+        body: JSON.stringify({ Invoices: [{ Type: "ACCREC", Status: "DRAFT", Contact: { ContactID: contactId }, Reference: job.production_title?.trim() || job.title.trim(), LineItems: proposedLines }] }),
       })
       const created = result?.Invoices?.[0] as XeroInvoice | undefined
       const validation = created?.ValidationErrors?.map((row) => row.Message).filter(Boolean).join("; ")
@@ -197,10 +198,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       if (before?.InvoiceNumber !== job.xero_invoice_number) return NextResponse.json({ error: "The invoice number changed in Xero. No update was made." }, { status: 409 })
       if (before?.UpdatedDateUTC !== body.expectedUpdatedAt) return NextResponse.json({ error: "The invoice changed in Xero since the preview. Refresh and review it again." }, { status: 409 })
 
-      // Deliberately replace draft line items. No InvoiceNumber, Contact, dates or status are sent.
+      // Deliberately replace draft line items and sync the job title. No InvoiceNumber, Contact, dates or status are sent.
       const result = await xeroJson(XERO_API + "/Invoices", xero.accessToken, xero.tenantId, {
         method: "POST",
-        body: JSON.stringify({ Invoices: [{ InvoiceID: job.xero_invoice_id, LineItems: proposedLines }] }),
+        body: JSON.stringify({ Invoices: [{ InvoiceID: job.xero_invoice_id, Reference: job.production_title?.trim() || job.title.trim(), LineItems: proposedLines }] }),
       })
       const returned = result?.Invoices?.[0] as XeroInvoice | undefined
       const validation = returned?.ValidationErrors?.map((row) => row.Message).filter(Boolean).join("; ")
@@ -220,3 +221,4 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update the Xero invoice." }, { status: 400 })
   }
 }
+
