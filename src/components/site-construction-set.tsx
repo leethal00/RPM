@@ -29,6 +29,20 @@ interface SiteConstructionSetProps {
 }
 
 const STORAGE_BUCKET = "construction-drawings"
+const DROP_FILE_TYPES: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+}
+
+function drawingFileType(file: File): string | null {
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? ""
+    const type = DROP_FILE_TYPES[extension]
+    return type && (!file.type || file.type === "application/octet-stream" || file.type === type) ? type : null
+}
 
 export function SiteConstructionSet({
     storeId,
@@ -41,6 +55,9 @@ export function SiteConstructionSet({
 
     const [dialogOpen, setDialogOpen] = useState(false)
     const [uploading, setUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState("")
+    const [dragOver, setDragOver] = useState(false)
+    const dragDepth = useRef(0)
 
     const [drawingNumber, setDrawingNumber] = useState("")
     const [drawingTitle, setDrawingTitle] = useState("")
@@ -75,6 +92,8 @@ export function SiteConstructionSet({
     }
 
     useEffect(() => {
+        // Loading the current site's records is the purpose of this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchDrawings()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId])
@@ -106,12 +125,8 @@ export function SiteConstructionSet({
             return
         }
 
-        const isPdf =
-            file.type === "application/pdf" ||
-            file.name.toLowerCase().endsWith(".pdf")
-
-        if (!isPdf) {
-            toast.error("Please select a PDF file.")
+        if (!drawingFileType(file)) {
+            toast.error("Please select a PDF, PNG, JPG, WebP or GIF file.")
             event.target.value = ""
             setSelectedFile(null)
             return
@@ -120,44 +135,10 @@ export function SiteConstructionSet({
         setSelectedFile(file)
     }
 
-    const handleUpload = async (
-        event: React.FormEvent<HTMLFormElement>
-    ) => {
-        event.preventDefault()
-
-        const number = drawingNumber.trim()
-        const title = drawingTitle.trim()
-
-        if (!number) {
-            toast.error("Enter a drawing number.")
-            return
-        }
-
-        if (!title) {
-            toast.error("Enter a drawing title.")
-            return
-        }
-
-        if (!selectedFile) {
-            toast.error("Select a PDF drawing.")
-            return
-        }
-
-        setUploading(true)
-
+    const uploadDrawing = async (file: File, number: string, title: string, userId: string) => {
         let uploadedPath: string | null = null
-
         try {
-            const {
-                data: { user },
-                error: userError,
-            } = await supabase.auth.getUser()
-
-            if (userError || !user) {
-                throw new Error("You must be logged in to upload drawings.")
-            }
-
-            const safeName = selectedFile.name
+            const safeName = file.name
                 .replace(/[^a-zA-Z0-9._-]/g, "_")
 
             const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${safeName}`
@@ -166,8 +147,8 @@ export function SiteConstructionSet({
 
             const { error: uploadError } = await supabase.storage
                 .from(STORAGE_BUCKET)
-                .upload(uploadedPath, selectedFile, {
-                    contentType: "application/pdf",
+                .upload(uploadedPath, file, {
+                    contentType: drawingFileType(file) ?? "application/pdf",
                     upsert: false,
                 })
 
@@ -182,8 +163,8 @@ export function SiteConstructionSet({
                     drawing_number: number,
                     drawing_title: title,
                     file_url: uploadedPath,
-                    file_name: selectedFile.name,
-                    uploaded_by: user.id,
+                    file_name: file.name,
+                    uploaded_by: userId,
                 })
 
             if (insertError) {
@@ -194,21 +175,76 @@ export function SiteConstructionSet({
                 throw insertError
             }
 
-            toast.success("Drawing added.")
+        } catch (error) {
+            console.error("Drawing upload failed:", error)
+            throw error
+        }
+    }
 
+    const getUploadUserId = async () => {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) throw new Error("You must be logged in to upload drawings.")
+        return user.id
+    }
+
+    const handleUpload = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        const number = drawingNumber.trim()
+        const title = drawingTitle.trim()
+        if (!number) return toast.error("Enter a drawing number.")
+        if (!title) return toast.error("Enter a drawing title.")
+        if (!selectedFile) return toast.error("Select a drawing file.")
+
+        setUploading(true)
+        try {
+            await uploadDrawing(selectedFile, number, title, await getUploadUserId())
+            toast.success("Drawing added.")
             setDialogOpen(false)
             resetForm()
             await fetchDrawings()
         } catch (error) {
-            console.error("Drawing upload failed:", error)
-
-            const message =
-                error instanceof Error
-                    ? error.message
-                    : "Could not upload the drawing."
-
-            toast.error(message)
+            toast.error(error instanceof Error ? error.message : "Could not upload the drawing.")
         } finally {
+            setUploading(false)
+        }
+    }
+
+    const handleDroppedFiles = async (files: File[]) => {
+        if (uploading || !available || files.length === 0) return
+        const valid = files.filter((file) => drawingFileType(file))
+        const rejected = files.length - valid.length
+        if (rejected) toast.error(`${rejected} file${rejected === 1 ? "" : "s"} skipped. Use PDF, PNG, JPG, WebP or GIF files.`)
+        if (!valid.length) return
+
+        setUploading(true)
+        let succeeded = 0
+        const failed: string[] = []
+        const usedNumbers = new Set(drawings.map((drawing) => drawing.drawing_number.toLowerCase()))
+        try {
+            const userId = await getUploadUserId()
+            for (const [index, file] of valid.entries()) {
+                setUploadProgress(`Uploading ${index + 1} of ${valid.length}: ${file.name}`)
+                const title = file.name.replace(/\.[^.]+$/, "").trim() || "Drawing"
+                let number = title
+                let suffix = 2
+                while (usedNumbers.has(number.toLowerCase())) number = `${title}-${suffix++}`
+                try {
+                    await uploadDrawing(file, number, title, userId)
+                    usedNumbers.add(number.toLowerCase())
+                    succeeded++
+                } catch {
+                    failed.push(file.name)
+                }
+            }
+            if (succeeded) {
+                await fetchDrawings()
+                toast.success(`${succeeded} drawing${succeeded === 1 ? "" : "s"} added.`)
+            }
+            if (failed.length) toast.error(`Could not upload: ${failed.join(", ")}`)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not upload the drawings.")
+        } finally {
+            setUploadProgress("")
             setUploading(false)
         }
     }
@@ -276,7 +312,7 @@ export function SiteConstructionSet({
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <h3 className="text-lg font-semibold">
-                        Construction Drawings
+                        Drawings
                     </h3>
 
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -288,7 +324,7 @@ export function SiteConstructionSet({
                     type="button"
                     size="sm"
                     className="gap-1.5"
-                    disabled={!available}
+                    disabled={!available || uploading}
                     onClick={() => setDialogOpen(true)}
                 >
                     <Plus className="size-3.5" />
@@ -301,11 +337,11 @@ export function SiteConstructionSet({
                     <FileText className="mx-auto mb-3 size-8 text-muted-foreground/40" />
 
                     <p className="text-sm font-medium">
-                        Construction drawing storage is not active yet
+                        Drawing storage is not active yet
                     </p>
 
                     <p className="mx-auto mt-1 max-w-lg text-xs text-muted-foreground">
-                        The Construction Drawings interface is ready. Drawing uploads
+                        The Drawings interface is ready. Drawing uploads
                         will become available once the Supabase construction
                         drawing migrations are applied.
                     </p>
@@ -318,74 +354,110 @@ export function SiteConstructionSet({
                 </div>
             )}
 
-            {available && !loading && drawings.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border/60 py-14 text-center">
-                    <FileText className="mx-auto mb-3 size-8 text-muted-foreground/40" />
-
-                    <p className="text-sm font-medium">
-                        No construction drawings uploaded yet
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Add the individual PDF sheets from the final construction drawings.
-                    </p>
-                </div>
-            )}
-
-            {available && !loading && drawings.length > 0 && (
-                <div className="overflow-hidden rounded-lg border">
-                    <div className="grid grid-cols-[minmax(130px,0.7fr)_minmax(250px,2fr)_minmax(180px,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                        <div>Drawing No.</div>
-                        <div>Drawing Title</div>
-                        <div>File</div>
-                        <div className="text-right">Actions</div>
-                    </div>
-
-                    {drawings.map((drawing) => (
-                        <div
-                            key={drawing.id}
-                            className="grid grid-cols-[minmax(130px,0.7fr)_minmax(250px,2fr)_minmax(180px,1fr)_auto] items-center gap-4 border-b px-4 py-3 last:border-b-0"
-                        >
-                            <div className="font-mono text-sm font-medium">
-                                {drawing.drawing_number}
-                            </div>
-
-                            <div className="min-w-0 text-sm">
-                                {drawing.drawing_title}
-                            </div>
-
-                            <div
-                                className="truncate text-xs text-muted-foreground"
-                                title={drawing.file_name}
-                            >
-                                {drawing.file_name}
-                            </div>
-
-                            <div className="flex items-center justify-end gap-1">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="gap-1.5"
-                                    onClick={() => openDrawing(drawing)}
-                                >
-                                    <ExternalLink className="size-3.5" />
-                                    Open
-                                </Button>
-
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 text-muted-foreground hover:text-destructive"
-                                    title="Delete drawing"
-                                    onClick={() => deleteDrawing(drawing)}
-                                >
-                                    <Trash2 className="size-3.5" />
-                                </Button>
-                            </div>
+            {available && !loading && (
+                <div
+                    aria-label="Drawings upload area"
+                    className={`relative rounded-lg border border-dashed transition-colors ${dragOver ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "border-border/60"}`}
+                    onDragEnter={(event) => {
+                        if (!Array.from(event.dataTransfer.types).includes("Files")) return
+                        event.preventDefault()
+                        dragDepth.current++
+                        setDragOver(true)
+                    }}
+                    onDragOver={(event) => {
+                        if (!Array.from(event.dataTransfer.types).includes("Files")) return
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = "copy"
+                    }}
+                    onDragLeave={(event) => {
+                        event.preventDefault()
+                        dragDepth.current = Math.max(0, dragDepth.current - 1)
+                        if (dragDepth.current === 0) setDragOver(false)
+                    }}
+                    onDrop={(event) => {
+                        event.preventDefault()
+                        dragDepth.current = 0
+                        setDragOver(false)
+                        void handleDroppedFiles(Array.from(event.dataTransfer.files))
+                    }}
+                >
+                    {dragOver && (
+                        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/90 text-center text-sm font-semibold text-primary">
+                            Drop PDF or image drawings here
                         </div>
-                    ))}
+                    )}
+                    {drawings.length === 0 ? (
+                        <div className="py-14 text-center">
+                            <FileText className="mx-auto mb-3 size-8 text-muted-foreground/40" />
+                            <p className="text-sm font-medium">No drawings uploaded yet</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Drop PDF or image files here, or use Add Drawing.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden rounded-lg">
+                            <div className="border-b px-4 py-2.5 text-center text-xs text-muted-foreground">
+                                Drop PDF or image files here to add drawings
+                            </div>
+                            <div className="hidden grid-cols-[minmax(100px,0.7fr)_minmax(180px,2fr)_minmax(120px,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground lg:grid">
+                                <div>Drawing No.</div>
+                                <div>Drawing Title</div>
+                                <div>File</div>
+                                <div className="text-right">Actions</div>
+                            </div>
+
+                            {drawings.map((drawing) => (
+                                <div
+                                    key={drawing.id}
+                                    className="grid grid-cols-1 items-center gap-2 border-b px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(100px,0.7fr)_minmax(180px,2fr)_minmax(120px,1fr)_auto] lg:gap-4"
+                                >
+                                    <div className="font-mono text-sm font-medium">
+                                        {drawing.drawing_number}
+                                    </div>
+
+                                    <div className="min-w-0 break-words text-sm">
+                                        {drawing.drawing_title}
+                                    </div>
+
+                                    <div
+                                        className="truncate text-xs text-muted-foreground"
+                                        title={drawing.file_name}
+                                    >
+                                        {drawing.file_name}
+                                    </div>
+
+                                    <div className="flex items-center gap-1 lg:justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="gap-1.5"
+                                            onClick={() => openDrawing(drawing)}
+                                        >
+                                            <ExternalLink className="size-3.5" />
+                                            Open
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8 text-muted-foreground hover:text-destructive"
+                                            title="Delete drawing"
+                                            onClick={() => deleteDrawing(drawing)}
+                                        >
+                                            <Trash2 className="size-3.5" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {uploading && uploadProgress && (
+                        <div role="status" className="border-t px-4 py-2 text-sm text-muted-foreground">
+                            {uploadProgress}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -401,7 +473,7 @@ export function SiteConstructionSet({
             >
                 <DialogContent className="sm:max-w-[520px]">
                     <DialogHeader>
-                        <DialogTitle>Add Construction Drawing</DialogTitle>
+                        <DialogTitle>Add Drawing</DialogTitle>
                     </DialogHeader>
 
                     <form
@@ -443,14 +515,14 @@ export function SiteConstructionSet({
 
                         <div className="space-y-2">
                             <Label htmlFor="construction-drawing-file">
-                                PDF Drawing
+                                Drawing File
                             </Label>
 
                             <Input
                                 ref={fileInputRef}
                                 id="construction-drawing-file"
                                 type="file"
-                                accept=".pdf,application/pdf"
+                                accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,application/pdf,image/png,image/jpeg,image/webp,image/gif"
                                 onChange={handleFileChange}
                                 disabled={uploading}
                             />
