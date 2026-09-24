@@ -52,6 +52,7 @@ export default function ItemCostSheetPage() {
 
     const isTemplate = !!job?.is_template
     const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
+    const backPath = isTemplate ? "/quoting/products" : isJobStage ? `/quoting/jobs/${jobId}` : `/quoting/${jobId}`
 
     async function patchItem(patch: Partial<CostingItem>) {
         const previous = item
@@ -122,11 +123,11 @@ export default function ItemCostSheetPage() {
     const filteredJobs = (jobs ?? []).filter((j) => j.title.toLowerCase().includes(jobSearch.trim().toLowerCase()))
 
     return (
-        <DashboardLayout activeQuotingItem={isTemplate ? "/quoting/products" : undefined}>
+        <DashboardLayout activeQuotingItem={isTemplate ? "/quoting/products" : isJobStage ? "/quoting/jobs" : undefined}>
             <PageShell width="full" className="px-4 xl:px-6 gap-1.5 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="ghost" size="sm" className="h-7 -ml-2 gap-1.5 text-muted-foreground"
-                        onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
+                        onClick={() => router.push(backPath)} disabled={loading}>
                         <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
                     </Button>
                     {!isTemplate && !loading && item && item.mode === "build" && (
@@ -291,7 +292,7 @@ export default function ItemCostSheetPage() {
                                     </Button>
                                 )}
                                 <Button size="sm" className="h-8 gap-1.5"
-                                    onClick={() => router.push(isTemplate ? "/quoting/products" : `/quoting/${jobId}`)}>
+                                    onClick={() => router.push(backPath)}>
                                     <Check className="size-3.5" /> {isTemplate ? "Done — back to Products" : "Done — back to job"}
                                 </Button>
                             </div>

@@ -18,7 +18,7 @@ export default function DashboardLayout({
     activeQuotingItem,
 }: {
     children: React.ReactNode
-    activeQuotingItem?: "/quoting/products"
+    activeQuotingItem?: "/quoting/products" | "/quoting/jobs"
 }) {
     const [sessionExpired, setSessionExpired] = useState(false)
     const pathname = usePathname()

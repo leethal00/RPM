@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
@@ -57,6 +57,9 @@ export default function CostingJobDetailPage() {
 
     const job = data ?? undefined
     const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
+    useEffect(() => {
+        if (isJobStage && job?.id === id) router.replace(`/quoting/jobs/${id}`)
+    }, [id, isJobStage, job?.id, router])
     const backPath = isJobStage ? "/quoting/jobs" : "/quoting"
     const backLabel = isJobStage ? "Active Jobs" : "Quotes"
     const xeroQuoteUrl = job?.xero_quote_id

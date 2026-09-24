@@ -31,7 +31,7 @@ const quotingItems = [
     { title: "Suppliers", url: "/quoting/suppliers", icon: Truck },
 ]
 
-export function AppSidebar({ activeQuotingItem }: { activeQuotingItem?: "/quoting/products" }) {
+export function AppSidebar({ activeQuotingItem }: { activeQuotingItem?: "/quoting/products" | "/quoting/jobs" }) {
     const supabase = createClient(), router = useRouter(), pathname = usePathname()
     const [user, setUser] = React.useState<User | null>(null)
     const [profile, setProfile] = React.useState<UserProfile | null>(null)
