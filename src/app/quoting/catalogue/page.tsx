@@ -27,6 +27,7 @@ const COLUMNS: ColMeta[] = [
     { key: "supplier", label: "Supplier", width: 140, min: 90 },
     { key: "section", label: "Section", width: 150, min: 100 },
     { key: "subsection", label: "Subsection", width: 150, min: 100 },
+    { key: "unit", label: "Unit", width: 90, min: 65, title: "Quantity unit, such as hour, km, each, or m. Labour items with non-hour units do not count toward Total hours." },
     { key: "unit_cost", label: "Unit cost", width: 100, min: 70, align: "right" },
     { key: "default_markup", label: "Markup", width: 90, min: 60, align: "right", title: "Markup on cost (0.5 = 50%)" },
     { key: "watts", label: "Watts", width: 84, min: 60, align: "right", title: "LED module watts, or transformer capacity" },
@@ -476,6 +477,7 @@ export default function CataloguePage() {
                     </select>
                 )
             }
+            case "unit": return <TextCell value={m.unit ?? ""} placeholder="hour" onCommit={(v) => patch(m.id, { unit: v.trim() || null })} />
             case "unit_cost": return <NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} />
             case "default_markup": return <NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
             case "watts": return m.section === "Wiring - LED"

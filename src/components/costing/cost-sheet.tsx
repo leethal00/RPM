@@ -12,6 +12,7 @@ import { MaterialCombobox } from "./material-combobox"
 import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
+import { totalBomHours } from "@/lib/costing/bom-hours"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
@@ -149,7 +150,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const [dragOverSection, setDragOverSection] = useState<string | null>(null)
     const [dragOverLineId, setDragOverLineId] = useState<string | null>(null)
     const [jobStatus, setJobStatus] = useState<string>("draft")
-    const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null }>>({})
+    const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null; unit: string | null }>>({})
     const syncingArgon = useRef(false)
 
     // Keep one catalogue Argon/Filler line equal to the combined welding hours.
@@ -234,13 +235,13 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             if (materialIds.length > 0) {
                 const { data: currentMaterials, error: materialError } = await supabase
                     .from("materials")
-                    .select("id,unit_cost,date_last_checked")
+                    .select("id,unit_cost,date_last_checked,unit")
                     .in("id", materialIds)
                 if (materialError) toast.error("Could not check current catalogue prices: " + materialError.message)
                 else {
-                    const current = Object.fromEntries(((currentMaterials || []) as Array<{ id: string; unit_cost: number; date_last_checked: string | null }>).map((material) => [
+                    const current = Object.fromEntries(((currentMaterials || []) as Array<{ id: string; unit_cost: number; date_last_checked: string | null; unit: string | null }>).map((material) => [
                         material.id,
-                        { unit_cost: Number(material.unit_cost || 0), date_last_checked: material.date_last_checked ?? null },
+                        { unit_cost: Number(material.unit_cost || 0), date_last_checked: material.date_last_checked ?? null, unit: material.unit ?? null },
                     ]))
                     setCatalogueCosts(current)
                 }
@@ -289,6 +290,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         const added = data as CostingLine
         const next = [...lines, added]
         setLines((prev) => [...prev, added])
+        if (m) setCatalogueCosts((current) => ({ ...current, [m.id]: { unit_cost: Number(m.unit_cost), date_last_checked: m.date_last_checked, unit: m.unit } }))
         if (isWeldingTime(added)) await syncArgonFromWelding(next)
         if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
     }
@@ -527,7 +529,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         ? Number(item.xero_line_amount) / Number(item.qty)
         : effectiveBuildSell(calculatedSell, item.unit_price)
     const margin = sellMargin(cost, finalSell)
-    const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
+    const totalHours = totalBomHours(lines, Object.fromEntries(Object.entries(catalogueCosts).map(([id, material]) => [id, material.unit])))
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
     // Galvanising must only use items in the Steel section, even when other materials carry weights.
     const totalSteelWeight = lines.filter((l) => l.section === "Steel").reduce((s, l) => s + lineWeight(l), 0)

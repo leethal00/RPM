@@ -1,3 +1,5 @@
+import { isHourUnit } from "@/lib/costing/bom-hours"
+
 export const WORKLOAD_DEPARTMENTS = {
     cnc: "CNC",
     metalshop: "Metalshop",
@@ -34,8 +36,7 @@ export function bomWork(line: BomWorkLine): { department: WorkloadDepartment; ho
     else if (/acrylic|wir(?:e|ing)|electrical|finish|paint|polish|assembl|vinyl|print|\bpack\b/.test(text)) department = "fabrication"
     if (!department) return null
     // Existing labour catalogue records have no unit; their BOM quantity is hours.
-    const unit = line.materials?.unit?.trim().toLowerCase()
-    const hours = !unit || ["h", "hr", "hrs", "hour", "hours"].includes(unit) ? quantity : null
+    const hours = isHourUnit(line.materials?.unit) ? quantity : null
     return { department, hours }
 }
 
