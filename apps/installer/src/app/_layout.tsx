@@ -6,7 +6,7 @@ import { colors } from '../lib/ui';
 
 export default function RootLayout() {
   return <SafeAreaProvider><InstallerSessionProvider><Stack screenOptions={{ headerStyle: { backgroundColor: colors.navy }, headerTintColor: '#fff', contentStyle: { backgroundColor: colors.bg } }}>
-    <Stack.Screen name="index" options={{ title: 'RPM Install' }} />
+    <Stack.Screen name="index" options={{ title: 'RPM Mobile' }} />
     <Stack.Screen name="login" options={{ title: 'Installer sign in' }} />
     <Stack.Screen name="sites" options={{ title: 'Sites' }} />
     <Stack.Screen name="job/[id]" options={{ title: 'Job detail' }} />

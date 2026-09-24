@@ -1,4 +1,4 @@
-# RPM Install mobile MVP
+# RPM Mobile MVP
 
 Expo app for installer accounts on iOS and Android. It uses the same Supabase project as the RPM web app, but only calls the restricted `installer_*` RPCs and designated storage buckets.
 
