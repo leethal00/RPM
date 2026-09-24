@@ -6,7 +6,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Document, InstallerNote, Photo, SitePhoto, Timer, addJobNote, documentUrl, jobNotes, photoUrl, timerAction, workspace } from '../../lib/api';
 import { enqueuePhoto, queuedFor, syncPhotos } from '../../lib/photo-queue';
 import { useInstallerSession } from '../../lib/session';
-import { Button, Card, ErrorText, Loading, Page, Title, colors, styles } from '../../lib/ui';
+import { Button, Card, ErrorText, Loading, Page, SectionLabel, StatusPill, Title, colors, styles } from '../../lib/ui';
 import { navigateTo } from '../sites';
 
 export default function JobDetail() {
@@ -79,41 +79,79 @@ export default function JobDetail() {
   const elapsed = timer ? Math.max(0, Math.floor((now-new Date(timer.started_at).getTime())/1000)) : 0;
   const clock = `${Math.floor(elapsed/3600).toString().padStart(2,'0')}:${Math.floor(elapsed%3600/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`;
   const canRecord = ['approved','in_progress'].includes(job.status);
-  return <Page><Title detail={`${job.client_name || 'Client'} · ${job.site_name || 'Site'} · ${job.job_number || 'Job'}`}>{job.title}</Title>
+  return <Page>
+    <Title detail={`${job.client_name || 'Client'}  ·  ${job.site_name || 'Site'}`}>{job.title}</Title>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -12, marginBottom: 19 }}>
+      <StatusPill status={job.status} />
+      <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>{job.job_number || 'JOB'}</Text>
+    </View>
     {error ? <ErrorText message={error} /> : null}
-    {timer ? <Card><Text style={{ color: colors.blue, fontWeight: '800' }}>● {timer.kind.toUpperCase()} RUNNING {timer.job_id !== id ? 'ON ANOTHER JOB' : ''}</Text><Text style={{ fontSize: 30, color: colors.navy, fontWeight: '800' }}>{clock}</Text></Card> : null}
-    <Card><Text style={styles.heading}>Site</Text><Text style={styles.muted}>{job.address || 'No address saved'}</Text>
-      <Button secondary disabled={!job.address && job.lat == null} onPress={() => void navigateTo(job.address, job.lat, job.lng)}>Navigate to site</Button></Card>
-    <Card><Text style={styles.heading}>Time and travel</Text>
-      {(['travel','work'] as const).map(kind => {
-        const running = timer?.job_id === id && timer.kind === kind;
-        return <Button key={kind} disabled={busy || (!canRecord && !running) || (!!timer && !running)} secondary={!running}
-          onPress={() => void changeTimer(kind, running ? 'stop' : 'start')}>{running ? `Stop ${kind}` : `Start ${kind}`}</Button>;
-      })}
-      {!canRecord ? <Text style={styles.muted}>Time entry is closed for this job.</Text> : null}
+
+    {timer ? <Card style={{ backgroundColor: colors.forest, borderColor: colors.forest }}>
+      <Text style={{ color: '#B9DAC0', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 }}>● {timer.kind.toUpperCase()} TIMER RUNNING{timer.job_id !== id ? ' ON ANOTHER JOB' : ''}</Text>
+      <Text style={{ color: colors.white, fontSize: 38, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] }}>{clock}</Text>
+    </Card> : null}
+
+    <Card>
+      <SectionLabel>Location</SectionLabel>
+      <Text style={[styles.heading, { marginBottom: 4 }]}>{job.site_name || 'Site'}</Text>
+      <Text style={[styles.muted, { marginBottom: 17 }]}>{job.address || 'No address saved'}</Text>
+      <Button secondary style={{ marginBottom: 0 }} disabled={!job.address && job.lat == null} onPress={() => void navigateTo(job.address, job.lat, job.lng)}>Navigate to site  ↗</Button>
     </Card>
-    <Card><Text style={styles.heading}>Installation instructions</Text><Text style={styles.muted}>{job.installation_notes || 'No installation instructions yet.'}</Text></Card>
-    <Card><Text style={styles.heading}>Installer notes</Text>
+
+    <SectionLabel>Time & travel</SectionLabel>
+    <Card>
+      <Text style={[styles.muted, { marginBottom: 15 }]}>Track your journey and work separately for this job.</Text>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        {(['travel','work'] as const).map(kind => {
+          const running = timer?.job_id === id && timer.kind === kind;
+          return <Button key={kind} style={{ flex: 1, marginBottom: 0 }} disabled={busy || (!canRecord && !running) || (!!timer && !running)} secondary={!running}
+            onPress={() => void changeTimer(kind, running ? 'stop' : 'start')}>{running ? `Stop ${kind}` : `Start ${kind}`}</Button>;
+        })}
+      </View>
+      {!canRecord ? <Text style={[styles.muted, { marginTop: 12 }]}>Time entry opens when this job is approved.</Text> : null}
+    </Card>
+
+    <SectionLabel>Job information</SectionLabel>
+    <Card>
+      <Text style={styles.heading}>Installation instructions</Text>
+      <Text style={styles.muted}>{job.installation_notes || 'No installation instructions yet.'}</Text>
+    </Card>
+
+    <Card>
+      <Text style={styles.heading}>Installer notes</Text>
+      <Text style={[styles.muted, { marginBottom: 14 }]}>Add progress, issues, or handover details from site.</Text>
       {canRecord ? <>
-        <TextInput style={[styles.input, { minHeight: 110, textAlignVertical: 'top' }]} multiline
-          placeholder="Add an update from site…" value={noteDraft} onChangeText={setNoteDraft} maxLength={4000} />
-        <Button disabled={savingNote || !noteDraft.trim()} onPress={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to RPM'}</Button>
+        <TextInput style={[styles.input, { minHeight: 108, textAlignVertical: 'top', backgroundColor: colors.bg }]} multiline
+          placeholder="Write an update…" placeholderTextColor={colors.muted} value={noteDraft} onChangeText={setNoteDraft} maxLength={4000} />
+        <Button style={{ marginBottom: 0 }} disabled={savingNote || !noteDraft.trim()} onPress={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to RPM'}</Button>
       </> : <Text style={styles.muted}>Notes can be added when this job is approved or in progress.</Text>}
-      {notes.length ? notes.map(note => <View key={note.id} style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }}>
-        <Text style={{ color: colors.ink }}>{note.body}</Text>
-        <Text style={styles.muted}>{note.author} · {new Date(note.created_at).toLocaleString()}</Text>
-      </View>) : <Text style={styles.muted}>No installer notes yet.</Text>}
+      {notes.length ? <View style={{ marginTop: 18 }}>{notes.map(note => <View key={note.id} style={{ borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12, marginTop: 12 }}>
+        <Text style={{ color: colors.ink, fontSize: 14, lineHeight: 21 }}>{note.body}</Text>
+        <Text style={[styles.muted, { marginTop: 5, fontSize: 12 }]}>{note.author} · {new Date(note.created_at).toLocaleString()}</Text>
+      </View>)}</View> : <Text style={[styles.muted, { marginTop: 14 }]}>No installer notes yet.</Text>}
     </Card>
-    <Card><Text style={styles.heading}>Photos</Text>
-      <TextInput style={styles.input} placeholder="Optional photo caption" value={caption} onChangeText={setCaption} maxLength={500} />
-      <Button disabled={!canRecord} onPress={() => void addPhotos(true)}>Take photo</Button>
-      <Button secondary disabled={!canRecord} onPress={() => void addPhotos(false)}>Choose multiple photos</Button>
-      {pending ? <Text style={styles.muted}>{pending} photo{pending===1?'':'s'} queued for upload</Text> : null}
-      {pending ? <Button secondary onPress={() => { void syncPhotos(session.user.id).then(refresh); }}>Retry uploads</Button> : null}
-      {photos.map(photo => <View key={photo.id} style={{ marginTop: 10 }}>{photoUrls[photo.id] ? <Image alt={photo.caption || 'Job photo'} source={{ uri: photoUrls[photo.id] }} style={{ width: '100%', height: 180, borderRadius: 10 }} /> : null}<Text style={styles.muted}>{photo.caption || new Date(photo.captured_at).toLocaleString()}</Text></View>)}
-      {sitePhotos.map(photo => <View key={photo.id} style={{ marginTop: 10 }}><Image alt={photo.caption || 'Site photo'} source={{ uri: photo.url }} style={{ width: '100%', height: 180, borderRadius: 10 }} />{photo.caption ? <Text style={styles.muted}>{photo.caption}</Text> : null}</View>)}
+
+    <SectionLabel>Photos & files</SectionLabel>
+    <Card>
+      <Text style={styles.heading}>Installation photos</Text>
+      <Text style={[styles.muted, { marginBottom: 14 }]}>Saved to this job and the site’s private Installation folder.</Text>
+      <TextInput style={[styles.input, { backgroundColor: colors.bg }]} placeholder="Optional photo caption" placeholderTextColor={colors.muted} value={caption} onChangeText={setCaption} maxLength={500} />
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Button style={{ flex: 1 }} disabled={!canRecord} onPress={() => void addPhotos(true)}>Take photo</Button>
+        <Button secondary style={{ flex: 1 }} disabled={!canRecord} onPress={() => void addPhotos(false)}>Choose photos</Button>
+      </View>
+      {pending ? <View style={{ backgroundColor: colors.amberPale, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+        <Text style={{ color: colors.amber, fontWeight: '800' }}>{pending} photo{pending===1?'':'s'} waiting to upload</Text>
+        <Button secondary style={{ marginTop: 10, marginBottom: 0 }} onPress={() => { void syncPhotos(session.user.id).then(refresh); }}>Retry uploads</Button>
+      </View> : null}
+      {photos.map(photo => <View key={photo.id} style={{ marginTop: 12 }}>{photoUrls[photo.id] ? <Image alt={photo.caption || 'Job photo'} source={{ uri: photoUrls[photo.id] }} style={{ width: '100%', height: 180, borderRadius: 12 }} /> : null}<Text style={[styles.muted, { marginTop: 4 }]}>{photo.caption || new Date(photo.captured_at).toLocaleString()}</Text></View>)}
+      {sitePhotos.length ? <Text style={[styles.heading, { marginTop: 20, fontSize: 15 }]}>Site gallery</Text> : null}
+      {sitePhotos.map(photo => <View key={photo.id} style={{ marginTop: 10 }}><Image alt={photo.caption || 'Site photo'} source={{ uri: photo.url }} style={{ width: '100%', height: 180, borderRadius: 12 }} />{photo.caption ? <Text style={[styles.muted, { marginTop: 4 }]}>{photo.caption}</Text> : null}</View>)}
     </Card>
-    <Card><Text style={styles.heading}>Site documents</Text>
+
+    <Card>
+      <Text style={styles.heading}>Site documents</Text>
       {docs.length ? docs.map(doc => <Button key={doc.id} secondary onPress={() => void openDoc(doc.path)}>{doc.title || doc.name}</Button>) : <Text style={styles.muted}>No site documents attached.</Text>}
     </Card>
   </Page>;
