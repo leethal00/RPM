@@ -10,6 +10,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/types/database"
+import { SidebarResizeHandle } from "@/components/sidebar-resize-handle"
 
 const navItems = [
     { title: "Map View", url: "/", icon: Map },
@@ -31,7 +32,13 @@ const quotingItems = [
     { title: "Suppliers", url: "/quoting/suppliers", icon: Truck },
 ]
 
-export function AppSidebar({ activeQuotingItem }: { activeQuotingItem?: "/quoting/products" | "/quoting/jobs" }) {
+export function AppSidebar({ activeQuotingItem, sidebarWidth, onSidebarResize, onSidebarResizeStart, onSidebarResizeEnd }: {
+    activeQuotingItem?: "/quoting/products" | "/quoting/jobs"
+    sidebarWidth: number
+    onSidebarResize: (width: number) => void
+    onSidebarResizeStart: () => void
+    onSidebarResizeEnd: (width: number) => void
+}) {
     const supabase = createClient(), router = useRouter(), pathname = usePathname()
     const [user, setUser] = React.useState<User | null>(null)
     const [profile, setProfile] = React.useState<UserProfile | null>(null)
@@ -70,5 +77,6 @@ export function AppSidebar({ activeQuotingItem }: { activeQuotingItem?: "/quotin
             </>}
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4"><SidebarMenu><SidebarMenuItem><DropdownMenu><DropdownMenuTrigger asChild><SidebarMenuButton size="lg"><Avatar className="h-8 w-8 rounded-lg"><AvatarImage src={profile?.avatar_url || ""} alt={userName} /><AvatarFallback>{userInitials}</AvatarFallback></Avatar><div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"><span className="truncate font-semibold">{loading ? "Loading..." : userName}</span><span className="truncate text-xs text-sidebar-foreground/60">{loading ? "..." : userEmail}</span></div></SidebarMenuButton></DropdownMenuTrigger><DropdownMenuContent className="min-w-56" side="bottom" align="end"><DropdownMenuLabel>{userName}<div className="text-xs font-normal">{userEmail}</div></DropdownMenuLabel><DropdownMenuSeparator />{user && <DropdownMenuItem asChild><a href="/profile"><Settings className="mr-2 size-4" />Profile Settings</a></DropdownMenuItem>}<DropdownMenuItem onClick={handleSwitchAccount}><LogIn className="mr-2 size-4" />Switch account</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={handleSignOut}>Log out</DropdownMenuItem></DropdownMenuContent></DropdownMenu></SidebarMenuItem></SidebarMenu></SidebarFooter>
+        <SidebarResizeHandle width={sidebarWidth} onResize={onSidebarResize} onResizeStart={onSidebarResizeStart} onResizeEnd={onSidebarResizeEnd} />
     </Sidebar>
 }

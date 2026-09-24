@@ -146,6 +146,60 @@
   }
 }
 
+/* The divider is interactive only on computer layouts with a precise pointer. */
+.rpm-sidebar-resize-handle {
+  display: none;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .rpm-sidebar-resize-handle {
+    position: absolute;
+    inset-block: 0;
+    right: -4px;
+    z-index: 20;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .rpm-sidebar-resize-handle {
+    display: block;
+  }
+
+  [data-slot="sidebar"][data-collapsible="icon"] .rpm-sidebar-resize-handle {
+    display: none;
+  }
+
+  .rpm-sidebar-resize-handle::after {
+    position: absolute;
+    inset-block: 0;
+    left: 3px;
+    width: 2px;
+    content: "";
+  }
+
+  .rpm-sidebar-resize-handle:hover::after,
+  .rpm-sidebar-resize-handle:focus-visible::after {
+    background: var(--primary);
+  }
+
+  .rpm-sidebar-resize-handle:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  .rpm-sidebar-resizing,
+  .rpm-sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+  }
+
+  .rpm-sidebar-resizing [data-slot="sidebar-gap"],
+  .rpm-sidebar-resizing [data-slot="sidebar-container"] {
+    transition: none;
+  }
+}
+
 /* Dense Job & Project Management workspace.
    The Catalogue page is the visual reference and is intentionally excluded from
    this scope in DashboardLayout because it already has the desired density. */

@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { SessionTimeoutDialog } from "@/components/session-timeout-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
+import { clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH, SIDEBAR_WIDTH_STORAGE_KEY } from "@/components/sidebar-width"
 
 export default function DashboardLayout({
     children,
@@ -21,7 +22,29 @@ export default function DashboardLayout({
     activeQuotingItem?: "/quoting/products" | "/quoting/jobs"
 }) {
     const [sessionExpired, setSessionExpired] = useState(false)
+    const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+    const [resizingSidebar, setResizingSidebar] = useState(false)
     const pathname = usePathname()
+
+    useEffect(() => {
+        try {
+            const savedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY))
+            if (Number.isFinite(savedWidth) && savedWidth > 0) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
+                setSidebarWidth(clampSidebarWidth(savedWidth))
+            }
+        } catch {
+            // Storage can be disabled; resizing still works for this page.
+        }
+    }, [])
+
+    const saveSidebarWidth = (width: number) => {
+        try {
+            window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)))
+        } catch {
+            // Keep the current width even when storage is unavailable.
+        }
+    }
 
     // Catalogue is already the reference layout for the dense workspace. Apply the
     // same full-width/condensed treatment to the rest of Job & Project Management,
@@ -52,8 +75,20 @@ export default function DashboardLayout({
 
     return (
         <TooltipProvider>
-            <SidebarProvider>
-                <AppSidebar activeQuotingItem={activeQuotingItem} />
+            <SidebarProvider
+                className={resizingSidebar ? "rpm-sidebar-resizing" : undefined}
+                style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
+            >
+                <AppSidebar
+                    activeQuotingItem={activeQuotingItem}
+                    sidebarWidth={sidebarWidth}
+                    onSidebarResize={setSidebarWidth}
+                    onSidebarResizeStart={() => setResizingSidebar(true)}
+                    onSidebarResizeEnd={(width) => {
+                        setResizingSidebar(false)
+                        saveSidebarWidth(width)
+                    }}
+                />
                 <SidebarInset>
                     <header className="flex h-14 shrink-0 items-center justify-between border-b px-3 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-11">
                         <div className="flex items-center gap-2">
