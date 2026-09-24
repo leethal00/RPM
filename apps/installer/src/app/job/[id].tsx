@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
-import { Redirect, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Document, InstallerNote, Material, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, deletablePhotoIds, deleteJobPhoto, documentUrl, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
@@ -160,6 +160,7 @@ export default function JobDetail() {
       <Text style={[styles.heading, { marginBottom: 4 }]}>{job.site_name || 'Site'}</Text>
       <Text style={[styles.muted, { marginBottom: 17 }]}>{job.address || 'No address saved'}</Text>
       <Button secondary style={{ marginBottom: 0 }} disabled={!job.address && job.lat == null} onPress={() => void navigateTo(job.address, job.lat, job.lng)}>Navigate to site  ↗</Button>
+      <Button secondary style={{ marginTop: 10, marginBottom: 0 }} onPress={() => router.push(`/site/${job.store_id}`)}>View site gallery  →</Button>
     </Card> : <Card><SectionLabel>Location</SectionLabel><Text style={styles.heading}>Manufacture only / No site</Text><Text style={styles.muted}>Work and photos are saved on this job.</Text></Card>}
 
     <SectionLabel>Time & travel</SectionLabel>

@@ -36,7 +36,8 @@ export default function Sites() {
       <Text style={[styles.heading, { marginTop: 6 }]}>{site.name}</Text>
       <Text style={styles.muted}>{site.address || 'No address saved'}</Text>
       {site.manager_name ? <Text style={[styles.muted, { marginTop: 9 }]}>Contact  ·  {site.manager_name}{site.manager_phone ? `  ·  ${site.manager_phone}` : ''}</Text> : null}
-      <Button secondary style={{ marginTop: 17, marginBottom: 0 }} disabled={!site.address && site.lat == null} onPress={() => void navigateTo(site.address, site.lat, site.lng)}>Get directions  ↗</Button>
+      <Button style={{ marginTop: 17, marginBottom: 0 }} onPress={() => router.push(`/site/${site.id}`)}>View site photos  →</Button>
+      <Button secondary style={{ marginTop: 10, marginBottom: 0 }} disabled={!site.address && site.lat == null} onPress={() => void navigateTo(site.address, site.lat, site.lng)}>Get directions  ↗</Button>
       {jobs.filter(job => job.store_id === site.id).map(job => <Button key={job.id} secondary style={{ marginTop: 10, marginBottom: 0 }} onPress={() => router.push(`/job/${job.id}`)}>{job.job_number || 'Job'} · {job.title}</Button>)}
     </Card>)}
     {!sites.length && !error ? <Card><Text style={styles.muted}>No sites found. Try a different name.</Text></Card> : null}
