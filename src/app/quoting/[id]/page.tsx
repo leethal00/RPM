@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calculator, ExternalLink, FileText, Loader2, Pencil, RefreshCw, Send } from "lucide-react"
+import { ArrowLeft, Calculator, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw, Send } from "lucide-react"
 import Link from "next/link"
 import { PageShell } from "@/components/page-shell"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -160,6 +160,7 @@ export default function CostingJobDetailPage() {
                                 )}
                             </div>
                             <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                                {job.store_id && <Button asChild variant="outline" size="sm" className="h-9 gap-1.5"><Link href={`/stores/${job.store_id}`}><MapPin className="size-3.5" /> View site</Link></Button>}
                                 {!job.xero_quote_id && !job.xero_invoice_id && !isJobStage ? (
                                     <Button size="sm" className="h-9 gap-1.5" onClick={sendToXero} disabled={sendingXero}>
                                         {sendingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
@@ -230,3 +231,4 @@ export default function CostingJobDetailPage() {
         </DashboardLayout>
     )
 }
+
