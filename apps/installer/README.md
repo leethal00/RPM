@@ -4,7 +4,7 @@ Expo app for installer accounts on iOS and Android. It uses the same Supabase pr
 
 ## Setup
 
-1. Apply `supabase/migrations/20260924230000_installer_mobile_mvp.sql` to the same environment as RPM.
+1. Apply `supabase/migrations/20260924030920_installer_mobile_mvp.sql` to the same environment as RPM.
 2. In RPM Settings → Users, create an Installer user and select their assigned jobs. Add mobile installation notes on each job card.
 3. Copy `.env.example` to `.env` and use the project's Supabase URL and **publishable** key. Do not put a service role key in the app.
 4. Run `npm ci`, then `npm start` from this directory. Open on an iOS or Android device. Camera and upload behavior need a physical device to verify.
