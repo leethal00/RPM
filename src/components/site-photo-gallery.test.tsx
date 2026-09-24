@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
     upload: vi.fn(), insert: vi.fn(), update: vi.fn(), remove: vi.fn(),
 }))
 
-vi.mock("next/image", () => ({ default: ({ alt }: { alt: string }) => <span role="img" aria-label={alt} /> }))
+vi.mock("next/image", () => ({ default: ({ alt, src, unoptimized }: { alt: string; src: string; unoptimized?: boolean }) =>
+    <span role="img" aria-label={alt} data-src={src} data-unoptimized={String(Boolean(unoptimized))} /> }))
 vi.mock("@/lib/image-prep", () => ({ ensureRenderable: async (file: File) => file, isHeic: () => false }))
 vi.mock("@/lib/supabase/client", () => ({
     createClient: () => ({
@@ -80,6 +81,19 @@ describe("site photo galleries", () => {
         expect(screen.queryByRole("button", { name: /Internal \(/ })).not.toBeInTheDocument()
         expect(screen.queryByText("Upload photo")).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Delete photo" })).not.toBeInTheDocument()
+    })
+
+    it("loads private thumbnails directly from signed storage URLs while preserving the full-size link", async () => {
+        mocks.installers = []
+        mocks.photos = [{ id: "internal-1", store_id: "site-1", album_id: null, url: "",
+            private_storage_path: "site-1/private.jpg", caption: "Workshop photo", internal_only: true, is_primary: false }]
+        render(<SitePhotoGallery storeId="site-1" />)
+
+        const thumbnail = await screen.findByRole("img", { name: "Workshop photo" })
+        expect(thumbnail).toHaveAttribute("data-src", "https://example.com/private.jpg")
+        expect(thumbnail).toHaveAttribute("data-unoptimized", "true")
+        expect(screen.getByTitle("Open full size").closest("a"))
+            .toHaveAttribute("href", "https://example.com/private.jpg")
     })
 
     it("saves a new staff upload to private storage in Internal", async () => {
