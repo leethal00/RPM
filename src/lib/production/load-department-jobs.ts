@@ -1,15 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { DepartmentCode } from "./planning"
 import type { DepartmentJob } from "./department-jobs"
+import { actualDepartment, bomWork, type BomWorkLine, type WorkloadDepartment } from "./bom-workload"
 
-type Assignment = {
-    estimated_hours: number | null
-    progress: number
-    costing_jobs: {
-        id: string; job_number: string | null; title: string; production_title: string | null
-        completion_date: string | null; clients: { name: string } | null
-    }
+type Job = {
+    id: string; job_number: string | null; title: string; production_title: string | null
+    completion_date: string | null; clients: { name: string } | null
 }
+type Entry = { job_id: string; hours: number; department_id: string | null; labour_type: string | null }
 
 async function pages<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>) {
     const rows: T[] = []
@@ -21,33 +18,49 @@ async function pages<T>(fetchPage: (from: number, to: number) => PromiseLike<{ d
     }
 }
 
-/** Uses the same assignments and department-linked labour as the factory workspace. */
-export async function loadDepartmentJobs(db: SupabaseClient, code: DepartmentCode, clientId: string | null): Promise<DepartmentJob[]> {
-    const department = await db.from("departments").select("id").eq("code", code).maybeSingle()
-    if (department.error) throw department.error
-    if (!department.data) return []
-    const departmentId = department.data.id as string
-    const assignments = await pages<Assignment>((from, to) => {
-        let query = db.from("department_jobs")
-            .select("estimated_hours,progress,costing_jobs!inner(id,job_number,title,production_title,completion_date,clients(name))")
-            .eq("department_id", departmentId).lt("progress", 100)
-            .in("costing_jobs.status", ["approved", "in_progress"]).eq("costing_jobs.is_template", false)
-        if (clientId) query = query.eq("costing_jobs.client_id", clientId)
-        return query.order("job_id").range(from, to)
+/** Derive workloads without creating assignments or changing operator access. */
+export async function loadDepartmentJobs(db: SupabaseClient, code: WorkloadDepartment, clientId: string | null): Promise<DepartmentJob[]> {
+    const jobs = await pages<Job>((from, to) => {
+        let query = db.from("costing_jobs")
+            .select("id,job_number,title,production_title,completion_date,clients(name)")
+            .in("status", ["approved", "in_progress"]).eq("is_template", false)
+        if (clientId) query = query.eq("client_id", clientId)
+        return query.order("id").range(from, to)
     })
-    if (!assignments.length) return []
+    if (!jobs.length) return []
+    const departments = await pages<{ id: string; code: string }>((from, to) =>
+        db.from("departments").select("id,code").order("id").range(from, to))
+    const departmentCodes = new Map(departments.map(row => [row.id, row.code]))
+    const estimates = new Map<string, { hours: number | null; missing: boolean }>()
     const actuals = new Map<string, number>()
-    // Bound the URL size, while paginating actuals independently of assignments.
-    for (let offset = 0; offset < assignments.length; offset += 100) {
-        const jobIds = assignments.slice(offset, offset + 100).map(row => row.costing_jobs.id)
-        const entries = await pages<{ job_id: string; hours: number }>((from, to) =>
-            db.from("costing_time_entries").select("job_id,hours").eq("department_id", departmentId)
-                .in("job_id", jobIds).order("id").range(from, to))
-        for (const entry of entries) actuals.set(entry.job_id, (actuals.get(entry.job_id) ?? 0) + entry.hours)
+    for (let offset = 0; offset < jobs.length; offset += 100) {
+        const ids = jobs.slice(offset, offset + 100).map(job => job.id)
+        const lines = await pages<BomWorkLine>((from, to) => db.from("costing_lines")
+            .select("job_id,section,subsection,description,qty,materials(is_labour,unit),costing_items(qty,mode)")
+            .in("job_id", ids).order("id").range(from, to))
+        for (const line of lines) {
+            const work = bomWork(line)
+            if (work?.department !== code) continue
+            const estimate = estimates.get(line.job_id) ?? { hours: null, missing: false }
+            if (work.hours === null) estimate.missing = true
+            else estimate.hours = (estimate.hours ?? 0) + work.hours
+            estimates.set(line.job_id, estimate)
+        }
+        const relevantIds = ids.filter(id => estimates.has(id))
+        if (!relevantIds.length) continue
+        const entries = await pages<Entry>((from, to) => db.from("costing_time_entries")
+            .select("job_id,hours,department_id,labour_type").in("job_id", relevantIds).order("id").range(from, to))
+        for (const entry of entries) {
+            // An explicit department wins; generic Workshop/Admin/Other remains unallocated.
+            const department = actualDepartment(entry.department_id
+                ? departmentCodes.get(entry.department_id) ?? "" : entry.labour_type ?? "")
+            if (department === code) actuals.set(entry.job_id, (actuals.get(entry.job_id) ?? 0) + Number(entry.hours))
+        }
     }
-    return assignments.map(({ estimated_hours, costing_jobs: job }) => ({
+    return jobs.filter(job => estimates.has(job.id)).map(job => ({
         id: job.id, number: job.job_number, title: job.production_title?.trim() || job.title,
         client: job.clients?.name ?? null, due: job.completion_date,
-        estimated: estimated_hours, actual: actuals.get(job.id) ?? null, missingEstimates: false,
+        estimated: estimates.get(job.id)!.hours, actual: actuals.get(job.id) ?? null,
+        missingEstimates: estimates.get(job.id)!.missing,
     })).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.title.localeCompare(b.title))
 }
