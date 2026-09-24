@@ -146,7 +146,7 @@
   }
 }
 
-/* Only the small grip near the top of the desktop sidebar is draggable. */
+/* Only the small grip near the bottom of the desktop sidebar is draggable. */
 .rpm-sidebar-resize-handle {
   display: none;
 }
@@ -157,7 +157,7 @@
     align-items: center;
     justify-content: center;
     position: absolute;
-    top: 78px;
+    bottom: 20px;
     right: -11px;
     z-index: 20;
     width: 22px;
