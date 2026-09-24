@@ -39,6 +39,7 @@ import type {
     SitePhotoAlbum,
 } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
+import { InstallerSitePhotos } from "@/components/costing/installer-site-photos"
 
 interface SitePhotoGalleryProps {
     storeId: string
@@ -922,6 +923,8 @@ export function SitePhotoGallery({
                 </div>
             </div>
 
+            <InstallerSitePhotos storeId={storeId} onPublished={() => { void fetchPhotos() }} />
+
             {/* Album selector */}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1391,3 +1394,4 @@ export function SitePhotoGallery({
         </div>
     )
 }
+

@@ -13,6 +13,7 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
   const [sessions, setSessions] = useState<Session[]>([])
   const [photos, setPhotos] = useState<Photo[]>([])
   const [notes, setNotes] = useState<InstallerNote[]>([])
+  const [brokenPhotoIds, setBrokenPhotoIds] = useState<string[]>([])
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -53,7 +54,7 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
     </section>
     <section><h3 className="font-semibold">Installation photos</h3>
       {photos.length ? <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">{photos.map(p => <div key={p.id} className="rounded border p-2">
-        {p.url && <a href={p.url} target="_blank" rel="noreferrer"><Image src={p.url} alt={p.caption || "Installation photo"} width={300} height={200} unoptimized className="h-40 w-full rounded object-cover" /></a>}
+        {p.url && !brokenPhotoIds.includes(p.id) ? <a href={p.url} target="_blank" rel="noreferrer"><Image src={p.url} alt={p.caption || "Installation photo"} width={300} height={200} unoptimized className="h-40 w-full rounded object-cover" onError={() => setBrokenPhotoIds(current => [...current, p.id])} /></a> : <div className="flex h-40 items-center justify-center rounded bg-muted text-xs text-muted-foreground">Photo unavailable</div>}
         <p className="mt-1 text-xs text-muted-foreground">{p.users?.name || "Installer"} · {p.caption || new Date(p.captured_at).toLocaleString("en-NZ")}</p>
       </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No installation photos uploaded.</p>}
     </section>
