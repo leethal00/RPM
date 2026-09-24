@@ -69,15 +69,15 @@ export default function ItemCostSheetPage() {
         }
     }
 
-    async function uploadProductImage(file: File) {
-        if (!isTemplate || !item || uploadingImage) return
+    async function uploadBomImage(file: File) {
+        if (!item || item.mode !== "build" || uploadingImage) return
         const allowed: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" }
         const extension = allowed[file.type]
         if (!extension) return toast.error("Choose a PNG, JPG or WebP image")
         if (file.size > 10 * 1024 * 1024) return toast.error("Image must be 10 MB or smaller")
         setUploadingImage(true)
         try {
-            const path = `products/${itemId}/${crypto.randomUUID()}.${extension}`
+            const path = `${isTemplate ? "products" : "boms"}/${itemId}/${crypto.randomUUID()}.${extension}`
             const { error: uploadError } = await supabase.storage.from("job-attachments")
                 .upload(path, file, { contentType: file.type, upsert: false })
             if (uploadError) throw uploadError
@@ -85,7 +85,7 @@ export default function ItemCostSheetPage() {
                 .update({ image_path: path }).eq("id", itemId)
             if (saveError) throw saveError
             setItem((current) => current ? { ...current, image_path: path } : current)
-            toast.success("Product image saved")
+            toast.success("BOM image saved")
         } catch (error) {
             toast.error(`Could not save image: ${error instanceof Error ? error.message : String(error)}`)
         } finally {
@@ -94,7 +94,7 @@ export default function ItemCostSheetPage() {
         }
     }
 
-    const productImageUrl = item?.image_path
+    const bomImageUrl = item?.image_path
         ? supabase.storage.from("job-attachments").getPublicUrl(item.image_path).data.publicUrl
         : null
 
@@ -260,28 +260,28 @@ export default function ItemCostSheetPage() {
                         <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
                             onFinalSellChange={(price) => patchItem({ unit_price: price })} />
 
-                        {isTemplate && (
+                        {item.mode === "build" && (
                             <div className="rounded-lg border border-border/60 p-3">
-                                <div className="mb-2 text-sm font-medium">Product image for job card</div>
+                                <div className="mb-2 text-sm font-medium">BOM image</div>
                                 <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only"
-                                    aria-label="Choose product image" onChange={(event) => {
+                                    aria-label="Choose BOM image" onChange={(event) => {
                                         const file = event.target.files?.[0]
-                                        if (file) void uploadProductImage(file)
+                                        if (file) void uploadBomImage(file)
                                     }} />
-                                <div tabIndex={0} role="button" aria-label="Drop or paste a product image"
-                                    onClick={() => imageInput.current?.click()}
-                                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); imageInput.current?.click() } }}
+                                <div tabIndex={0} role="button" aria-label="Drop or paste a BOM image" aria-disabled={uploadingImage}
+                                    onClick={() => { if (!uploadingImage) imageInput.current?.click() }}
+                                    onKeyDown={(event) => { if (!uploadingImage && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); imageInput.current?.click() } }}
                                     onDragOver={(event) => event.preventDefault()}
-                                    onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void uploadProductImage(file) }}
-                                    onPaste={(event) => { const file = Array.from(event.clipboardData.files)[0]; if (file) { event.preventDefault(); void uploadProductImage(file) } }}
+                                    onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void uploadBomImage(file) }}
+                                    onPaste={(event) => { const file = Array.from(event.clipboardData.files)[0]; if (file) { event.preventDefault(); void uploadBomImage(file) } }}
                                     className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border p-3 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                                    {productImageUrl ? (
+                                    {bomImageUrl ? (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={productImageUrl} alt={item.name || "Product"} className="max-h-48 max-w-full object-contain" />
+                                        <img src={bomImageUrl} alt={item.name || "BOM"} className="max-h-48 max-w-full object-contain" />
                                     ) : <ImagePlus className="size-7 text-muted-foreground" aria-hidden="true" />}
-                                    <span className="text-sm text-muted-foreground">{uploadingImage ? "Uploading…" : productImageUrl ? "Click, drop or paste to replace the image" : "Click, drop or paste a screenshot here"}</span>
+                                    <span className="text-sm text-muted-foreground">{uploadingImage ? "Uploading…" : bomImageUrl ? "Click, drop or paste to replace the image" : "Click, drop or paste an image here"}</span>
                                 </div>
-                                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. This image appears on job cards made from this product.</p>
+                                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. Saved with this BOM and shown on its job card.</p>
                             </div>
                         )}
 
