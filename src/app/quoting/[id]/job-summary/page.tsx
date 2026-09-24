@@ -221,19 +221,20 @@ export default function JobSummaryPage() {
             <colgroup>
               <col style={{ width: "15%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "27%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "32%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
               <tr className="bg-[#eef2f1]">
-                {["Workshop Ref", "Qty", "Item", "Size", "Description"].map((h) => <th key={h} className="border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-left text-[10.5px]">{h}</th>)}
+                {["Workshop Ref", "Qty", "Item", "Size", "Description", "Complete"].map((h) => <th key={h} className={`border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-[10.5px] ${h === "Complete" ? "text-center" : "text-left"}`}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {items.map((item) => item.sign_code === SECTION_HEADING_CODE ? (
                 <tr key={item.id} className="break-inside-avoid break-after-avoid">
-                  <th colSpan={5} scope="row" className="border border-[#b9c5c1] border-l-[1mm] border-l-[#155f4c] bg-[#e4eeea] px-[2.5mm] py-[2mm] text-left text-[11.5px] font-black uppercase tracking-[.04em]" style={{ color: GREEN }}>
+                  <th colSpan={6} scope="row" className="border border-[#b9c5c1] border-l-[1mm] border-l-[#155f4c] bg-[#e4eeea] px-[2.5mm] py-[2mm] text-left text-[11.5px] font-black uppercase tracking-[.04em]" style={{ color: GREEN }}>
                     {sectionNumbers.get(item.id)}. {item.name}
                   </th>
                 </tr>
@@ -247,9 +248,10 @@ export default function JobSummaryPage() {
                     <div className="whitespace-pre-wrap">{item.details || ""}</div>
                     {item.delivery && <div className="mt-[1mm] text-neutral-600">{item.delivery}</div>}
                   </td>
+                  <td className="border border-[#b9c5c1] px-[1mm] py-[2mm] text-center"><span aria-hidden="true" className="mx-auto block h-[4mm] w-[4mm] border border-neutral-700 bg-white" /></td>
                 </tr>
               ))}
-              {!items.length && <tr><td colSpan={5} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
+              {!items.length && <tr><td colSpan={6} className="border border-[#b9c5c1] p-4 text-center text-neutral-500">No items on this job.</td></tr>}
             </tbody>
           </table>
         </div>
