@@ -25,6 +25,6 @@ export interface Vendor { id: string; client_id: string | null; name: string; tr
 export interface Region { id: string; name: string; created_at: string }
 export interface MaintenanceSchedule { id: string; asset_id: string; task_name: string; frequency_days: number; last_completed_at: string | null; next_due_at: string; created_at: string }
 export interface SiteConstructionDrawing { id: string; store_id: string; drawing_number: string; drawing_title: string; file_url: string; file_name: string; uploaded_by: string | null; created_at: string; updated_at: string }
-export interface SitePhotoAlbum { id: string; store_id: string; name: string; created_by: string | null; created_at: string; updated_at: string }
-export interface SitePhoto { id: string; store_id: string; album_id: string | null; url: string; caption: string | null; internal_only: boolean; is_primary: boolean; created_at: string; updated_at: string; album?: SitePhotoAlbum | null }
+export interface SitePhotoAlbum { id: string; store_id: string; name: string; audience: 'client' | 'internal'; created_by: string | null; created_at: string; updated_at: string }
+export interface SitePhoto { id: string; store_id: string; album_id: string | null; url: string; private_storage_path: string | null; caption: string | null; internal_only: boolean; is_primary: boolean; created_at: string; updated_at: string; album?: SitePhotoAlbum | null }
 export interface AssetPhoto { id: string; asset_id: string; url: string; caption: string | null; internal_only: boolean; is_thumbnail?: boolean; created_at: string }

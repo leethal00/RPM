@@ -39,7 +39,6 @@ import type {
     SitePhotoAlbum,
 } from "@/types/database"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
-import { InstallerSitePhotos } from "@/components/costing/installer-site-photos"
 
 interface SitePhotoGalleryProps {
     storeId: string
@@ -50,14 +49,42 @@ type AssetPhotoEnriched = AssetPhoto & {
 }
 
 const GENERAL_ALBUM = "__general__"
+function publicPhotoPath(url: string): string | null {
+    const marker = "/storage/v1/object/public/site-photos/"
+    const index = url.indexOf(marker)
+    if (index < 0) return null
+    try {
+        return decodeURIComponent(url.slice(index + marker.length).split("?")[0])
+    } catch {
+        return null
+    }
+}
+type GalleryAudience = "client" | "internal"
+type InstallerPhoto = {
+    id: string
+    store_id: string
+    storage_path: string
+    caption: string | null
+    category: string
+    captured_at: string
+    album_id: string | null
+    users?: { name: string | null } | null
+    previewUrl?: string | null
+}
+type DisplaySitePhoto = SitePhoto & { previewUrl?: string | null }
 
 export function SitePhotoGallery({
     storeId,
 }: SitePhotoGalleryProps) {
     const supabase = useMemo(() => createClient(), [])
 
-    const [photos, setPhotos] = useState<SitePhoto[]>([])
+    const [photos, setPhotos] = useState<DisplaySitePhoto[]>([])
+    const [installerPhotos, setInstallerPhotos] = useState<InstallerPhoto[]>([])
+    const [brokenInstallerIds, setBrokenInstallerIds] = useState<string[]>([])
+    const [processingInstallerId, setProcessingInstallerId] = useState<string | null>(null)
     const [albums, setAlbums] = useState<SitePhotoAlbum[]>([])
+    const [audience, setAudience] = useState<GalleryAudience>("internal")
+    const [isStaff, setIsStaff] = useState<boolean | null>(null)
     const [assetPhotos, setAssetPhotos] = useState<
         AssetPhotoEnriched[]
     >([])
@@ -67,9 +94,6 @@ export function SitePhotoGallery({
     const [isDragging, setIsDragging] = useState(false)
 
     const [includeAssetPhotos, setIncludeAssetPhotos] =
-        useState(false)
-
-    const [uploadInternalOnly, setUploadInternalOnly] =
         useState(false)
 
     const [selectedAlbumId, setSelectedAlbumId] =
@@ -92,7 +116,14 @@ export function SitePhotoGallery({
 
             if (error) throw error
 
-            setPhotos((data ?? []) as SitePhoto[])
+            const rows = (data ?? []) as SitePhoto[]
+            const signed = await Promise.all(rows.map(async (photo) => {
+                if (!photo.internal_only || !photo.private_storage_path) return photo
+                const { data: url } = await supabase.storage.from("site-internal-photos")
+                    .createSignedUrl(photo.private_storage_path, 3600)
+                return { ...photo, previewUrl: url?.signedUrl ?? null }
+            }))
+            setPhotos(signed)
         } catch (error: unknown) {
             console.error(
                 "Error fetching photos:",
@@ -140,6 +171,25 @@ export function SitePhotoGallery({
             setAlbums([])
             setAlbumsAvailable(false)
         }
+    }
+
+    const fetchInstallerPhotos = async () => {
+        const { data, error } = await supabase.from("installer_photos")
+            .select("id,store_id,storage_path,caption,category,captured_at,album_id,users(name)")
+            .eq("store_id", storeId).is("published_site_photo_id", null)
+            .order("captured_at", { ascending: false })
+        if (error) {
+            console.error("Could not load installation photos:", error)
+            return
+        }
+        const rows = (data ?? []) as InstallerPhoto[]
+        const signed = await Promise.all(rows.map(async (photo) => {
+            const { data: url } = await supabase.storage.from("installer-photos")
+                .createSignedUrl(photo.storage_path, 3600)
+            return { ...photo, previewUrl: url?.signedUrl ?? null }
+        }))
+        setInstallerPhotos(signed)
+        setBrokenInstallerIds([])
     }
 
     const fetchAssetPhotos = async () => {
@@ -207,11 +257,22 @@ export function SitePhotoGallery({
     }
 
     useEffect(() => {
+        // Reset the selected album when the site changes.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedAlbumId(GENERAL_ALBUM)
         setLoading(true)
 
         fetchPhotos()
         fetchAlbums()
+        void fetchInstallerPhotos()
+
+        void (async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            const { data } = user ? await supabase.from("users").select("role").eq("id", user.id).single() : { data: null }
+            const staff = data?.role === "super_admin" || data?.role === "rodier_admin"
+            setIsStaff(staff)
+            if (!staff) setAudience("client")
+        })()
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storeId])
@@ -221,6 +282,7 @@ export function SitePhotoGallery({
             includeAssetPhotos &&
             assetPhotos.length === 0
         ) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             fetchAssetPhotos()
         }
 
@@ -245,6 +307,7 @@ export function SitePhotoGallery({
         if (
             albums.some(
                 (album) =>
+                    album.audience === audience &&
                     album.name.toLowerCase() ===
                     name.toLowerCase()
             )
@@ -267,6 +330,7 @@ export function SitePhotoGallery({
                 .insert({
                     store_id: storeId,
                     name,
+                    audience,
                     created_by: user?.id ?? null,
                 })
                 .select("*")
@@ -304,7 +368,7 @@ export function SitePhotoGallery({
     ) => {
         const photoCount = photos.filter(
             (photo) => photo.album_id === album.id
-        ).length
+        ).length + installerPhotos.filter((photo) => photo.album_id === album.id).length
 
         const message =
             photoCount > 0
@@ -344,6 +408,10 @@ export function SitePhotoGallery({
             )
         )
 
+        setInstallerPhotos((current) => current.map((photo) =>
+            photo.album_id === album.id ? { ...photo, album_id: null } : photo
+        ))
+
         if (selectedAlbumId === album.id) {
             setSelectedAlbumId(GENERAL_ALBUM)
         }
@@ -354,6 +422,7 @@ export function SitePhotoGallery({
     }
 
     const uploadFiles = async (files: File[]) => {
+        if (!isStaff || uploading) return
         const images = files.filter(
             (file) =>
                 file.type.startsWith("image/") ||
@@ -395,26 +464,23 @@ export function SitePhotoGallery({
                     const fileExt =
                         file.name.split(".").pop()
 
-                    const fileName =
-                        `${storeId}/${Math.random()}.${fileExt}`
-
-                    const filePath =
-                        `photos/${fileName}`
+                    const privateUpload = audience === "internal"
+                    const bucket = privateUpload ? "site-internal-photos" : "site-photos"
+                    const filePath = privateUpload
+                        ? `${storeId}/${crypto.randomUUID()}.${fileExt}`
+                        : `photos/${storeId}/${crypto.randomUUID()}.${fileExt}`
 
                     const { error: uploadError } =
                         await supabase.storage
-                            .from("site-photos")
+                            .from(bucket)
                             .upload(filePath, file)
 
                     if (uploadError) {
                         throw uploadError
                     }
 
-                    const {
-                        data: { publicUrl },
-                    } = supabase.storage
-                        .from("site-photos")
-                        .getPublicUrl(filePath)
+                    const publicUrl = privateUpload ? "" : supabase.storage
+                        .from("site-photos").getPublicUrl(filePath).data.publicUrl
 
                     // Important: when uploading to General we
                     // deliberately do not send album_id at all.
@@ -427,9 +493,9 @@ export function SitePhotoGallery({
                         store_id: storeId,
                         url: publicUrl,
                         caption: file.name,
-                        internal_only:
-                            uploadInternalOnly,
+                        internal_only: privateUpload,
                     }
+                    if (privateUpload) insertData.private_storage_path = filePath
 
                     if (
                         selectedAlbumId !==
@@ -444,7 +510,10 @@ export function SitePhotoGallery({
                             .from("site_photos")
                             .insert(insertData)
 
-                    if (dbError) throw dbError
+                    if (dbError) {
+                        await supabase.storage.from(bucket).remove([filePath])
+                        throw dbError
+                    }
 
                     succeeded++
                 } catch (error: unknown) {
@@ -583,6 +652,66 @@ export function SitePhotoGallery({
         )
     }
 
+    const moveInstallerPhoto = async (photo: InstallerPhoto, value: string) => {
+        const albumId = value === GENERAL_ALBUM ? null : value
+        const { error } = await supabase.from("installer_photos")
+            .update({ album_id: albumId }).eq("id", photo.id)
+        if (error) return toast.error(`Could not move photo: ${error.message}`)
+        setInstallerPhotos((current) => current.map((item) =>
+            item.id === photo.id ? { ...item, album_id: albumId } : item
+        ))
+        toast.success("Photo moved")
+    }
+
+    const publishInstallerPhoto = async (photo: InstallerPhoto) => {
+        if (processingInstallerId) return
+        setProcessingInstallerId(photo.id)
+        const path = `photos/${storeId}/installation/${photo.id}.jpg`
+        let uploaded = false
+        try {
+            const { data: file, error: downloadError } = await supabase.storage
+                .from("installer-photos").download(photo.storage_path)
+            if (downloadError) throw downloadError
+            if (!file || file.size === 0) throw new Error("This photo upload is empty. Please take it again in RPM Mobile.")
+            const { error: uploadError } = await supabase.storage.from("site-photos")
+                .upload(path, file, { contentType: "image/jpeg", upsert: false })
+            if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) throw uploadError
+            uploaded = !uploadError
+            const { data: publicUrl } = supabase.storage.from("site-photos").getPublicUrl(path)
+            const { error: publishError } = await supabase.rpc("installer_publish_site_photo", {
+                p_photo_id: photo.id, p_public_path: path, p_public_url: publicUrl.publicUrl,
+            })
+            if (publishError) throw publishError
+            setInstallerPhotos((current) => current.filter((item) => item.id !== photo.id))
+            await fetchPhotos()
+            toast.success("Photo moved to Client viewable · General")
+        } catch (error) {
+            if (uploaded) await supabase.storage.from("site-photos").remove([path])
+            toast.error(error instanceof Error ? error.message : "Could not make photo client viewable")
+        } finally {
+            setProcessingInstallerId(null)
+        }
+    }
+
+    const deleteInstallerPhoto = async (photo: InstallerPhoto) => {
+        if (!confirm("Delete this job photo?")) return
+        if (processingInstallerId) return
+        setProcessingInstallerId(photo.id)
+        try {
+            const { error } = await supabase.from("installer_photos").delete().eq("id", photo.id)
+            if (error) throw error
+            const { error: storageError } = await supabase.storage.from("installer-photos")
+                .remove([photo.storage_path])
+            if (storageError) console.warn("Photo record deleted, but file cleanup failed:", storageError)
+            setInstallerPhotos((current) => current.filter((item) => item.id !== photo.id))
+            toast.success("Photo deleted")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not delete photo")
+        } finally {
+            setProcessingInstallerId(null)
+        }
+    }
+
     const handleDelete = async (
         photo: SitePhoto
     ) => {
@@ -595,26 +724,23 @@ export function SitePhotoGallery({
         }
 
         try {
-            const pathMatch = photo.url.match(
-                /site-photos\/(.+)$/
-            )
-
-            if (pathMatch) {
-                const filePath = pathMatch[1]
-
-                await supabase.storage
-                    .from("site-photos")
-                    .remove([
-                        decodeURIComponent(filePath),
-                    ])
-            }
-
+            const publicPath = publicPhotoPath(photo.url)
             const { error } = await supabase
                 .from("site_photos")
                 .delete()
                 .eq("id", photo.id)
 
             if (error) throw error
+
+            if (publicPath) {
+                const { error: storageError } = await supabase.storage.from("site-photos").remove([publicPath])
+                if (storageError) console.warn("Photo record deleted, but public file cleanup failed:", storageError)
+            }
+            if (photo.private_storage_path) {
+                const { error: storageError } = await supabase.storage.from("site-internal-photos")
+                    .remove([photo.private_storage_path])
+                if (storageError) console.warn("Photo record deleted, but private file cleanup failed:", storageError)
+            }
 
             setPhotos((current) =>
                 current.filter(
@@ -635,41 +761,107 @@ export function SitePhotoGallery({
         }
     }
 
-    const toggleInternalOnly = async (
-        photo: SitePhoto
-    ) => {
-        const next = !photo.internal_only
+    const toggleInternalOnly = async (photo: SitePhoto) => {
+        try {
+            if (photo.internal_only) {
+                if (photo.private_storage_path) {
+                    const { data: file, error: downloadError } = await supabase.storage
+                        .from("site-internal-photos").download(photo.private_storage_path)
+                    if (downloadError) throw downloadError
+                    if (!file || file.size === 0) throw new Error("This photo file is unavailable")
+                    const extension = photo.private_storage_path.split(".").pop() || "jpg"
+                    const publicPath = `photos/${storeId}/shared/${crypto.randomUUID()}.${extension}`
+                    const { error: uploadError } = await supabase.storage.from("site-photos")
+                        .upload(publicPath, file, { contentType: file.type, upsert: false })
+                    if (uploadError) throw uploadError
+                    const publicUrl = supabase.storage.from("site-photos").getPublicUrl(publicPath).data.publicUrl
+                    const { error } = await supabase.from("site_photos").update({
+                        internal_only: false, album_id: null, url: publicUrl,
+                    }).eq("id", photo.id)
+                    if (error) {
+                        await supabase.storage.from("site-photos").remove([publicPath])
+                        throw error
+                    }
+                } else {
+                    const { error } = await supabase.from("site_photos")
+                        .update({ internal_only: false, album_id: null }).eq("id", photo.id)
+                    if (error) throw error
+                }
+                await fetchPhotos()
+                toast.success("Moved to Client viewable · General")
+                return
+            }
 
-        const { error } = await supabase
-            .from("site_photos")
-            .update({
-                internal_only: next,
-            })
-            .eq("id", photo.id)
-
-        if (error) {
-            toast.error(
-                `Update failed: ${error.message}`
-            )
-            return
+            const publicPath = publicPhotoPath(photo.url)
+            if (!publicPath) throw new Error("This external photo cannot be moved to private storage")
+            let privatePath = photo.private_storage_path
+            let addedPrivateCopy = false
+            if (!privatePath) {
+                const { data: file, error: downloadError } = await supabase.storage
+                    .from("site-photos").download(publicPath)
+                if (downloadError) throw downloadError
+                if (!file || file.size === 0) throw new Error("This photo file is unavailable")
+                const extension = publicPath.split(".").pop() || "jpg"
+                privatePath = `${storeId}/${crypto.randomUUID()}.${extension}`
+                const { error: uploadError } = await supabase.storage.from("site-internal-photos")
+                    .upload(privatePath, file, { contentType: file.type, upsert: false })
+                if (uploadError) throw uploadError
+                addedPrivateCopy = true
+            }
+            const { error } = await supabase.from("site_photos").update({
+                internal_only: true, album_id: null, url: "", private_storage_path: privatePath,
+                is_primary: false,
+            }).eq("id", photo.id)
+            if (error) {
+                if (addedPrivateCopy) await supabase.storage.from("site-internal-photos").remove([privatePath])
+                throw error
+            }
+            const { error: removeError } = await supabase.storage.from("site-photos").remove([publicPath])
+            if (removeError) {
+                await supabase.from("site_photos").update({
+                    internal_only: false, url: photo.url, private_storage_path: photo.private_storage_path,
+                    is_primary: photo.is_primary,
+                }).eq("id", photo.id)
+                if (addedPrivateCopy) await supabase.storage.from("site-internal-photos").remove([privatePath])
+                throw removeError
+            }
+            await fetchPhotos()
+            toast.success("Moved to Internal · General")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not change photo visibility")
         }
+    }
 
-        setPhotos((current) =>
-            current.map((item) =>
-                item.id === photo.id
-                    ? {
-                          ...item,
-                          internal_only: next,
-                      }
-                    : item
-            )
-        )
-
-        toast.success(
-            next
-                ? "Marked as service-team only"
-                : "Made visible to clients"
-        )
+    const secureLegacyInternalPhoto = async (photo: SitePhoto) => {
+        const publicPath = publicPhotoPath(photo.url)
+        if (!publicPath) return toast.error("This photo has no site storage file to move")
+        try {
+            const { data: file, error: downloadError } = await supabase.storage
+                .from("site-photos").download(publicPath)
+            if (downloadError) throw downloadError
+            if (!file || file.size === 0) throw new Error("This photo file is unavailable")
+            const extension = publicPath.split(".").pop() || "jpg"
+            const privatePath = `${storeId}/${crypto.randomUUID()}.${extension}`
+            const { error: uploadError } = await supabase.storage.from("site-internal-photos")
+                .upload(privatePath, file, { contentType: file.type, upsert: false })
+            if (uploadError) throw uploadError
+            const { error: updateError } = await supabase.from("site_photos")
+                .update({ url: "", private_storage_path: privatePath }).eq("id", photo.id)
+            if (updateError) {
+                await supabase.storage.from("site-internal-photos").remove([privatePath])
+                throw updateError
+            }
+            const { error: removeError } = await supabase.storage.from("site-photos").remove([publicPath])
+            if (removeError) {
+                await supabase.from("site_photos").update({ url: photo.url, private_storage_path: null }).eq("id", photo.id)
+                await supabase.storage.from("site-internal-photos").remove([privatePath])
+                throw removeError
+            }
+            await fetchPhotos()
+            toast.success("Photo moved into private storage")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not secure photo")
+        }
     }
 
     const setAsPrimary = async (
@@ -773,7 +965,7 @@ export function SitePhotoGallery({
         )
     }
 
-    if (loading) {
+    if (loading || isStaff === null) {
         return (
             <div className="flex items-center justify-center p-12">
                 <Loader2 className="animate-spin text-muted-foreground" />
@@ -789,30 +981,39 @@ export function SitePhotoGallery({
                       album.id === selectedAlbumId
               ) ?? null
 
+    const galleryAlbums = albums.filter((album) => album.audience === audience)
+    const galleryPhotos = photos.filter((photo) => photo.internal_only === (audience === "internal"))
+    const galleryInstallerPhotos = audience === "internal" ? installerPhotos : []
+
     const filteredPhotos =
         selectedAlbumId === GENERAL_ALBUM
-            ? photos.filter(
+            ? galleryPhotos.filter(
                   (photo) => !photo.album_id
               )
-            : photos.filter(
+            : galleryPhotos.filter(
                   (photo) =>
                       photo.album_id ===
                       selectedAlbumId
               )
 
+    const filteredInstallerPhotos = galleryInstallerPhotos.filter((photo) =>
+        selectedAlbumId === GENERAL_ALBUM ? !photo.album_id : photo.album_id === selectedAlbumId
+    )
+
     const visibleAssetPhotos =
         includeAssetPhotos &&
         selectedAlbumId === GENERAL_ALBUM
-            ? assetPhotos
+            ? assetPhotos.filter((photo) => photo.internal_only === (audience === "internal"))
             : []
 
     const totalCount =
         filteredPhotos.length +
+        filteredInstallerPhotos.length +
         visibleAssetPhotos.length
 
-    const generalCount = photos.filter(
+    const generalCount = galleryPhotos.filter(
         (photo) => !photo.album_id
-    ).length
+    ).length + galleryInstallerPhotos.filter((photo) => !photo.album_id).length
 
     const selectedAlbumLabel =
         selectedAlbum?.name ?? "General"
@@ -827,7 +1028,7 @@ export function SitePhotoGallery({
                     </h3>
 
                     <p className="text-sm text-muted-foreground mt-0.5">
-                        Organise site photos into optional albums, or leave them in General.
+                        Photos from every team, organised by who can view them.
                     </p>
                 </div>
 
@@ -859,7 +1060,7 @@ export function SitePhotoGallery({
                             </span>
                         </label>
 
-                        <Label
+                        {isStaff && <Label
                             htmlFor="photo-upload"
                             className="cursor-pointer"
                         >
@@ -884,46 +1085,35 @@ export function SitePhotoGallery({
                                 }
                                 disabled={uploading}
                             />
-                        </Label>
+                        </Label>}
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-3">
+                    {isStaff && <div className="flex flex-wrap items-center justify-end gap-3">
                         <span className="text-xs text-muted-foreground">
-                            Uploading to:{" "}
-                            <span className="font-medium text-foreground">
-                                {selectedAlbumLabel}
+                            Uploading to: <span className="font-medium text-foreground">
+                                {audience === "internal" ? "Internal" : "Client viewable"} · {selectedAlbumLabel}
                             </span>
                         </span>
-
-                        <label className="flex items-center gap-2 text-xs cursor-pointer select-none text-muted-foreground">
-                            <input
-                                type="checkbox"
-                                checked={
-                                    uploadInternalOnly
-                                }
-                                onChange={(event) =>
-                                    setUploadInternalOnly(
-                                        event.target
-                                            .checked
-                                    )
-                                }
-                                className="size-3.5 accent-amber-500"
-                            />
-
-                            <Lock className="size-3" />
-
-                            <span>
-                                Mark next upload as{" "}
-                                <span className="font-medium text-foreground">
-                                    service-team only
-                                </span>
-                            </span>
-                        </label>
-                    </div>
+                    </div>}
                 </div>
             </div>
 
-            <InstallerSitePhotos storeId={storeId} onPublished={() => { void fetchPhotos() }} />
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Photo gallery visibility">
+                {isStaff && <Button type="button" size="sm" variant={audience === "internal" ? "default" : "outline"}
+                    onClick={() => { setAudience("internal"); setSelectedAlbumId(GENERAL_ALBUM) }}>
+                    <Lock className="mr-1.5 size-3.5" /> Internal ({photos.filter((p) => p.internal_only).length + installerPhotos.length})
+                </Button>}
+                <Button type="button" size="sm" variant={audience === "client" ? "default" : "outline"}
+                    onClick={() => { setAudience("client"); setSelectedAlbumId(GENERAL_ALBUM) }}>
+                    <LockOpen className="mr-1.5 size-3.5" /> Client viewable ({photos.filter((p) => !p.internal_only).length})
+                </Button>
+            </div>
+
+            {isStaff && audience === "internal" && photos.some((photo) => photo.internal_only && !photo.private_storage_path && !!photo.url) && (
+                <p className="rounded-md border border-amber-300 bg-amber-50/40 px-3 py-2 text-xs text-muted-foreground">
+                    Older Internal photos can be moved into private storage using the lock action on each photo.
+                </p>
+            )}
 
             {/* Album selector */}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
@@ -951,12 +1141,12 @@ export function SitePhotoGallery({
                         </span>
                     </Button>
 
-                    {albums.map((album) => {
-                        const count = photos.filter(
+                    {galleryAlbums.map((album) => {
+                        const count = galleryPhotos.filter(
                             (photo) =>
                                 photo.album_id ===
                                 album.id
-                        ).length
+                        ).length + galleryInstallerPhotos.filter((photo) => photo.album_id === album.id).length
 
                         return (
                             <div
@@ -987,7 +1177,7 @@ export function SitePhotoGallery({
                                     </span>
                                 </Button>
 
-                                <Button
+                                {isStaff && <Button
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -998,13 +1188,13 @@ export function SitePhotoGallery({
                                     }
                                 >
                                     <Trash2 className="size-3.5" />
-                                </Button>
+                                </Button>}
                             </div>
                         )
                     })}
                 </div>
 
-                {albumsAvailable ? (
+                {albumsAvailable && isStaff ? (
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 max-w-lg">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                             <FolderPlus className="size-3.5" />
@@ -1050,11 +1240,11 @@ export function SitePhotoGallery({
                             Add
                         </Button>
                     </div>
-                ) : (
+                ) : !albumsAvailable ? (
                     <p className="text-xs text-muted-foreground">
                         Album support is ready in RPM but the Supabase album migration still needs to be applied. General photos continue to work normally.
                     </p>
-                )}
+                ) : null}
             </div>
 
             <div
@@ -1094,12 +1284,52 @@ export function SitePhotoGallery({
                         </p>
 
                         <p className="text-xs text-muted-foreground/80">
-                            Drop an image here, or click
-                            Upload above.
+                            {isStaff ? "Drop an image here, or click Upload above." : "No photos have been shared here yet."}
                         </p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3">
+                        {filteredInstallerPhotos.map((photo) => (
+                            <div key={`installation-${photo.id}`} className="space-y-1.5 rounded-md border p-2">
+                                <div className="relative aspect-square overflow-hidden rounded bg-muted">
+                                    {photo.previewUrl && !brokenInstallerIds.includes(photo.id) ? (
+                                        <Image src={photo.previewUrl} alt={photo.caption || "Job photo"}
+                                            fill unoptimized className="object-cover"
+                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                            onError={() => setBrokenInstallerIds((current) => [...current, photo.id])} />
+                                    ) : (
+                                        <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">Photo unavailable</div>
+                                    )}
+                                    <span className="absolute left-1.5 top-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
+                                        {photo.category || "Job photo"} · Internal
+                                    </span>
+                                </div>
+                                <p className="truncate text-sm" title={photo.caption || "Job photo"}>{photo.caption || "Job photo"}</p>
+                                <p className="text-xs text-muted-foreground">{photo.users?.name || "Installer"} · {new Date(photo.captured_at).toLocaleString("en-NZ")}</p>
+                                {albumsAvailable && (
+                                    <Select value={photo.album_id ?? GENERAL_ALBUM}
+                                        onValueChange={(value) => void moveInstallerPhoto(photo, value)}>
+                                        <SelectTrigger className="h-8 text-xs" aria-label="Move job photo to album">
+                                            <SelectValue placeholder="Move to album" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={GENERAL_ALBUM}>General</SelectItem>
+                                            {galleryAlbums.map((album) => <SelectItem key={album.id} value={album.id}>{album.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                <div className="flex flex-wrap gap-1">
+                                    <Button type="button" size="sm" className="min-h-9 flex-1 text-xs"
+                                        disabled={processingInstallerId !== null || brokenInstallerIds.includes(photo.id) || !photo.previewUrl}
+                                        onClick={() => void publishInstallerPhoto(photo)}>
+                                        {processingInstallerId === photo.id ? <Loader2 className="size-3.5 animate-spin" /> : "Make client viewable"}
+                                    </Button>
+                                    <Button type="button" size="icon" variant="outline" className="size-9"
+                                        title="Delete job photo" disabled={processingInstallerId !== null}
+                                        onClick={() => void deleteInstallerPhoto(photo)}><Trash2 className="size-3.5" /></Button>
+                                </div>
+                            </div>
+                        ))}
                         {filteredPhotos.map(
                             (photo) => (
                                 <div
@@ -1115,19 +1345,13 @@ export function SitePhotoGallery({
                                                   : "border-border/60"
                                         }`}
                                     >
-                                        <Image
-                                            src={
-                                                photo.url
-                                            }
-                                            alt={
-                                                photo.caption ??
-                                                "Site photo"
-                                            }
-                                            fill
-                                            className="object-cover"
-                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                            loading="lazy"
-                                        />
+                                        {photo.internal_only && photo.private_storage_path && !photo.previewUrl ? (
+                                            <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">Photo unavailable</div>
+                                        ) : (
+                                            <Image src={photo.internal_only ? photo.previewUrl || photo.url : photo.url}
+                                                alt={photo.caption ?? "Site photo"} fill className="object-cover"
+                                                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" loading="lazy" />
+                                        )}
 
                                         <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
                                             {photo.is_primary && (
@@ -1145,10 +1369,10 @@ export function SitePhotoGallery({
                                             )}
                                         </div>
 
-                                        <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
+                                        <div className="absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
                                             <div className="w-full p-2 flex items-center justify-between gap-1">
                                                 <div className="flex items-center gap-1">
-                                                    <Button
+                                                    {isStaff && !photo.internal_only && <Button
                                                         type="button"
                                                         size="icon"
                                                         variant="secondary"
@@ -1171,9 +1395,9 @@ export function SitePhotoGallery({
                                                                     : ""
                                                             }`}
                                                         />
-                                                    </Button>
+                                                    </Button>}
 
-                                                    <Button
+                                                    {isStaff && <Button
                                                         type="button"
                                                         size="icon"
                                                         variant="secondary"
@@ -1194,9 +1418,17 @@ export function SitePhotoGallery({
                                                         ) : (
                                                             <LockOpen className="size-3.5" />
                                                         )}
-                                                    </Button>
+                                                    </Button>}
 
-                                                    <Button
+                                                    {isStaff && photo.internal_only && !photo.private_storage_path && !!photo.url && (
+                                                        <Button type="button" size="icon" variant="secondary" className="size-8"
+                                                            title="Move photo to private storage"
+                                                            onClick={() => void secureLegacyInternalPhoto(photo)}>
+                                                            <Lock className="size-3.5" />
+                                                        </Button>
+                                                    )}
+
+                                                    {(!photo.internal_only || photo.previewUrl || photo.url) && <Button
                                                         type="button"
                                                         size="icon"
                                                         variant="secondary"
@@ -1205,18 +1437,16 @@ export function SitePhotoGallery({
                                                         title="Open full size"
                                                     >
                                                         <a
-                                                            href={
-                                                                photo.url
-                                                            }
+                                                            href={photo.internal_only ? photo.previewUrl || photo.url : photo.url}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                         >
                                                             <ExternalLink className="size-3.5" />
                                                         </a>
-                                                    </Button>
+                                                    </Button>}
                                                 </div>
 
-                                                <Button
+                                                {isStaff && <Button
                                                     type="button"
                                                     size="icon"
                                                     variant="destructive"
@@ -1229,12 +1459,12 @@ export function SitePhotoGallery({
                                                     }
                                                 >
                                                     <Trash2 className="size-3.5" />
-                                                </Button>
+                                                </Button>}
                                             </div>
                                         </div>
                                     </div>
 
-                                    {albumsAvailable && (
+                                    {albumsAvailable && isStaff && (
                                         <Select
                                             value={
                                                 photo.album_id ??
@@ -1262,7 +1492,7 @@ export function SitePhotoGallery({
                                                     General
                                                 </SelectItem>
 
-                                                {albums.map(
+                                                {galleryAlbums.map(
                                                     (
                                                         album
                                                     ) => (
@@ -1325,10 +1555,10 @@ export function SitePhotoGallery({
                                         )}
                                     </div>
 
-                                    <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
+                                    <div className="absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
                                         <div className="w-full p-2 flex items-center justify-between">
                                             <div className="flex gap-1">
-                                                <Button
+                                                {isStaff && <Button
                                                     type="button"
                                                     size="icon"
                                                     variant="secondary"
@@ -1349,7 +1579,7 @@ export function SitePhotoGallery({
                                                     ) : (
                                                         <LockOpen className="size-3.5" />
                                                     )}
-                                                </Button>
+                                                </Button>}
 
                                                 <Button
                                                     type="button"

@@ -138,7 +138,7 @@ function StoreMarker({
 
     const icon = TRAFFIC_ICONS[traffic] ?? TRAFFIC_ICONS.green
 
-    const photos = store.site_photos ?? []
+    const photos = (store.site_photos ?? []).filter((photo) => !photo.internal_only && !!photo.url)
 
     const popupPhoto =
         photos.find((p) => p.is_primary) ??
@@ -251,6 +251,8 @@ export default function StoreMap({
     const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
+        // Leaflet renders only after the browser mounts.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsMounted(true)
 
         const timer = closeTimerRef.current

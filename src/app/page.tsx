@@ -6,12 +6,12 @@ import DashboardLayout from "@/components/dashboard-layout"
 import { StoreList } from "@/components/store-list"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
-import type { Store } from "@/types/database"
+import type { Asset, Job, Store } from "@/types/database"
 import { useCustomerFilter } from "@/lib/customer-filter"
 
 const StoreMap = dynamic(() => import("@/components/store-map"), { ssr: false, loading: () => <div className="h-full w-full bg-muted animate-pulse" /> })
 
-const STORE_COLS = "id, name, address, region, status, lat, lng, location_approximate, site_category, has_drive_thru, manager_name, client_id, client:clients(name), site_photos(url, is_primary, created_at), store_brands(brand_id, client_brands(*))"
+const STORE_COLS = "id, name, address, region, status, lat, lng, location_approximate, site_category, has_drive_thru, manager_name, client_id, client:clients(name), site_photos(url, is_primary, internal_only, created_at), store_brands(brand_id, client_brands(*))"
 
 export default function MapPage() {
   const supabase = useMemo(() => createClient(), [])
@@ -32,7 +32,7 @@ export default function MapPage() {
     ])
     if (assetError) return { data: null, error: assetError }
     if (jobError) return { data: null, error: jobError }
-    const assetsByStore = new Map<string, any[]>(), jobsByStore = new Map<string, any[]>()
+    const assetsByStore = new Map<string, Pick<Asset, "next_service_date">[]>(), jobsByStore = new Map<string, Pick<Job, "status" | "job_type">[]>()
     for (const asset of assetData ?? []) { if (!asset.store_id) continue; const a = assetsByStore.get(asset.store_id) ?? []; a.push({ next_service_date: asset.next_service_date }); assetsByStore.set(asset.store_id, a) }
     for (const job of jobData ?? []) { if (!job.store_id) continue; const j = jobsByStore.get(job.store_id) ?? []; j.push({ status: job.status, job_type: job.job_type }); jobsByStore.set(job.store_id, j) }
     return { data: baseStores.map(store => ({ ...store, assets: assetsByStore.get(store.id) ?? [], jobs: jobsByStore.get(store.id) ?? [] })) as Store[], error: null }
