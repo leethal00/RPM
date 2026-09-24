@@ -4,7 +4,7 @@ Expo app for factory and installation workers on iOS and Android. It uses the sa
 
 ## Setup
 
-1. Apply the RPM migrations, including `20260924043403_job_photo_categories.sql`, to the same environment as RPM.
+1. Apply the RPM migrations, including `20260924050452_job_photo_categories.sql`, to the same environment as RPM.
 2. In RPM Settings → Users, create an RPM Mobile worker and select their jobs. A manufacture-only job needs a client but no site; a site job links to an actual client site.
 3. Copy `.env.example` to `.env` and use the project's Supabase URL and **publishable** key. Do not put a service role key in the app.
 4. Run `npm ci`, then `npm start` from this directory. Open on an iOS or Android device. Camera and upload behavior need a physical device to verify.
