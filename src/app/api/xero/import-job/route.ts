@@ -24,7 +24,7 @@ type XeroInvoice = {
     Status?: string | null
     Total?: number | null
     SubTotal?: number | null
-    Contact?: { Name?: string | null } | null
+    Contact?: { ContactID?: string | null; Name?: string | null } | null
     LineItems?: XeroLineItem[] | null
 }
 
@@ -43,7 +43,22 @@ async function getInvoice(invoiceNumber: string) {
     const escaped = invoiceNumber.replaceAll('"', '\\"')
     const where = encodeURIComponent(`InvoiceNumber==\"${escaped}\"`)
     const body = await xeroJson(`${XERO_API}/Invoices?where=${where}`, xero.accessToken, xero.tenantId)
-    return (body?.Invoices?.[0] || null) as XeroInvoice | null
+    const summary = (body?.Invoices?.[0] || null) as XeroInvoice | null
+    if (!summary) return null
+    if (!summary.InvoiceID || summary.InvoiceNumber !== invoiceNumber) {
+        throw new Error("The Xero invoice could not be identified. Find it again.")
+    }
+    // Xero's filtered invoice list is a summary; line items require an individual invoice request.
+    const detail = await xeroJson(`${XERO_API}/Invoices/${encodeURIComponent(summary.InvoiceID)}?unitdp=4`, xero.accessToken, xero.tenantId)
+    const invoice = (detail?.Invoices?.[0] || null) as XeroInvoice | null
+    if (!invoice || invoice.InvoiceID !== summary.InvoiceID || invoice.InvoiceNumber !== invoiceNumber) {
+        throw new Error("The Xero invoice detail did not match the lookup. Find it again.")
+    }
+    return invoice
+}
+
+function hasImportableLines(invoice: XeroInvoice) {
+    return Array.isArray(invoice.LineItems) && invoice.LineItems.length > 0
 }
 
 function preview(invoice: XeroInvoice) {
@@ -98,6 +113,7 @@ export async function GET(req: NextRequest) {
         if (invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "")) {
             return NextResponse.json({ error: "Only draft or approved Xero sales invoices can be imported." }, { status: 400 })
         }
+        if (!hasImportableLines(invoice)) return NextResponse.json({ error: "Xero returned no invoice lines. The invoice cannot be imported for BOMs yet." }, { status: 409 })
         const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
         if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
@@ -169,6 +185,7 @@ export async function POST(req: NextRequest) {
         if (invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "")) {
             return NextResponse.json({ error: "Only draft or approved Xero sales invoices can be imported." }, { status: 400 })
         }
+        if (!hasImportableLines(invoice)) return NextResponse.json({ error: "Xero returned no invoice lines. The invoice cannot be imported for BOMs yet." }, { status: 409 })
         const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
         if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
@@ -179,6 +196,25 @@ export async function POST(req: NextRequest) {
             if (!site || site.client_id !== body.clientId) return NextResponse.json({ error: "The selected site does not belong to this customer." }, { status: 400 })
         }
 
+        let resolvedClientId = body.clientId || null
+        if (!resolvedClientId) {
+            const contactName = String(invoice.Contact?.Name || "").trim()
+            if (!contactName) return NextResponse.json({ error: "The Xero invoice has no customer name to import." }, { status: 409 })
+            const { data: customers, error: customerError } = await admin.from("clients").select("id,name")
+            if (customerError) throw customerError
+            const matches = (customers || []).filter((customer) => String(customer.name || "").trim().toLocaleLowerCase() === contactName.toLocaleLowerCase())
+            if (matches.length > 1) return NextResponse.json({ error: `Multiple RPM customers match ${contactName}. Select the correct customer before importing.` }, { status: 409 })
+            if (matches.length === 1) resolvedClientId = matches[0].id
+            else {
+                const { data: customer, error: createError } = await admin.from("clients")
+                    .insert({ name: contactName, active: true })
+                    .select("id")
+                    .single()
+                if (createError || !customer) throw createError || new Error("Could not import the Xero customer.")
+                resolvedClientId = customer.id
+            }
+        }
+
         const title = String(body.title || "").trim() || String(invoice.Reference || "").trim() || invoiceNumber
         const { data: job, error: jobError } = await admin
             .from("costing_jobs")
@@ -186,7 +222,7 @@ export async function POST(req: NextRequest) {
                 job_number: invoiceNumber,
                 title,
                 reference: invoice.Reference || null,
-                client_id: body.clientId || null,
+                client_id: resolvedClientId,
                 store_id: body.storeId || null,
                 qty: 1,
                 status: "in_progress",
@@ -221,3 +257,4 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not import the Xero invoice." }, { status: 500 })
     }
 }
+

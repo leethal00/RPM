@@ -8,8 +8,8 @@ Signage asset management platform for Rodier Preventive Maintenance, serving mul
 
 | | Production | Development / Preview |
 |---|---|---|
-| **App** | https://rpm-sandy.vercel.app | https://rpm-git-dev-leethal00s-projects.vercel.app |
-| **Branch** | `main` | `dev` (plus any other preview branches) |
+| **App** | https://rpm-sandy.vercel.app | https://rpm-git-stu-dev-leethal00s-projects.vercel.app/ |
+| **Branch** | `main` | `stu-dev` |
 | **Supabase project** | `rpm` (ref `ywjwqxrrnmqlhvqdfvua`, ap-south-1) | `rpm-dev` (ref `jtotzntmndxanhjijqcz`, ap-southeast-2) |
 | **Region** | Mumbai | Sydney |
 
@@ -69,3 +69,4 @@ Multi-tenant via `client_id` on every row, enforced by Row Level Security.
 - **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** — database migration workflow
 - **[SCHEMA_DRIFT.md](./SCHEMA_DRIFT.md)** — known drift between prod and dev branch schemas
 - **[RPM-Specification-v1.0.docx](./RPM-Specification-v1.0.docx)** — product specification
+

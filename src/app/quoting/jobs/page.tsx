@@ -169,7 +169,7 @@ export default function ActiveJobsPage() {
     const [importing, setImporting] = useState(false)
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id" | "address">[]>([])
-    const [selectedClient, setSelectedClient] = useState("none")
+    const [selectedClient, setSelectedClient] = useState("auto")
     const [selectedStore, setSelectedStore] = useState("none")
     const [importTitle, setImportTitle] = useState("")
     const [completionDate, setCompletionDate] = useState("")
@@ -331,6 +331,8 @@ export default function ActiveJobsPage() {
         setCreatingSite(false)
         setPreview(null)
         setImportError(null)
+        setSelectedClient("auto")
+        setSelectedStore("none")
         if (!clients.length || !stores.length) {
             const [{ data: clientRows }, { data: storeRows }] = await Promise.all([
                 supabase.from("clients").select("id,name").order("name"),
@@ -370,6 +372,9 @@ export default function ActiveJobsPage() {
             const invoice = body.invoice as ImportPreview
             setPreview(invoice)
             setImportTitle(invoice.reference || invoice.invoiceNumber)
+            const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
+            setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
+            setSelectedStore("none")
         } catch (error) {
             setImportError(error instanceof Error ? error.message : "Could not find that Xero invoice.")
         } finally {
@@ -388,7 +393,7 @@ export default function ActiveJobsPage() {
                 body: JSON.stringify({
                     invoiceNumber: preview.invoiceNumber,
                     invoiceId: preview.invoiceId,
-                    clientId: selectedClient === "none" ? null : selectedClient,
+                    clientId: selectedClient === "auto" ? null : selectedClient,
                     storeId: selectedStore === "none" ? null : selectedStore,
                     title: importTitle.trim() || preview.reference || preview.invoiceNumber,
                     completionDate: completionDate || null,
@@ -565,16 +570,16 @@ export default function ActiveJobsPage() {
                                     <div className="grid gap-2">
                                         <Label>Customer</Label>
                                         <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none") }} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                                            <option value="none">Ad-hoc / no customer</option>
+                                            <option value="auto">{preview.contactName ? `Use Xero customer: ${preview.contactName}` : "Use Xero customer"}</option>
                                             {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                                         </select>
                                     </div>
                                     <div className="grid gap-2">
                                         <div className="flex items-center justify-between gap-2">
                                             <Label htmlFor="import-site">Site</Label>
-                                            <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "none"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
+                                            <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "auto"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
                                         </div>
-                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "none"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
                                             <option value="none">No site</option>
                                             {siteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
@@ -598,3 +603,4 @@ export default function ActiveJobsPage() {
         </DashboardLayout>
     )
 }
+

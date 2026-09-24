@@ -6,6 +6,9 @@ const state = vi.hoisted(() => ({
     job: null as Record<string, unknown> | null,
     lines: [] as Record<string, unknown>[],
     importStatus: null as string | null,
+    customers: [] as Array<{ id: string; name: string }>,
+    createdCustomer: null as Record<string, unknown> | null,
+    detailLines: true,
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -31,6 +34,13 @@ vi.mock("@/lib/xero", () => ({
             if (table === "costing_items") return {
                 insert: async (payload: Record<string, unknown>[]) => { state.lines = payload; return { error: null } },
             }
+            if (table === "clients") return {
+                select: async () => ({ data: state.customers, error: null }),
+                insert: (payload: Record<string, unknown>) => {
+                    state.createdCustomer = payload
+                    return { select: () => ({ single: async () => ({ data: { id: "new-client-1" }, error: null }) }) }
+                },
+            }
             if (table === "stores") return {
                 select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "site-1", client_id: "client-1" }, error: null }) }) }),
             }
@@ -53,15 +63,18 @@ describe("Xero invoice import", () => {
         state.job = null
         state.lines = []
         state.importStatus = null
-        vi.stubGlobal("fetch", vi.fn(async () => ({
+        state.customers = []
+        state.createdCustomer = null
+        state.detailLines = true
+        vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
             ok: true,
             text: async () => JSON.stringify({ Invoices: [{
                 InvoiceID: "xero-invoice-1", InvoiceNumber: invoiceNumber, Type: "ACCREC", Status: state.status,
-                Reference: "Gateway signs", Total: 1115.5,
-                LineItems: [
+                Reference: "Gateway signs", Total: 1115.5, Contact: { Name: "Brave Design", ContactID: "contact-1" },
+                ...(input.includes("/Invoices/xero-invoice-1") && state.detailLines ? { LineItems: [
                     { LineItemID: "line-1", Description: "Gateway Plinth Signs\nFabricated steel", Quantity: 2, UnitAmount: 485, LineAmount: 970 },
                     { LineItemID: "line-2", Description: "Discounted fitting", Quantity: 1, UnitAmount: 150, LineAmount: 145.5 },
-                ],
+                ] } : {}),
             }] }),
         })))
     })
@@ -74,6 +87,9 @@ describe("Xero invoice import", () => {
         expect(body.invoice).toMatchObject({ invoiceNumber, status: "AUTHORISED", total: 1115.5 })
         expect(body.invoice.lines).toHaveLength(2)
         expect(body.invoice.lines[1].lineAmount).toBe(145.5)
+        expect(body.invoice.contactName).toBe("Brave Design")
+        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
+        expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("/Invoices/xero-invoice-1?unitdp=4")
     })
 
     it("imports approved lines for BOMs and never writes to Xero", async () => {
@@ -96,8 +112,9 @@ describe("Xero invoice import", () => {
             { job_id: "job-1", name: "Discounted fitting", qty: 1, unit_price: 150, xero_imported_line: true, xero_line_amount: 145.5 },
         ])
         expect(state.importStatus).toBe("AUTHORISED")
-        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
+        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
         expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBeUndefined()
+        expect(vi.mocked(fetch).mock.calls[1][1]?.method).toBeUndefined()
     })
 
     it("retains the existing draft import path", async () => {
@@ -113,4 +130,27 @@ describe("Xero invoice import", () => {
         expect(response.status).toBe(400)
         expect(state.job).toBeNull()
     })
+
+    it("links an existing RPM customer matching the Xero contact", async () => {
+        state.customers = [{ id: "existing-client-1", name: "brave design" }]
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber }) }))
+        expect(response.status).toBe(200)
+        expect(state.job?.client_id).toBe("existing-client-1")
+        expect(state.createdCustomer).toBeNull()
+    })
+
+    it("creates the Xero customer in RPM when no match exists", async () => {
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber }) }))
+        expect(response.status).toBe(200)
+        expect(state.createdCustomer).toMatchObject({ name: "Brave Design", active: true })
+        expect(state.job?.client_id).toBe("new-client-1")
+    })
+
+    it("blocks an invoice whose detail response has no lines", async () => {
+        state.detailLines = false
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber }) }))
+        expect(response.status).toBe(409)
+        expect(state.job).toBeNull()
+    })
 })
+
