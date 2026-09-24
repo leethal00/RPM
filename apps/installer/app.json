@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RPM Mobile",
-    "slug": "rpm-install",
+    "slug": "rpm-mobile",
     "scheme": "rpminstall",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -32,3 +32,4 @@
     ]
   }
 }
+
