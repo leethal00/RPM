@@ -3,7 +3,7 @@ import { Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-n
 import { Redirect, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Document, InstallerNote, Material, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, documentUrl, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
+import { Document, InstallerNote, Material, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, deletablePhotoIds, deleteJobPhoto, documentUrl, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
 import { enqueuePhoto, queuedFor, syncPhotos } from '../../lib/photo-queue';
 import { useInstallerSession } from '../../lib/session';
 import { Button, Card, ErrorText, Loading, Page, SectionLabel, StatusPill, Title, colors, styles } from '../../lib/ui';
@@ -28,17 +28,20 @@ export default function JobDetail() {
   const [savingNote, setSavingNote] = useState(false);
   const [timer, setTimer] = useState<Timer | null>(null); const [pending, setPending] = useState(0);
   const [caption, setCaption] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false); const [photoStatus, setPhotoStatus] = useState('');
+  const [deletablePhotos, setDeletablePhotos] = useState<string[]>([]); const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [category, setCategory] = useState<PhotoCategory>('Production');
   const [now, setNow] = useState(0); const [photoUrls, setPhotoUrls] = useState<Record<string,string>>({});
   const refresh = useCallback(async () => {
     if (!allowed || !session || !id) return;
     try {
-      const [data, savedNotes] = await Promise.all([workspace(id), jobNotes(id)]);
+      const [data, savedNotes, canDelete] = await Promise.all([workspace(id), jobNotes(id), role === 'installer' ? deletablePhotoIds(id) : Promise.resolve([])]);
       setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setMaterials(data.materials ?? []); setTimeEntries(data.time_entries ?? []); setError('');
+      setDeletablePhotos(role === 'super_admin' ? data.photos.map(photo => photo.id) : canDelete);
       setCategory(data.job?.store_id ? 'Installation' : 'Production');
       setPending((await queuedFor(session.user.id)).filter(p => p.jobId === id).length);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not load job.'); }
-  }, [allowed, session, id]);
+  }, [allowed, session, id, role]);
   useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
   useEffect(() => { const interval = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(interval); }, []);
   useEffect(() => { photos.forEach(p => { void photoUrl(p.path).then(url => setPhotoUrls(prev => ({ ...prev, [p.id]: url }))).catch(() => {}); }); }, [photos]);
@@ -51,16 +54,19 @@ export default function JobDetail() {
     finally { setBusy(false); }
   }
   async function addPhotos(fromCamera: boolean) {
-    if (!id || !session) return;
+    if (!id || !session || photoBusy) return;
+    setPhotoBusy(true); setPhotoStatus('Opening camera…');
     try {
       if (fromCamera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) { Alert.alert('Camera access is needed to take a job photo.'); return; }
+        if (!permission.granted) { Alert.alert('Camera access is needed to take a job photo.'); setPhotoStatus('Camera access is needed to take a job photo.'); return; }
       }
+      if (!fromCamera) setPhotoStatus('Opening photos…');
       const result = fromCamera
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6, exif: false })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.6, exif: false });
-      if (result.canceled) return;
+      if (result.canceled) { setPhotoStatus(''); return; }
+      setPhotoStatus('Preparing photo…');
       for (const asset of result.assets) {
         const manipulator = ImageManipulator.manipulate(asset.uri);
         if (Math.max(asset.width, asset.height) > 1600) manipulator.resize(asset.width >= asset.height ? { width: 1600 } : { height: 1600 });
@@ -68,8 +74,41 @@ export default function JobDetail() {
         await enqueuePhoto(session.user.id, id, image.uri, caption.trim() || null, category);
       }
       setCaption('');
+      setPhotoStatus('Photo saved on phone. Uploading…');
       const synced = await syncPhotos(session.user.id); setPending(synced.pending); await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save the photo.'); }
+      const uploadError = synced.errors.find(item => item.jobId === id);
+      setPhotoStatus(uploadError ? `Photo saved on phone. Upload failed: ${uploadError.message}` : synced.pending ? 'Photo saved on phone. Waiting to upload.' : 'Photo uploaded to job.');
+    } catch (e) { setPhotoStatus(`Photo could not be saved: ${e instanceof Error ? e.message : 'Please try again.'}`); }
+    finally { setPhotoBusy(false); }
+  }
+  async function retryPhotoUploads() {
+    if (!session || !id || photoBusy) return;
+    setPhotoBusy(true); setPhotoStatus('Retrying upload…');
+    try {
+      const synced = await syncPhotos(session.user.id);
+      await refresh();
+      const uploadError = synced.errors.find(item => item.jobId === id);
+      setPhotoStatus(uploadError ? `Upload failed: ${uploadError.message}` : synced.pending ? 'Photo is still waiting to upload.' : 'Photo uploaded to job.');
+    } catch (e) { setPhotoStatus(`Upload failed: ${e instanceof Error ? e.message : 'Please try again.'}`); }
+    finally { setPhotoBusy(false); }
+  }
+  function confirmDeletePhoto(photo: Photo) {
+    Alert.alert('Delete photo?', 'This removes the photo from the job for everyone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void removePhoto(photo) },
+    ]);
+  }
+  async function removePhoto(photo: Photo) {
+    if (deletingPhotoId) return;
+    setDeletingPhotoId(photo.id); setPhotoStatus('Deleting photo…');
+    try {
+      await deleteJobPhoto(photo, role === 'super_admin');
+      setPhotos(current => current.filter(item => item.id !== photo.id));
+      setDeletablePhotos(current => current.filter(item => item !== photo.id));
+      setPhotoStatus('Photo deleted from job.');
+      await refresh();
+    } catch (e) { setPhotoStatus(`Could not delete photo: ${e instanceof Error ? e.message : 'Please try again.'}`); }
+    finally { setDeletingPhotoId(null); }
   }
   async function openDoc(path: string) {
     try { await Linking.openURL(await documentUrl(path)); }
@@ -188,14 +227,19 @@ export default function JobDetail() {
         </Pressable>)}</View>
       <TextInput style={[styles.input, { backgroundColor: colors.bg }]} placeholder="Optional photo caption" placeholderTextColor={colors.muted} value={caption} onChangeText={setCaption} maxLength={500} />
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <Button style={{ flex: 1 }} disabled={!canRecord} onPress={() => void addPhotos(true)}>Take photo</Button>
-        <Button secondary style={{ flex: 1 }} disabled={!canRecord} onPress={() => void addPhotos(false)}>Choose photos</Button>
+        <Button style={{ flex: 1 }} disabled={!canRecord || photoBusy} onPress={() => void addPhotos(true)}>Take photo</Button>
+        <Button secondary style={{ flex: 1 }} disabled={!canRecord || photoBusy} onPress={() => void addPhotos(false)}>Choose photos</Button>
       </View>
+      {photoStatus ? <Text style={[styles.muted, { marginBottom: 12 }]} accessibilityRole="alert">{photoStatus}</Text> : null}
       {pending ? <View style={{ backgroundColor: colors.amberPale, borderRadius: 12, padding: 12, marginBottom: 12 }}>
         <Text style={{ color: colors.amber, fontWeight: '800' }}>{pending} photo{pending===1?'':'s'} waiting to upload</Text>
-        <Button secondary style={{ marginTop: 10, marginBottom: 0 }} onPress={() => { void syncPhotos(session.user.id).then(refresh); }}>Retry uploads</Button>
+        <Button secondary style={{ marginTop: 10, marginBottom: 0 }} disabled={photoBusy} onPress={() => void retryPhotoUploads()}>Retry uploads</Button>
       </View> : null}
-      {photos.map(photo => <View key={photo.id} style={{ marginTop: 12 }}>{photoUrls[photo.id] ? <Image alt={photo.caption || 'Job photo'} source={{ uri: photoUrls[photo.id] }} style={{ width: '100%', height: 180, borderRadius: 12 }} /> : null}<Text style={[styles.muted, { marginTop: 4 }]}>{photo.category || 'Installation'} · {photo.caption || new Date(photo.captured_at).toLocaleString()}</Text></View>)}
+      {photos.map(photo => <View key={photo.id} style={{ marginTop: 12 }}>
+        {photoUrls[photo.id] ? <Image alt={photo.caption || 'Job photo'} source={{ uri: photoUrls[photo.id] }} style={{ width: '100%', height: 180, borderRadius: 12 }} /> : null}
+        <Text style={[styles.muted, { marginTop: 4 }]}>{photo.category || 'Installation'} · {photo.caption || new Date(photo.captured_at).toLocaleString()}</Text>
+        {deletablePhotos.includes(photo.id) ? <Button secondary disabled={!!deletingPhotoId} onPress={() => confirmDeletePhoto(photo)} style={{ marginTop: 8, marginBottom: 0 }}>{deletingPhotoId === photo.id ? 'Deleting…' : 'Delete photo'}</Button> : null}
+      </View>)}
       {sitePhotos.length ? <Text style={[styles.heading, { marginTop: 20, fontSize: 15 }]}>Site gallery</Text> : null}
       {sitePhotos.map(photo => <View key={photo.id} style={{ marginTop: 10 }}><Image alt={photo.caption || 'Site photo'} source={{ uri: photo.url }} style={{ width: '100%', height: 180, borderRadius: 12 }} />{photo.caption ? <Text style={[styles.muted, { marginTop: 4 }]}>{photo.caption}</Text> : null}</View>)}
     </Card>
@@ -206,4 +250,3 @@ export default function JobDetail() {
     </Card> : null}
   </Page>;
 }
-

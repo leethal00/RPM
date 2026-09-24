@@ -52,6 +52,7 @@ export default function ActiveJobDetailPage() {
   const [editJobLead, setEditJobLead] = useState("")
   const [teamMembers, setTeamMembers] = useState<string[]>([])
   const [canManageXero, setCanManageXero] = useState(false)
+  const [canDeleteJobPhotos, setCanDeleteJobPhotos] = useState(false)
   const [savingJob, setSavingJob] = useState(false)
   const [deletingJob, setDeletingJob] = useState(false)
 
@@ -77,6 +78,7 @@ export default function ActiveJobDetailPage() {
       setTeamMembers(Array.from(new Set(teamRows.map((member) => member.name?.trim() || member.email?.split("@")[0]).filter(Boolean) as string[])))
       const role = teamRows.find((member) => member.id === auth.user?.id)?.role
       setCanManageXero(role === "super_admin" || role === "rodier_admin")
+      setCanDeleteJobPhotos(role === "super_admin")
     }
     void fetchTeamMembers()
   }, [supabase])
@@ -205,9 +207,8 @@ export default function ActiveJobDetailPage() {
         <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>
         <TabsContent value="actuals" className="mt-1"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual" className="mt-1"><EstVsActual job={job}/></TabsContent>
-        <TabsContent value="install" className="mt-1"><InstallerActivity jobId={id}/></TabsContent>
+        <TabsContent value="install" className="mt-1"><InstallerActivity jobId={id} canDeletePhotos={canDeleteJobPhotos}/></TabsContent>
       </Tabs>
     </>}
   </PageShell></DashboardLayout>
 }
-

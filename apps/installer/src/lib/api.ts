@@ -11,6 +11,7 @@ export type InstallerNote = { id: string; body: string; created_at: string; auth
 export type Material = { id: string; description: string; qty: number; unit: string | null; section: string | null };
 export type TimeEntry = { id: string; work_date: string; person_name: string | null; hours: number; description: string | null; labour_type: string | null };
 export type Workspace = { jobs: Job[]; sites: Site[]; job: Job | null; documents: Document[]; photos: Photo[]; site_photos: SitePhoto[]; timer: Timer | null; materials?: Material[]; time_entries?: TimeEntry[] };
+export type SuperuserPhotoJob = { job_id: string; job_number: string | null; title: string; client_name: string | null; site_name: string | null; photo_count: number; latest_photo_at: string };
 
 export const isAdminRole = (role: string | null) => role === 'mobile_admin' || role === 'rodier_admin' || role === 'super_admin';
 
@@ -65,3 +66,26 @@ export async function photoUrl(path: string) {
   return data.signedUrl;
 }
 
+export async function deletablePhotoIds(jobId: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc('installer_deletable_photo_ids', { p_job_id: jobId });
+  if (error) throw error;
+  return data as string[];
+}
+
+export async function deleteJobPhoto(photo: Photo, asSuperuser = false): Promise<void> {
+  const { error: storageError } = await supabase.storage.from('installer-photos').remove([photo.path]);
+  if (storageError) throw storageError;
+  if (asSuperuser) {
+    const { error } = await supabase.from('installer_photos').delete().eq('id', photo.id).select('id').single();
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.rpc('installer_delete_job_photo', { p_photo_id: photo.id });
+    if (error) throw error;
+  }
+}
+
+export async function superuserPhotoJobs(search: string, offset = 0): Promise<SuperuserPhotoJob[]> {
+  const { data, error } = await supabase.rpc('superuser_photo_jobs', { p_search: search, p_offset: offset });
+  if (error) throw error;
+  return data as SuperuserPhotoJob[];
+}

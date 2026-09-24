@@ -17,7 +17,7 @@ export async function enqueuePhoto(userId: string, jobId: string, sourceUri: str
   const copy = new File(Paths.document, `installer-${id}.jpg`);
   const source = new File(sourceUri);
   if (source.size <= 0) throw new Error('The photo is empty. Please take it again.');
-  source.copy(copy);
+  await source.copy(copy);
   if (copy.size <= 0) { copy.delete(); throw new Error('The photo could not be saved. Please take it again.'); }
   const item: QueuedPhoto = { id, userId, jobId, path: `${jobId}/${userId}/${id}.jpg`, uri: copy.uri, caption, category, capturedAt: new Date().toISOString() };
   await AsyncStorage.setItem(KEY, JSON.stringify([...(await all()), item]));
@@ -25,10 +25,11 @@ export async function enqueuePhoto(userId: string, jobId: string, sourceUri: str
 }
 
 let syncing = false;
-export async function syncPhotos(userId: string): Promise<{ uploaded: number; pending: number }> {
-  if (syncing) return { uploaded: 0, pending: (await queuedFor(userId)).length };
+export async function syncPhotos(userId: string): Promise<{ uploaded: number; pending: number; errors: { jobId: string; message: string }[] }> {
+  if (syncing) return { uploaded: 0, pending: (await queuedFor(userId)).length, errors: [] };
   syncing = true;
   let uploaded = 0;
+  const errors: { jobId: string; message: string }[] = [];
   try {
     for (const item of await queuedFor(userId)) {
       try {
@@ -43,11 +44,13 @@ export async function syncPhotos(userId: string): Promise<{ uploaded: number; pe
           : await supabase.rpc('installer_register_photo', common);
         if (registerError) throw registerError;
         await AsyncStorage.setItem(KEY, JSON.stringify((await all()).filter(photo => photo.id !== item.id)));
-        file.delete();
         uploaded++;
-      } catch { /* Keep both file and metadata for the next foreground retry. */ }
+        try { file.delete(); } catch { /* The upload is complete even if local cleanup fails. */ }
+      } catch (error) {
+        // Keep both file and metadata for the next foreground retry.
+        errors.push({ jobId: item.jobId, message: error instanceof Error ? error.message : 'Upload failed. Please try again.' });
+      }
     }
-    return { uploaded, pending: (await queuedFor(userId)).length };
+    return { uploaded, pending: (await queuedFor(userId)).length, errors };
   } finally { syncing = false; }
 }
-

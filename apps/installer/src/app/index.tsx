@@ -83,6 +83,13 @@ export default function Home() {
       </View>
     </Card>
 
+    {role === 'super_admin' ? <Card onPress={() => router.push('/admin-photos')} style={{ backgroundColor: '#EEF5EF', borderColor: '#DCE9DE' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
+        <View style={{ flex: 1 }}><Text style={{ color: colors.navy, fontWeight: '800', fontSize: 16 }}>All job photos</Text><Text style={styles.muted}>Find and delete photos from any job</Text></View>
+        <Text style={{ color: colors.forest, fontSize: 22 }}>›</Text>
+      </View>
+    </Card> : null}
+
     <SectionLabel>{admin ? 'All Jobs' : 'Assigned Jobs'} · {jobs.length}</SectionLabel>
     {jobs.length ? jobs.map(job => <Card key={job.id} onPress={() => router.push(`/job/${job.id}`)}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -98,4 +105,3 @@ export default function Home() {
     <Button secondary style={{ marginTop: 10 }} onPress={() => void supabase.auth.signOut()}>Sign out</Button>
   </Page>;
 }
-
