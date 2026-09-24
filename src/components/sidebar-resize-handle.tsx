@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { MoveHorizontal } from "lucide-react"
 import { clampSidebarWidth, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from "@/components/sidebar-width"
 
 const RESIZE_MEDIA_QUERY = "(min-width: 1024px) and (hover: hover) and (pointer: fine)"
@@ -28,7 +29,7 @@ export function SidebarResizeHandle({ width, onResize, onResizeStart, onResizeEn
             aria-valuemin={MIN_SIDEBAR_WIDTH}
             aria-valuemax={MAX_SIDEBAR_WIDTH}
             aria-valuenow={width}
-            title="Drag to resize navigation; use arrow keys for smaller steps"
+            title="Drag left or right to resize navigation"
             tabIndex={0}
             className="rpm-sidebar-resize-handle group-data-[collapsible=icon]:hidden"
             onPointerDown={(event) => {
@@ -63,6 +64,8 @@ export function SidebarResizeHandle({ width, onResize, onResizeStart, onResizeEn
                 onResize(nextWidth)
                 onResizeEnd(nextWidth)
             }}
-        />
+        >
+            <MoveHorizontal aria-hidden="true" className="size-3.5 opacity-50" />
+        </div>
     )
 }
