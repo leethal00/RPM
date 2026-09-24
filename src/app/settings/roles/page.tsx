@@ -17,6 +17,7 @@ interface RoleInfo {
 
 const ROLES: RoleInfo[] = [
     { role: "installer", label: "Installer", description: "Mobile access to assigned jobs, all active sites, installation notes, permitted documents, timers and photos. No pricing or finance.", icon: Hammer, headcountHint: "Installation team" },
+    { role: "mobile_admin", label: "Mobile Admin", description: "All operational jobs in RPM Mobile, including photos, notes, materials and time entry editing. No web administration or pricing.", icon: ShieldCheck, headcountHint: "Mobile operations leads" },
     { role: "department_operator", label: "Department Operator", description: "Assigned production jobs, time and material usage. No sales, pricing or administration.", icon: Hammer, headcountHint: "CNC and future departments" },
     {
         role: "super_admin",
@@ -67,9 +68,9 @@ interface Resource {
 const RESOURCES: Resource[] = [
     {
         key: "installer_mobile",
-        label: "Installer mobile",
-        description: "Assigned job details, all active sites, travel and work timers, photos and installation notes through restricted APIs.",
-        matrix: { installer: "own", super_admin: "full", rodier_admin: "full" },
+        label: "RPM Mobile",
+        description: "Assigned installer jobs or all operational jobs for mobile administrators, with time, photos and notes through scoped APIs.",
+        matrix: { installer: "own", mobile_admin: "full", super_admin: "full", rodier_admin: "full" },
     },
     {
         key: "production",

@@ -49,6 +49,7 @@ export function AppSidebar({ activeQuotingItem, sidebarWidth, onSidebarResize, o
     const handleSwitchAccount = async () => { await supabase.auth.signOut(); router.push("/login?switch=1"); router.refresh() }
     const userName = profile?.name || user?.email?.split("@")[0] || "User", userEmail = user?.email || "user@example.com", userInitials = userName.substring(0, 2).toUpperCase()
     const isOperator = profile?.role === "department_operator"
+    const isMobileOnly = profile?.role === "installer" || profile?.role === "mobile_admin"
     const isClientUser = profile?.role === "client_hq" || profile?.role === "client_store"
     const isQuotingItemActive = (url: string) => activeQuotingItem
         ? url === activeQuotingItem
@@ -58,7 +59,7 @@ export function AppSidebar({ activeQuotingItem, sidebarWidth, onSidebarResize, o
         <SidebarHeader className="border-b border-sidebar-border p-4"><div className="flex items-center gap-2 px-2"><div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Building2 className="size-4" /></div><div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden"><span className="font-semibold text-sidebar-foreground">RPM</span><span className="text-xs text-sidebar-foreground/60">Rodier Property</span></div></div></SidebarHeader>
         <SidebarContent>
             {isOperator && <SidebarGroup><SidebarGroupLabel>Production</SidebarGroupLabel><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname === "/production"}><Link href="/production"><Hammer className="size-4" /><span>My department jobs</span></Link></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroup>}
-            {!loading && !isOperator && <>
+            {!loading && !isOperator && !isMobileOnly && <>
             <SidebarGroup><div className="px-2 pt-2 mb-2"><SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"><Link href="/jobs/new"><PlusCircle className="size-4" /><span>Report Fault</span></Link></SidebarMenuButton></div><SidebarGroupLabel>Main Navigation</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{navItems.map(item => <SidebarMenuItem key={item.title}><SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}><Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup>
             {!isClientUser && <>
                 <SidebarGroup><SidebarGroupLabel>Supply Chain</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{supplyChainItems.map(item => <SidebarMenuItem key={item.title}><SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}><Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup>

@@ -1,11 +1,11 @@
 # RPM Mobile MVP
 
-Expo app for factory and installation workers on iOS and Android. It uses the same Supabase project as the RPM web app, but only calls the restricted `installer_*` RPCs and designated storage buckets.
+Expo app for factory workers, installers, and operational administrators on iOS and Android. It uses the same Supabase project as the RPM web app and reads job data through scoped RPCs and designated storage buckets.
 
 ## Setup
 
-1. Apply the RPM migrations, including `20260924050452_job_photo_categories.sql`, to the same environment as RPM.
-2. In RPM Settings → Users, create an RPM Mobile worker and select their jobs. A manufacture-only job needs a client but no site; a site job links to an actual client site.
+1. Apply the RPM migrations, including `20260924050452_job_photo_categories.sql` and `20260924051417_mobile_admin_access.sql`, to the same environment as RPM.
+2. In RPM Settings → Users, create an RPM Mobile worker and select their jobs, or choose Mobile Admin for all operational jobs. Hugo's existing Rodier Admin account can sign in without changing his web role. A manufacture-only job needs a client but no site; a site job links to an actual client site.
 3. Copy `.env.example` to `.env` and use the project's Supabase URL and **publishable** key. Do not put a service role key in the app.
 4. Run `npm ci`, then `npm start` from this directory. Open on an iOS or Android device. Camera and upload behavior need a physical device to verify.
 
@@ -20,7 +20,7 @@ The `preview` EAS profile makes an installable **RPM Mobile** app with its own h
 
 The `production` profile is reserved for later App Store / Google Play builds. It uses the same app identifiers (`nz.co.rpm.installer`) so signing, upgrades, and store records must be managed under the RPM team's accounts. Increment `ios.buildNumber` and `android.versionCode` for subsequent releases. This setup does not submit the app to either store.
 
-`installer_workspace` returns only assigned active job fields, actual active sites, notes, permitted drawing metadata, uploaded photos, and the user's running timer. The mobile worker uses the restricted `installer` database role and cannot select raw costing, quoting, or finance tables. A timer is exclusive per user across jobs and records travel and work separately. Photos are copied into app documents before upload and retried on app foreground, Home refresh, and manual retry. They remain queued if registration or upload fails. Photos belong to the job and default to Production for manufacture-only jobs or Installation for site jobs; Site Survey and Delivery are available when relevant.
+`installer_workspace` returns only assigned active job fields, actual active sites, notes, permitted drawing metadata, uploaded photos, and the user's running timer. `mobile_admin_workspace` returns all operational jobs, material descriptions and quantities, job notes, and time entries without costs or prices. The mobile worker and mobile admin roles cannot select raw costing, quoting, or finance tables. A timer is exclusive per user across jobs and records travel and work separately. Photos are copied into app documents before upload and retried on app foreground, Home refresh, and manual retry. They remain queued if registration or upload fails. Photos belong to the job and default to Production for manufacture-only jobs or Installation for site jobs; Site Survey and Delivery are available when relevant.
 
 In the RPM web job detail, **Job photos & mobile** shows uploaded photos and recorded travel/work sessions. Only a reviewed copy of a site-linked photo can be published to a site's gallery.
 

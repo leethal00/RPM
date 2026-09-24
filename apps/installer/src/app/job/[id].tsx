@@ -3,7 +3,7 @@ import { Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-n
 import { Redirect, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Document, InstallerNote, Photo, PhotoCategory, SitePhoto, Timer, addJobNote, documentUrl, jobNotes, photoUrl, timerAction, workspace } from '../../lib/api';
+import { Document, InstallerNote, Material, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, documentUrl, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
 import { enqueuePhoto, queuedFor, syncPhotos } from '../../lib/photo-queue';
 import { useInstallerSession } from '../../lib/session';
 import { Button, Card, ErrorText, Loading, Page, SectionLabel, StatusPill, Title, colors, styles } from '../../lib/ui';
@@ -11,11 +11,19 @@ import { navigateTo } from '../sites';
 
 export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { allowed, ready, session } = useInstallerSession();
+  const { allowed, ready, session, role } = useInstallerSession();
   const [job, setJob] = useState<Awaited<ReturnType<typeof workspace>>['job']>(null);
   const [docs, setDocs] = useState<Document[]>([]); const [photos, setPhotos] = useState<Photo[]>([]);
   const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([]);
   const [notes, setNotes] = useState<InstallerNote[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [editingTimeId, setEditingTimeId] = useState<string | undefined>();
+  const [timeDate, setTimeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [timeHours, setTimeHours] = useState('');
+  const [timeDescription, setTimeDescription] = useState('');
+  const [timeType, setTimeType] = useState('work');
+  const [savingTime, setSavingTime] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [timer, setTimer] = useState<Timer | null>(null); const [pending, setPending] = useState(0);
@@ -26,7 +34,7 @@ export default function JobDetail() {
     if (!allowed || !session || !id) return;
     try {
       const [data, savedNotes] = await Promise.all([workspace(id), jobNotes(id)]);
-      setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setError('');
+      setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setMaterials(data.materials ?? []); setTimeEntries(data.time_entries ?? []); setError('');
       setCategory(data.job?.store_id ? 'Installation' : 'Production');
       setPending((await queuedFor(session.user.id)).filter(p => p.jobId === id).length);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not load job.'); }
@@ -77,10 +85,23 @@ export default function JobDetail() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save note. Try again when connected.'); }
     finally { setSavingNote(false); }
   }
+  async function saveTime() {
+    if (!id || savingTime) return;
+    const hours = Number(timeHours);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(timeDate) || !Number.isFinite(hours) || hours <= 0 || hours > 24) { setError('Enter a valid date and hours between 0 and 24.'); return; }
+    setSavingTime(true); setError('');
+    try {
+      await saveTimeEntry(id, { id: editingTimeId, work_date: timeDate, hours, description: timeDescription.trim(), labour_type: timeType.trim() });
+      setEditingTimeId(undefined); setTimeHours(''); setTimeDescription(''); setTimeType('work');
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save time.'); }
+    finally { setSavingTime(false); }
+  }
   if (!job) return <Page>{error ? <ErrorText message={error} /> : <Loading />}</Page>;
   const elapsed = timer ? Math.max(0, Math.floor((now-new Date(timer.started_at).getTime())/1000)) : 0;
   const clock = `${Math.floor(elapsed/3600).toString().padStart(2,'0')}:${Math.floor(elapsed%3600/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`;
   const canRecord = ['approved','in_progress'].includes(job.status);
+  const admin = role === 'mobile_admin' || role === 'rodier_admin' || role === 'super_admin';
   const categories: PhotoCategory[] = job.store_id ? ['Production', 'Installation', 'Site Survey', 'Delivery'] : ['Production', 'Delivery'];
   return <Page>
     <Title detail={`${job.client_name || 'Client'}  ·  ${job.site_name || 'Manufacture only / No site'}`}>{job.title}</Title>
@@ -114,6 +135,27 @@ export default function JobDetail() {
       </View>
       {!canRecord ? <Text style={[styles.muted, { marginTop: 12 }]}>Time entry opens when this job is approved.</Text> : null}
     </Card>
+
+    {admin ? <>
+      <SectionLabel>Job records</SectionLabel>
+      <Card><Text style={styles.heading}>Time entries</Text>
+        {timeEntries.map(entry => <Card key={entry.id} onPress={() => { setEditingTimeId(entry.id); setTimeDate(entry.work_date); setTimeHours(String(entry.hours)); setTimeDescription(entry.description || ''); setTimeType(entry.labour_type || 'work'); }}>
+          <Text style={styles.muted}>{entry.work_date} · {entry.person_name || 'Staff'} · {entry.hours} h</Text>
+          {entry.description ? <Text style={styles.muted}>{entry.description}</Text> : null}
+        </Card>)}
+        <Text style={styles.muted}>{editingTimeId ? 'Edit time entry' : 'Add time entry'}</Text>
+        <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={timeDate} onChangeText={setTimeDate} />
+        <TextInput style={styles.input} placeholder="Hours" keyboardType="decimal-pad" value={timeHours} onChangeText={setTimeHours} />
+        <TextInput style={styles.input} placeholder="Work type" value={timeType} onChangeText={setTimeType} />
+        <TextInput style={styles.input} placeholder="Description" value={timeDescription} onChangeText={setTimeDescription} />
+        <Button disabled={savingTime || !canRecord} onPress={() => void saveTime()}>{savingTime ? 'Saving…' : editingTimeId ? 'Save changes' : 'Add time'}</Button>
+        {editingTimeId ? <Button secondary onPress={() => { setEditingTimeId(undefined); setTimeHours(''); setTimeDescription(''); }}>Cancel edit</Button> : null}
+      </Card>
+      <Card><Text style={styles.heading}>Materials</Text>
+        {materials.length ? materials.map(item => <View key={item.id} style={{ marginTop: 8 }}><Text style={styles.muted}>{item.description} · {item.qty} {item.unit || ''}</Text></View>) : <Text style={styles.muted}>No materials listed for this job.</Text>}
+      </Card>
+      {(job.details || job.production_details || job.notes) ? <Card><Text style={styles.heading}>Job details and notes</Text><Text style={styles.muted}>{job.details || ''}</Text><Text style={styles.muted}>{job.production_details || ''}</Text><Text style={styles.muted}>{job.notes || ''}</Text></Card> : null}
+    </> : null}
 
     <SectionLabel>Job information</SectionLabel>
     <Card>

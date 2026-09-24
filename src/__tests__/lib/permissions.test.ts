@@ -22,3 +22,11 @@ describe("installer web boundary", () => {
         expect(canOpenRoute("installer", path)).toBe(true)
     })
 })
+
+describe("mobile admin web boundary", () => {
+    it("lands on profile", () => expect(homeForRole("mobile_admin")).toBe("/profile"))
+    it.each(["/", "/quoting/jobs", "/settings/users", "/production", "/api/xero/import-job"])("denies %s", path => {
+        expect(canOpenRoute("mobile_admin", path)).toBe(false)
+    })
+    it("leaves Rodier admin web access intact", () => expect(canOpenRoute("rodier_admin", "/quoting/jobs")).toBe(true))
+})

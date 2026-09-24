@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'rodier_admin' | 'technician' | 'client_hq' | 'client_store' | 'department_operator' | 'installer'
+export type UserRole = 'super_admin' | 'rodier_admin' | 'mobile_admin' | 'technician' | 'client_hq' | 'client_store' | 'department_operator' | 'installer'
 export type StoreStatus = 'active' | 'inactive' | 'maintenance'
 export type JobType = 'fault' | 'maintenance' | 'project'
 export type JobStatus = 'open' | 'in_progress' | 'resolved' | 'closed'

@@ -1,5 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { canOpenRoute, homeForRole, isInstaller, isProductionOperator } from '@/lib/permissions'
+import { canOpenRoute, homeForRole, isInstaller, isMobileAdmin, isProductionOperator } from '@/lib/permissions'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -78,7 +78,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     const { data: profile } = user ? await supabase.from('users').select('role').eq('id', user.id).single() : { data: null }
-    if (user && (!isPublicPath || isProductionOperator(profile?.role) || isInstaller(profile?.role)) && !canOpenRoute(profile?.role, request.nextUrl.pathname)) {
+    if (user && (!isPublicPath || isProductionOperator(profile?.role) || isInstaller(profile?.role) || isMobileAdmin(profile?.role)) && !canOpenRoute(profile?.role, request.nextUrl.pathname)) {
         if (request.nextUrl.pathname.startsWith('/api/') || !profile?.role) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }

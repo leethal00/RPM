@@ -137,7 +137,7 @@ export function UserManager() {
 
         try {
             if (role === "department_operator" && departmentId === "none") throw new Error("Select a department for this operator")
-            const finalClientId = role === "department_operator" || clientId === "none" ? null : clientId
+            const finalClientId = role === "department_operator" || role === "mobile_admin" || clientId === "none" ? null : clientId
 
             let savedUserId = editingUserId
             if (editingUserId) {
@@ -393,6 +393,7 @@ export function UserManager() {
                                     <SelectItem value="rodier_admin">Rodier Admin</SelectItem>
                                     <SelectItem value="department_operator">Department Operator (CNC / production)</SelectItem>
                                     <SelectItem value="installer">RPM Mobile worker (factory / installer)</SelectItem>
+                                    <SelectItem value="mobile_admin">Mobile Admin (all operational jobs)</SelectItem>
                                     <SelectItem value="technician">Technician</SelectItem>
                                     <SelectItem value="client_hq">Client HQ</SelectItem>
                                     <SelectItem value="client_store">Client Store</SelectItem>
@@ -406,6 +407,7 @@ export function UserManager() {
                                 <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={allInstallJobs} onChange={e=>setAllInstallJobs(e.target.checked)} /><span><strong>All install jobs</strong><span className="block text-xs text-muted-foreground">Automatically show jobs containing Site Time Labour items, including future jobs. Quoted jobs are view only until approved.</span></span></label>
                                 {!allInstallJobs && <><Label>Assigned mobile jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">Only selected jobs appear in RPM Mobile.</p></>}
                             </div>}
+                            {role === "mobile_admin" && <p className="text-xs text-muted-foreground">Full operational access in RPM Mobile: all jobs, photos, notes, materials and time. No web administration or pricing access.</p>}
                             <Label htmlFor="client_id">Assign to Client (Optional)</Label>
                             <Select value={clientId || "none"} onValueChange={(val) => setClientId(val)}>
                                 <SelectTrigger>
