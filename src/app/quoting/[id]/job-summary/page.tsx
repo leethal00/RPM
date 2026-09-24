@@ -111,7 +111,7 @@ export default function JobSummaryPage() {
         supabase.from("costing_lines").select("id,item_id,section,subsection,description").eq("job_id", id).order("sort"),
       ])
       const nextJob = jobData as Job
-      const nextItems = ((itemData || []) as Item[]).filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+      const nextItems = (itemData || []) as Item[]
       const nextLines = (lineData || []) as BomLine[]
       setJob(nextJob)
       setItems(nextItems)
@@ -140,7 +140,9 @@ export default function JobSummaryPage() {
   const qrUrl = typeof window !== "undefined"
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
     : ""
-  const buildItems = items.filter((item) => item.mode === "build")
+  const buildItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE && item.mode === "build")
+  const sectionNumbers = new Map(items.filter((item) => item.sign_code === SECTION_HEADING_CODE)
+    .map((item, index) => [item.id, index + 1]))
 
   const toggleDepartment = (department: string) => {
     setSelectedDepartments((current) => current.includes(department)
@@ -229,7 +231,13 @@ export default function JobSummaryPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {items.map((item) => item.sign_code === SECTION_HEADING_CODE ? (
+                <tr key={item.id} className="break-inside-avoid break-after-avoid">
+                  <th colSpan={5} scope="row" className="border border-[#b9c5c1] border-l-[1mm] border-l-[#155f4c] bg-[#e4eeea] px-[2.5mm] py-[2mm] text-left text-[11.5px] font-black uppercase tracking-[.04em]" style={{ color: GREEN }}>
+                    {sectionNumbers.get(item.id)}. {item.name}
+                  </th>
+                </tr>
+              ) : (
                 <tr key={item.id} className="align-top">
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm] font-black" style={{ color: item.mode === "build" ? GREEN : undefined }}>{workshopRef(item)}</td>
                   <td className="border border-[#b9c5c1] px-[1.5mm] py-[2mm] font-bold">{prettyQty(itemQty(item))}</td>
