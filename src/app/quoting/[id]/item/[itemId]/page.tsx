@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -69,7 +69,7 @@ export default function ItemCostSheetPage() {
         }
     }
 
-    async function uploadBomImage(file: File) {
+    const uploadBomImage = useCallback(async (file: File) => {
         if (!item || item.mode !== "build" || uploadingImage) return
         const allowed: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" }
         const extension = allowed[file.type]
@@ -92,7 +92,23 @@ export default function ItemCostSheetPage() {
             setUploadingImage(false)
             if (imageInput.current) imageInput.current.value = ""
         }
-    }
+    }, [item, uploadingImage, isTemplate, itemId, supabase])
+
+    useEffect(() => {
+        if (item?.mode !== "build") return
+        const pasteImage = (event: ClipboardEvent) => {
+            const target = event.target
+            if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']")) return
+            const image = Array.from(event.clipboardData?.items ?? [])
+                .find((entry) => entry.kind === "file" && entry.type.startsWith("image/"))?.getAsFile()
+                ?? Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith("image/"))
+            if (!image) return
+            event.preventDefault()
+            void uploadBomImage(image)
+        }
+        window.addEventListener("paste", pasteImage)
+        return () => window.removeEventListener("paste", pasteImage)
+    }, [item?.mode, uploadBomImage])
 
     const bomImageUrl = item?.image_path
         ? supabase.storage.from("job-attachments").getPublicUrl(item.image_path).data.publicUrl
@@ -273,7 +289,6 @@ export default function ItemCostSheetPage() {
                                     onKeyDown={(event) => { if (!uploadingImage && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); imageInput.current?.click() } }}
                                     onDragOver={(event) => event.preventDefault()}
                                     onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void uploadBomImage(file) }}
-                                    onPaste={(event) => { const file = Array.from(event.clipboardData.files)[0]; if (file) { event.preventDefault(); void uploadBomImage(file) } }}
                                     className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border p-3 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring">
                                     {bomImageUrl ? (
                                         // eslint-disable-next-line @next/next/no-img-element
@@ -281,7 +296,7 @@ export default function ItemCostSheetPage() {
                                     ) : <ImagePlus className="size-7 text-muted-foreground" aria-hidden="true" />}
                                     <span className="text-sm text-muted-foreground">{uploadingImage ? "Uploading…" : bomImageUrl ? "Click, drop or paste to replace the image" : "Click, drop or paste an image here"}</span>
                                 </div>
-                                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. Saved with this BOM and shown on its job card.</p>
+                                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG or WebP, up to 10 MB. Paste a Snipping Tool screenshot with Ctrl+V while no text field is active. Saved with this BOM and shown on its job card.</p>
                             </div>
                         )}
 

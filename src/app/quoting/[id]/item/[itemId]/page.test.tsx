@@ -66,4 +66,29 @@ describe("BOM image upload", () => {
         await screen.findByText("Existing BOM cost sheet")
         expect(screen.queryByRole("button", { name: "Drop or paste a BOM image" })).not.toBeInTheDocument()
     })
+
+    it("accepts a Snipping Tool image from clipboard items anywhere on the page", async () => {
+        render(<ItemCostSheetPage />)
+        await screen.findByRole("button", { name: "Drop or paste a BOM image" })
+        const file = new File(["screenshot"], "image.png", { type: "image/png" })
+        const clipboardData = { items: [{ kind: "file", type: "image/png", getAsFile: () => file }], files: [] }
+
+        fireEvent.paste(window, { clipboardData })
+
+        await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(
+            expect.stringMatching(/^boms\/item-id\/.+\.png$/), file, { contentType: "image/png", upsert: false },
+        ))
+        await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ image_path: mocks.upload.mock.calls[0][0] }))
+    })
+
+    it("leaves clipboard paste in BOM text fields alone", async () => {
+        render(<ItemCostSheetPage />)
+        await screen.findByRole("button", { name: "Drop or paste a BOM image" })
+        const file = new File(["screenshot"], "image.png", { type: "image/png" })
+        fireEvent.paste(screen.getByPlaceholderText("Item name"), {
+            clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }], files: [] },
+        })
+
+        expect(mocks.upload).not.toHaveBeenCalled()
+    })
 })
