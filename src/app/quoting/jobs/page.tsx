@@ -318,7 +318,7 @@ export default function ActiveJobsPage() {
 
     function renderCell(key: SortKey, job: JobRow) {
         if (key === "job") return <><div className="font-medium truncate">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground truncate">{job.reference}</div>}</>
-        if (key === "client") return <span className="block truncate text-muted-foreground">{job.clients?.name || "Ad-hoc"}{job.stores?.name ? ` · ${job.stores.name}` : ""}</span>
+        if (key === "client") return <span className="block truncate text-muted-foreground">{job.clients?.name || "Ad-hoc"} · {job.stores?.name || "Manufacture only / No site"}</span>
         if (key === "job_number") return <span className="tabular-nums truncate block">{job.job_number || job.xero_invoice_number || "—"}</span>
         if (key === "job_lead") return <div className="text-xs"><div className="font-medium truncate">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground truncate">Quoted: {job.quoted_by_name || "—"}</div></div>
         if (key === "completion_date") return <span className="tabular-nums whitespace-nowrap">{formatDate(job.completion_date)}</span>
@@ -580,7 +580,7 @@ export default function ActiveJobsPage() {
                                             <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "auto"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
                                         </div>
                                         <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
-                                            <option value="none">No site</option>
+                                            <option value="none">Manufacture only / No site</option>
                                             {siteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
                                     </div>

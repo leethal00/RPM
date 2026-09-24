@@ -65,7 +65,7 @@ export default function ActiveJobDetailPage() {
   const jobTitle = job?.production_title || job?.title || ""
   const jobDetails = job?.production_details ?? job?.details ?? ""
   const jobContact = job?.production_contact_name ?? job?.contact_name ?? ""
-  const clientSite = job ? [job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ") : ""
+  const clientSite = job ? `${job.clients?.name || "Ad-hoc"} · ${job.stores?.name || "Manufacture only / No site"}` : ""
 
   useEffect(() => {
     async function fetchTeamMembers() {
@@ -199,7 +199,7 @@ export default function ActiveJobDetailPage() {
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
-          <TabsTrigger value="install">Install</TabsTrigger>
+          <TabsTrigger value="install">Job photos & mobile</TabsTrigger>
         </TabsList>
         <TabsContent value="items" className="mt-0 [&>div]:!mt-2 [&>div]:!space-y-3"><ItemsList job={job}/></TabsContent>
         <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>

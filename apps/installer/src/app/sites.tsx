@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Text, TextInput, View } from 'react-native';
-import { Redirect } from 'expo-router';
-import { Site, workspace } from '../lib/api';
+import { Redirect, router } from 'expo-router';
+import { Job, Site, workspace } from '../lib/api';
 import { useInstallerSession } from '../lib/session';
 import { Button, Card, ErrorText, Loading, Page, SectionLabel, Title, colors, styles } from '../lib/ui';
 
@@ -16,10 +16,10 @@ export async function navigateTo(address: string | null, lat?: number | null, ln
 
 export default function Sites() {
   const { allowed, ready } = useInstallerSession();
-  const [term, setTerm] = useState(''); const [sites, setSites] = useState<Site[]>([]); const [error, setError] = useState('');
+  const [term, setTerm] = useState(''); const [sites, setSites] = useState<Site[]>([]); const [jobs, setJobs] = useState<Job[]>([]); const [error, setError] = useState('');
   useEffect(() => {
     if (!allowed) return;
-    const handle = setTimeout(() => { void workspace(undefined, term).then(data => { setSites(data.sites); setError(''); }).catch(e => setError(e.message)); }, 250);
+    const handle = setTimeout(() => { void workspace(undefined, term).then(data => { setSites(data.sites); setJobs(data.jobs); setError(''); }).catch(e => setError(e.message)); }, 250);
     return () => clearTimeout(handle);
   }, [allowed, term]);
   if (!ready) return <Loading />;
@@ -37,6 +37,7 @@ export default function Sites() {
       <Text style={styles.muted}>{site.address || 'No address saved'}</Text>
       {site.manager_name ? <Text style={[styles.muted, { marginTop: 9 }]}>Contact  ·  {site.manager_name}{site.manager_phone ? `  ·  ${site.manager_phone}` : ''}</Text> : null}
       <Button secondary style={{ marginTop: 17, marginBottom: 0 }} disabled={!site.address && site.lat == null} onPress={() => void navigateTo(site.address, site.lat, site.lng)}>Get directions  ↗</Button>
+      {jobs.filter(job => job.store_id === site.id).map(job => <Button key={job.id} secondary style={{ marginTop: 10, marginBottom: 0 }} onPress={() => router.push(`/job/${job.id}`)}>{job.job_number || 'Job'} · {job.title}</Button>)}
     </Card>)}
     {!sites.length && !error ? <Card><Text style={styles.muted}>No sites found. Try a different name.</Text></Card> : null}
   </Page>;

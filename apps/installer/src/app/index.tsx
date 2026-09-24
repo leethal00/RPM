@@ -38,17 +38,17 @@ export default function Home() {
   const readyJobs = jobs.filter(job => ['approved', 'in_progress'].includes(job.status)).length;
 
   return <Page>
-    <Title detail="Everything you need on site, in one place.">Your workday</Title>
+    <Title detail="Factory and site work available to you.">Active Jobs</Title>
 
     <View style={{ backgroundColor: colors.forest, borderRadius: 22, padding: 22, marginBottom: 18, overflow: 'hidden' }}>
       <View style={{ position: 'absolute', width: 160, height: 160, borderRadius: 80, right: -55, top: -65, backgroundColor: '#2D6A4D', opacity: 0.6 }} />
-      <Text style={{ color: '#A9D4B5', fontWeight: '800', letterSpacing: 1.5, fontSize: 11 }}>FIELD OVERVIEW</Text>
+      <Text style={{ color: '#A9D4B5', fontWeight: '800', letterSpacing: 1.5, fontSize: 11 }}>WORK OVERVIEW</Text>
       <Text style={{ color: colors.white, fontSize: 25, fontWeight: '800', marginTop: 12 }}>Hi, {name.charAt(0).toUpperCase() + name.slice(1)}</Text>
       <Text style={{ color: '#C6DEC9', fontSize: 14, marginTop: 4 }}>{now ? new Date(now).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Today'}</Text>
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
         <View style={{ flex: 1, borderRadius: 14, backgroundColor: '#FFFFFF20', padding: 14 }}>
           <Text style={{ color: colors.white, fontSize: 25, fontWeight: '800' }}>{jobs.length}</Text>
-          <Text style={{ color: '#D6E8D8', fontSize: 12 }}>Install jobs</Text>
+          <Text style={{ color: '#D6E8D8', fontSize: 12 }}>Available jobs</Text>
         </View>
         <View style={{ flex: 1, borderRadius: 14, backgroundColor: '#FFFFFF20', padding: 14 }}>
           <Text style={{ color: colors.white, fontSize: 25, fontWeight: '800' }}>{readyJobs}</Text>
@@ -77,23 +77,23 @@ export default function Home() {
     <Card onPress={() => router.push('/sites')} style={{ backgroundColor: '#EEF5EF', borderColor: '#DCE9DE' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
         <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.forest, fontSize: 20 }}>⌕</Text></View>
-        <View style={{ flex: 1 }}><Text style={{ color: colors.navy, fontWeight: '800', fontSize: 16 }}>Find a site</Text><Text style={styles.muted}>Search addresses and contacts</Text></View>
+        <View style={{ flex: 1 }}><Text style={{ color: colors.navy, fontWeight: '800', fontSize: 16 }}>Sites / Map</Text><Text style={styles.muted}>Find sites and their jobs</Text></View>
         <Text style={{ color: colors.forest, fontSize: 22 }}>›</Text>
       </View>
     </Card>
 
-    <SectionLabel>Install jobs · {jobs.length}</SectionLabel>
+    <SectionLabel>Assigned Jobs · {jobs.length}</SectionLabel>
     {jobs.length ? jobs.map(job => <Card key={job.id} onPress={() => router.push(`/job/${job.id}`)}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>{job.job_number || 'JOB'}</Text>
         <StatusPill status={job.status} />
       </View>
       <Text style={{ color: colors.navy, fontSize: 18, lineHeight: 24, fontWeight: '800', marginTop: 12 }}>{job.title}</Text>
-      <Text style={{ color: colors.ink, fontSize: 13, fontWeight: '700', marginTop: 9 }}>{job.client_name || 'Client'}  ·  {job.site_name || 'No site'}</Text>
+      <Text style={{ color: colors.ink, fontSize: 13, fontWeight: '700', marginTop: 9 }}>{job.client_name || 'Client'}  ·  {job.site_name || 'Manufacture only / No site'}</Text>
       {job.address ? <Text numberOfLines={2} style={[styles.muted, { marginTop: 3 }]}>{job.address}</Text> : null}
       <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 15 }} />
       <Text style={{ color: colors.forest, fontWeight: '800', fontSize: 13 }}>Open job  →</Text>
-    </Card>) : <Card><Text style={styles.muted}>No install jobs are available yet. Ask an RPM administrator to check your access.</Text></Card>}
+    </Card>) : <Card><Text style={styles.muted}>No jobs are available yet. Ask an RPM administrator to assign your jobs.</Text></Card>}
     <Button secondary style={{ marginTop: 10 }} onPress={() => void supabase.auth.signOut()}>Sign out</Button>
   </Page>;
 }

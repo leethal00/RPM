@@ -5,7 +5,7 @@ import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 
 type Session = { id: string; kind: string; started_at: string; stopped_at: string | null; user_id: string; users?: {name:string|null} | null }
-type Photo = { id: string; storage_path: string; caption: string | null; captured_at: string; user_id: string; users?: {name:string|null} | null; url?: string }
+type Photo = { id: string; storage_path: string; caption: string | null; category: string; captured_at: string; user_id: string; users?: {name:string|null} | null; url?: string }
 type InstallerNote = { id: string; body: string; created_at: string; user_id: string; users?: {name:string|null} | null }
 
 export function InstallerActivity({ jobId }: { jobId: string }) {
@@ -21,7 +21,7 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
     ;(async () => {
       const [timeResult, photoResult, noteResult] = await Promise.all([
         supabase.from("installer_time_sessions").select("id,kind,started_at,stopped_at,user_id,users(name)").eq("job_id",jobId).order("started_at",{ascending:false}),
-        supabase.from("installer_photos").select("id,storage_path,caption,captured_at,user_id,users(name)").eq("job_id",jobId).order("captured_at",{ascending:false}),
+        supabase.from("installer_photos").select("id,storage_path,caption,category,captured_at,user_id,users(name)").eq("job_id",jobId).order("captured_at",{ascending:false}),
         supabase.from("installer_job_notes").select("id,body,created_at,user_id,users(name)").eq("job_id",jobId).order("created_at",{ascending:false}),
       ])
       if (!live) return
@@ -52,11 +52,11 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
         <span>{s.stopped_at ? `${((new Date(s.stopped_at).getTime()-new Date(s.started_at).getTime())/3600000).toFixed(2)} h` : "Running"}</span>
       </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No installer time recorded.</p>}
     </section>
-    <section><h3 className="font-semibold">Installation photos</h3>
+    <section><h3 className="font-semibold">Job photos</h3><p className="mt-1 text-xs text-muted-foreground">Photos belong to this job, including manufacture-only work with no site.</p>
       {photos.length ? <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">{photos.map(p => <div key={p.id} className="rounded border p-2">
-        {p.url && !brokenPhotoIds.includes(p.id) ? <a href={p.url} target="_blank" rel="noreferrer"><Image src={p.url} alt={p.caption || "Installation photo"} width={300} height={200} unoptimized className="h-40 w-full rounded object-cover" onError={() => setBrokenPhotoIds(current => [...current, p.id])} /></a> : <div className="flex h-40 items-center justify-center rounded bg-muted text-xs text-muted-foreground">Photo unavailable</div>}
-        <p className="mt-1 text-xs text-muted-foreground">{p.users?.name || "Installer"} · {p.caption || new Date(p.captured_at).toLocaleString("en-NZ")}</p>
-      </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No installation photos uploaded.</p>}
+        {p.url && !brokenPhotoIds.includes(p.id) ? <a href={p.url} target="_blank" rel="noreferrer"><Image src={p.url} alt={p.caption || `${p.category} photo`} width={300} height={200} unoptimized className="h-40 w-full rounded object-cover" onError={() => setBrokenPhotoIds(current => [...current, p.id])} /></a> : <div className="flex h-40 items-center justify-center rounded bg-muted text-xs text-muted-foreground">Photo unavailable</div>}
+        <p className="mt-1 text-xs font-medium">{p.category}</p><p className="text-xs text-muted-foreground">{p.users?.name || "RPM Mobile"} · {p.caption || new Date(p.captured_at).toLocaleString("en-NZ")}</p>
+      </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No job photos uploaded.</p>}
     </section>
   </div>
 }

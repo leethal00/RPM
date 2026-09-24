@@ -18,6 +18,8 @@ import { Loader2 } from "lucide-react"
 import type { Client, Store, CostingJob } from "@/types/database"
 import { costingJobSchema, getValidationErrors } from "@/lib/validations"
 import { siteDisplayName } from "@/lib/site-name"
+import { SiteForm } from "@/components/site-form"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface CostingJobFormProps {
     onSuccess: (jobId?: string) => void
@@ -49,7 +51,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     const [addingClient, setAddingClient] = useState(false)
     const [newClientName, setNewClientName] = useState("")
     const [addingStore, setAddingStore] = useState(false)
-    const [newStoreName, setNewStoreName] = useState("")
+    const [jobLocation, setJobLocation] = useState<"manufacture" | "site">(job?.store_id ? "site" : "manufacture")
 
     async function createClientInline() {
         const name = newClientName.trim()
@@ -61,23 +63,12 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         setAddingClient(false); setNewClientName("")
     }
 
-    async function createStoreInline() {
-        const name = newStoreName.trim()
-        if (!name) return
-        if (formData.client_id === "none") return toast.error("Pick a client first, then add its site")
-        const clientName = clients.find((client) => client.id === formData.client_id)?.name || ""
-        const duplicate = stores.find((store) => store.client_id === formData.client_id && siteDisplayName(store.name, clientName).toLowerCase() === siteDisplayName(name, clientName).toLowerCase())
-        if (duplicate) {
-            setFormData((current) => ({ ...current, store_id: duplicate.id }))
-            setAddingStore(false); setNewStoreName("")
-            toast.info("Existing site selected")
-            return
-        }
-        const { data, error } = await supabase.from("stores").insert({ name, client_id: formData.client_id }).select("id, name, client_id").single()
+    async function siteCreated(siteId?: string) {
+        const { data, error } = await supabase.from("stores").select("id, name, client_id").eq("client_id", formData.client_id).order("name")
         if (error) return toast.error(error.message)
-        setStores((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
-        setFormData((f) => ({ ...f, store_id: data.id }))
-        setAddingStore(false); setNewStoreName("")
+        setStores((current) => [...current.filter((store) => store.client_id !== formData.client_id), ...(data || [])])
+        if (siteId) setFormData((current) => ({ ...current, store_id: siteId }))
+        setAddingStore(false)
     }
 
     useEffect(() => {
@@ -110,6 +101,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (createAsJob && formData.client_id === "none") return toast.error("Select a customer for this job")
+        if (jobLocation === "site" && formData.store_id === "none") return toast.error("Select or create a client site for site work")
         setLoading(true)
 
         const result = costingJobSchema.safeParse(formData)
@@ -126,7 +118,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
             reference: formData.reference || null,
             qty: parseFloat(formData.qty) || 1,
             client_id: formData.client_id === "none" ? null : formData.client_id,
-            store_id: formData.store_id === "none" ? null : formData.store_id,
+            store_id: jobLocation === "manufacture" ? null : formData.store_id,
             details: formData.details || null,
             contact_name: formData.contact_name.trim() || null,
             quoted_by_name: formData.quoted_by_name.trim() || null,
@@ -164,7 +156,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         onSuccess(data?.id)
     }
 
-    return (
+    return (<>
         <form onSubmit={handleSubmit} className="space-y-6 py-4 font-primary">
             <div className="space-y-4">
                 <div className="grid gap-2">
@@ -178,6 +170,20 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                     />
                 </div>
 
+                <div className="grid gap-2">
+                    <Label htmlFor="job_location" className="text-xs font-medium text-muted-foreground">Job location</Label>
+                    <Select value={jobLocation} onValueChange={(value: "manufacture" | "site") => {
+                        setJobLocation(value)
+                        if (value === "manufacture") setFormData((current) => ({ ...current, store_id: "none" }))
+                    }}>
+                        <SelectTrigger id="job_location"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="manufacture">Manufacture only / No site</SelectItem>
+                            <SelectItem value="site">Site job</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {jobLocation === "manufacture" && <p className="text-xs text-muted-foreground">Production photos and work stay on this job. No pin is added to the Sites map.</p>}
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label htmlFor="quoted_by_name" className="text-xs font-medium text-muted-foreground">Quoted by</Label>
@@ -257,7 +263,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                     <SelectValue placeholder={fetching ? "Loading…" : "Select client"} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">Ad-hoc / wholesale (no client)</SelectItem>
+                                    <SelectItem value="none">No client (ad-hoc)</SelectItem>
                                     <SelectItem value="__new__" className="text-primary">+ New client…</SelectItem>
                                     {clients.map((c) => (
                                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -267,29 +273,17 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                         )}
                     </div>
                     <div className="grid gap-2">
-                        <Label htmlFor="store_id" className="text-xs font-medium text-muted-foreground">Site (optional)</Label>
-                        {addingStore ? (
-                            <div className="flex gap-1.5">
-                                <Input autoFocus value={newStoreName} placeholder="New site name"
-                                    onChange={(e) => setNewStoreName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") { e.preventDefault(); createStoreInline() }
-                                        else if (e.key === "Escape") setAddingStore(false)
-                                    }} />
-                                <Button type="button" size="sm" className="shrink-0" onClick={createStoreInline}>Add</Button>
-                                <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2" onClick={() => setAddingStore(false)}>×</Button>
-                            </div>
-                        ) : (
+                        <Label htmlFor="store_id" className="text-xs font-medium text-muted-foreground">Site {jobLocation === "site" ? "(required)" : "(not needed)"}</Label>
                             <Select
                                 value={formData.store_id}
                                 onValueChange={(v) => v === "__new__" ? setAddingStore(true) : setFormData({ ...formData, store_id: v })}
-                                disabled={fetching || !hasClient}
+                                disabled={fetching || !hasClient || jobLocation === "manufacture"}
                             >
                                 <SelectTrigger id="store_id">
                                     <SelectValue placeholder={fetching ? "Loading…" : !hasClient ? "Pick a client first" : "Select site"} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">No site</SelectItem>
+                                    <SelectItem value="none">{jobLocation === "manufacture" ? "Manufacture only / No site" : "Select a site"}</SelectItem>
                                     <SelectItem value="__new__" className="text-primary">+ New site…</SelectItem>
                                     {clientStores.length === 0 ? (
                                         <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
@@ -300,7 +294,6 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                     )}
                                 </SelectContent>
                             </Select>
-                        )}
                     </div>
                 </div>
 
@@ -338,5 +331,11 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                 </Button>
             </div>
         </form>
-    )
+        <Dialog open={addingStore} onOpenChange={setAddingStore}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+                <DialogHeader><DialogTitle>Create client site</DialogTitle><DialogDescription>Add the real site and address so it can appear on the Sites map.</DialogDescription></DialogHeader>
+                {hasClient && <SiteForm initialClientId={formData.client_id} initialClientName={clients.find((client) => client.id === formData.client_id)?.name} lockClient onSuccess={(siteId) => { void siteCreated(siteId) }} onCancel={() => setAddingStore(false)} />}
+            </DialogContent>
+        </Dialog>
+    </>)
 }

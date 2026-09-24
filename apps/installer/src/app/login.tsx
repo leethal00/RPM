@@ -16,13 +16,13 @@ export default function Login() {
     else { await refreshRole(); router.replace('/'); }
     setBusy(false);
   }
-  return <Page><Title detail="Your jobs, sites and site updates in your pocket.">Welcome back</Title>
+  return <Page><Title detail="Your jobs, sites and updates in your pocket.">Welcome back</Title>
     <View style={{ backgroundColor: colors.forest, borderRadius: 20, padding: 22, marginBottom: 18 }}>
       <Text style={{ color: '#AFD9BA', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 }}>RPM MOBILE</Text>
-      <Text style={{ color: colors.white, fontSize: 22, fontWeight: '800', marginTop: 10 }}>Ready for the field.</Text>
-      <Text style={{ color: '#D5E9D9', marginTop: 6, lineHeight: 20 }}>Sign in to see your install jobs and send updates from site.</Text>
+      <Text style={{ color: colors.white, fontSize: 22, fontWeight: '800', marginTop: 10 }}>Ready for work.</Text>
+      <Text style={{ color: '#D5E9D9', marginTop: 6, lineHeight: 20 }}>Sign in to see your jobs and send updates from the factory or site.</Text>
     </View>
-    {session && !allowed ? <Card><ErrorText message="This account is not assigned the installer role." /><Button secondary style={{ marginBottom: 0 }} onPress={() => void supabase.auth.signOut()}>Sign out</Button></Card> :
+    {session && !allowed ? <Card><ErrorText message="This account does not have RPM Mobile access." /><Button secondary style={{ marginBottom: 0 }} onPress={() => void supabase.auth.signOut()}>Sign out</Button></Card> :
     <Card>
       <Text style={{ color: colors.navy, fontWeight: '800', fontSize: 18, marginBottom: 16 }}>Sign in</Text>
       <Text style={{ color: colors.ink, fontWeight: '700', marginBottom: 6 }}>Email</Text>

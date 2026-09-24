@@ -304,7 +304,7 @@ export function UserManager() {
                                     <TableCell>{user.email}</TableCell>
                                     <TableCell>
                                         <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/10 text-primary">
-                                            {user.role}
+                                            {user.role === "installer" ? "RPM Mobile worker" : user.role}
                                         </span>
                                     </TableCell>
                                     <TableCell>{user.clients?.name || "—"}</TableCell>
@@ -392,7 +392,7 @@ export function UserManager() {
                                     <SelectItem value="super_admin">Super Admin</SelectItem>
                                     <SelectItem value="rodier_admin">Rodier Admin</SelectItem>
                                     <SelectItem value="department_operator">Department Operator (CNC / production)</SelectItem>
-                                    <SelectItem value="installer">Installer (mobile only)</SelectItem>
+                                    <SelectItem value="installer">RPM Mobile worker (factory / installer)</SelectItem>
                                     <SelectItem value="technician">Technician</SelectItem>
                                     <SelectItem value="client_hq">Client HQ</SelectItem>
                                     <SelectItem value="client_store">Client Store</SelectItem>
@@ -404,7 +404,7 @@ export function UserManager() {
                             {role === "department_operator" && <div className="space-y-2"><Label htmlFor="department_id">Department</Label><select id="department_id" className="w-full rounded border p-2" value={departmentId} onChange={e=>setDepartmentId(e.target.value)} required><option value="none">Select department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="text-xs text-muted-foreground">Only assigned production jobs, time and material usage. No pricing or administration.</p></div>}
                             {role === "installer" && <div className="space-y-2">
                                 <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={allInstallJobs} onChange={e=>setAllInstallJobs(e.target.checked)} /><span><strong>All install jobs</strong><span className="block text-xs text-muted-foreground">Automatically show jobs containing Site Time Labour items, including future jobs. Quoted jobs are view only until approved.</span></span></label>
-                                {!allInstallJobs && <><Label>Assigned installer jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">Only selected jobs appear in RPM Mobile.</p></>}
+                                {!allInstallJobs && <><Label>Assigned mobile jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">Only selected jobs appear in RPM Mobile.</p></>}
                             </div>}
                             <Label htmlFor="client_id">Assign to Client (Optional)</Label>
                             <Select value={clientId || "none"} onValueChange={(val) => setClientId(val)}>

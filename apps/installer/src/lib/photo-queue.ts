@@ -2,23 +2,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
+import type { PhotoCategory } from './api';
 
 const KEY = 'rpm-installer-photo-queue-v1';
-export type QueuedPhoto = { id: string; userId: string; jobId: string; path: string; uri: string; caption: string | null; capturedAt: string };
+export type QueuedPhoto = { id: string; userId: string; jobId: string; path: string; uri: string; caption: string | null; category?: PhotoCategory; capturedAt: string };
 
 async function all(): Promise<QueuedPhoto[]> {
   return JSON.parse((await AsyncStorage.getItem(KEY)) ?? '[]') as QueuedPhoto[];
 }
 export async function queuedFor(userId: string) { return (await all()).filter(item => item.userId === userId); }
 
-export async function enqueuePhoto(userId: string, jobId: string, sourceUri: string, caption: string | null) {
+export async function enqueuePhoto(userId: string, jobId: string, sourceUri: string, caption: string | null, category: PhotoCategory) {
   const id = Crypto.randomUUID();
   const copy = new File(Paths.document, `installer-${id}.jpg`);
   const source = new File(sourceUri);
   if (source.size <= 0) throw new Error('The photo is empty. Please take it again.');
   source.copy(copy);
   if (copy.size <= 0) { copy.delete(); throw new Error('The photo could not be saved. Please take it again.'); }
-  const item: QueuedPhoto = { id, userId, jobId, path: `${jobId}/${userId}/${id}.jpg`, uri: copy.uri, caption, capturedAt: new Date().toISOString() };
+  const item: QueuedPhoto = { id, userId, jobId, path: `${jobId}/${userId}/${id}.jpg`, uri: copy.uri, caption, category, capturedAt: new Date().toISOString() };
   await AsyncStorage.setItem(KEY, JSON.stringify([...(await all()), item]));
   return item;
 }
@@ -36,9 +37,10 @@ export async function syncPhotos(userId: string): Promise<{ uploaded: number; pe
         if (body.byteLength === 0) throw new Error('Empty photo cannot be uploaded');
         const { error: uploadError } = await supabase.storage.from('installer-photos').upload(item.path, body, { contentType: 'image/jpeg', upsert: false });
         if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) throw uploadError;
-        const { error: registerError } = await supabase.rpc('installer_register_photo', {
-          p_job_id: item.jobId, p_path: item.path, p_caption: item.caption, p_captured_at: item.capturedAt,
-        });
+        const common = { p_job_id: item.jobId, p_path: item.path, p_caption: item.caption, p_captured_at: item.capturedAt };
+        const { error: registerError } = item.category
+          ? await supabase.rpc('installer_register_job_photo', { ...common, p_category: item.category })
+          : await supabase.rpc('installer_register_photo', common);
         if (registerError) throw registerError;
         await AsyncStorage.setItem(KEY, JSON.stringify((await all()).filter(photo => photo.id !== item.id)));
         file.delete();

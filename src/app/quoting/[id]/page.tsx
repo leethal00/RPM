@@ -140,7 +140,7 @@ export default function CostingJobDetailPage() {
                                 </div>
                                 {job.reference && <p className="text-sm text-muted-foreground mt-1">{job.reference}</p>}
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    {[job.clients?.name || "Ad-hoc / wholesale", job.stores?.name].filter(Boolean).join(" · ")}
+                                    {`${job.clients?.name || "Ad-hoc"} · ${job.stores?.name || "Manufacture only / No site"}`}
                                 </p>
                                 {(job.quoted_by_name || job.job_lead_name || job.xero_quote_number || job.xero_invoice_number || job.job_number || job.due_date) && (
                                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">

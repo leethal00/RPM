@@ -10,6 +10,14 @@ import { Loader2, Plus, Trash2, Users, Palette, ContactRound, RefreshCw, Mail, P
 import type { Client } from "@/types/database"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { BrandManager } from "@/components/brand-manager"
+import Link from "next/link"
+
+type XeroContact = {
+    name: string; email?: string | null
+    phones?: { PhoneNumber?: string | null }[]
+    addresses?: { AddressLine1?: string | null; AddressLine2?: string | null; City?: string | null; Region?: string | null; PostalCode?: string | null }[]
+    people?: { FirstName?: string | null; LastName?: string | null; EmailAddress?: string | null }[]
+}
 
 export function CustomerManager() {
     const supabase = createClient()
@@ -19,7 +27,10 @@ export function CustomerManager() {
     const [adding, setAdding] = useState(false)
     const [brandManagerFor, setBrandManagerFor] = useState<Client | null>(null)
     const [detailsFor, setDetailsFor] = useState<Client | null>(null)
-    const [xeroContacts, setXeroContacts] = useState<any[]>([])
+    const [clientJobs, setClientJobs] = useState<{ id: string; title: string; job_number: string | null; store_id: string | null; stores: { name: string } | null }[]>([])
+    const [clientSites, setClientSites] = useState<{ id: string; name: string }[]>([])
+    const [clientWorkError, setClientWorkError] = useState("")
+    const [xeroContacts, setXeroContacts] = useState<XeroContact[]>([])
     const [xeroLoading, setXeroLoading] = useState(false)
     const [syncingCustomers, setSyncingCustomers] = useState(false)
     const [editCustomer, setEditCustomer] = useState<Client | null>(null)
@@ -72,7 +83,7 @@ export function CustomerManager() {
         setXeroLoading(true)
         try {
             const response = await fetch("/api/xero/contacts", { cache: "no-store" })
-            const body = await response.json()
+            const body = await response.json() as { contacts?: XeroContact[]; error?: string }
             if (!response.ok) throw new Error(body.error || "Could not load Xero contacts")
             setXeroContacts(body.contacts || [])
         } catch (error) {
@@ -82,21 +93,34 @@ export function CustomerManager() {
 
     const matchingXeroContact = detailsFor ? xeroContacts.find((c) => c.name?.toLowerCase() === detailsFor.name.toLowerCase()) : null
 
+    async function loadClientWork(clientId: string) {
+        setClientWorkError("")
+        setClientJobs([])
+        setClientSites([])
+        const [jobs, sites] = await Promise.all([
+            supabase.from("costing_jobs").select("id,title,job_number,store_id,stores(name)").eq("client_id", clientId).eq("is_template", false).order("created_at", { ascending: false }).limit(100),
+            supabase.from("stores").select("id,name").eq("client_id", clientId).order("name"),
+        ])
+        if (jobs.error || sites.error) return setClientWorkError(jobs.error?.message || sites.error?.message || "Could not load client work")
+        setClientJobs((jobs.data || []) as typeof clientJobs)
+        setClientSites(sites.data || [])
+    }
+
     const importXeroCustomers = async () => {
         setSyncingCustomers(true)
         try {
             const response = await fetch("/api/xero/contacts", { cache: "no-store" })
-            const body = await response.json()
+            const body = await response.json() as { contacts?: XeroContact[]; error?: string }
             if (!response.ok) throw new Error(body.error || "Could not load Xero customers")
             const contacts = body.contacts || []
             const existing = new Map(customers.map(c => [c.name.trim().toLowerCase(), c]))
-            const missing = contacts.filter((c: any) => c.name?.trim() && !existing.has(c.name.trim().toLowerCase()))
+            const missing = contacts.filter((c: XeroContact) => c.name?.trim() && !existing.has(c.name.trim().toLowerCase()))
             if (missing.length) {
-                const { error } = await supabase.from('clients').insert(missing.map((c: any) => ({ name: c.name.trim(), contact_email: c.email || null, active: true })))
+                const { error } = await supabase.from('clients').insert(missing.map((c: XeroContact) => ({ name: c.name.trim(), contact_email: c.email || null, active: true })))
                 if (error) throw error
             }
-            const exactMatches = contacts.filter((c: any) => existing.has((c.name || '').trim().toLowerCase()) && c.email)
-            await Promise.all(exactMatches.map((c: any) => supabase.from('clients').update({ contact_email: c.email }).eq('id', existing.get(c.name.trim().toLowerCase())!.id)))
+            const exactMatches = contacts.filter((c: XeroContact) => existing.has((c.name || '').trim().toLowerCase()) && c.email)
+            await Promise.all(exactMatches.map((c: XeroContact) => supabase.from('clients').update({ contact_email: c.email }).eq('id', existing.get(c.name.trim().toLowerCase())!.id)))
             toast.success(missing.length ? `Imported ${missing.length} customer${missing.length === 1 ? "" : "s"} from Xero` : "Customer list already matches Xero")
             await fetchCustomers()
             setXeroContacts(contacts)
@@ -193,7 +217,7 @@ export function CustomerManager() {
                                             <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Rename customer" onClick={(e) => { e.stopPropagation(); setEditCustomer(customer); setEditName(customer.name) }}>
                                                 <Pencil className="size-3.5" />
                                             </Button>
-                                            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setDetailsFor(customer); if (!xeroContacts.length) loadXeroContacts() }}>
+                                            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setDetailsFor(customer); void loadClientWork(customer.id); if (!xeroContacts.length) loadXeroContacts() }}>
                                                 <ContactRound className="size-3.5" /> Details
                                             </Button>
                                             <Button
@@ -239,12 +263,18 @@ export function CustomerManager() {
                     {xeroLoading ? <div className="py-10 text-center"><Loader2 className="size-6 animate-spin mx-auto" /></div> : matchingXeroContact ? (
                         <div className="space-y-4 text-sm">
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-md border p-3"><div className="font-medium mb-2">Primary contact</div>{matchingXeroContact.email && <div className="flex gap-2"><Mail className="size-4 mt-0.5" />{matchingXeroContact.email}</div>}{matchingXeroContact.phones?.filter((p:any)=>p.PhoneNumber).map((p:any,i:number)=><div key={i} className="flex gap-2 mt-1"><Phone className="size-4 mt-0.5" />{p.PhoneNumber}</div>)}</div>
-                                <div className="rounded-md border p-3"><div className="font-medium mb-2">Addresses</div>{matchingXeroContact.addresses?.filter((a:any)=>a.AddressLine1||a.City).map((a:any,i:number)=><div key={i} className="flex gap-2 mb-2"><MapPin className="size-4 mt-0.5 shrink-0" /><span>{[a.AddressLine1,a.AddressLine2,a.City,a.Region,a.PostalCode].filter(Boolean).join(", ")}</span></div>)}</div>
+                                <div className="rounded-md border p-3"><div className="font-medium mb-2">Primary contact</div>{matchingXeroContact.email && <div className="flex gap-2"><Mail className="size-4 mt-0.5" />{matchingXeroContact.email}</div>}{matchingXeroContact.phones?.filter((p)=>p.PhoneNumber).map((p,i:number)=><div key={i} className="flex gap-2 mt-1"><Phone className="size-4 mt-0.5" />{p.PhoneNumber}</div>)}</div>
+                                <div className="rounded-md border p-3"><div className="font-medium mb-2">Addresses</div>{matchingXeroContact.addresses?.filter((a)=>a.AddressLine1||a.City).map((a,i:number)=><div key={i} className="flex gap-2 mb-2"><MapPin className="size-4 mt-0.5 shrink-0" /><span>{[a.AddressLine1,a.AddressLine2,a.City,a.Region,a.PostalCode].filter(Boolean).join(", ")}</span></div>)}</div>
                             </div>
-                            {!!matchingXeroContact.people?.length && <div className="rounded-md border p-3"><div className="font-medium mb-2">Contact people</div>{matchingXeroContact.people.map((person:any,i:number)=><div key={i} className="py-1">{[person.FirstName,person.LastName].filter(Boolean).join(" ")}{person.EmailAddress ? ` — ${person.EmailAddress}` : ""}</div>)}</div>}
+                            {!!matchingXeroContact.people?.length && <div className="rounded-md border p-3"><div className="font-medium mb-2">Contact people</div>{matchingXeroContact.people.map((person,i:number)=><div key={i} className="py-1">{[person.FirstName,person.LastName].filter(Boolean).join(" ")}{person.EmailAddress ? ` — ${person.EmailAddress}` : ""}</div>)}</div>}
                         </div>
                     ) : <div className="rounded-md border border-dashed p-5 text-sm text-muted-foreground">No exact Xero contact named <strong>{detailsFor?.name}</strong> was found. Check the customer name in Xero, then sync again.</div>}
+                    <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                        <section><h3 className="mb-2 font-semibold">Jobs</h3>{clientWorkError && <p className="text-destructive">{clientWorkError}</p>}
+                            {clientJobs.length ? <div className="divide-y rounded-md border">{clientJobs.map((job) => <Link key={job.id} href={`/quoting/${job.id}`} className="block p-2.5 hover:bg-muted/40" onClick={() => setDetailsFor(null)}><span className="font-medium">{job.job_number || "Job"} · {job.title}</span><span className="block text-xs text-muted-foreground">{job.stores?.name || "Manufacture only / No site"}</span></Link>)}</div> : !clientWorkError && <p className="text-muted-foreground">No jobs for this client yet.</p>}
+                        </section>
+                        <section><h3 className="mb-2 font-semibold">Sites</h3>{clientSites.length ? <div className="divide-y rounded-md border">{clientSites.map((site) => <Link key={site.id} href={`/stores/${site.id}`} className="block p-2.5 hover:bg-muted/40" onClick={() => setDetailsFor(null)}>{site.name}</Link>)}</div> : !clientWorkError && <p className="text-muted-foreground">No sites for this client yet.</p>}</section>
+                    </div>
                 </DialogContent>
             </Dialog>
 

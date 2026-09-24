@@ -7,7 +7,7 @@ import { colors } from '../lib/ui';
 export default function RootLayout() {
   return <SafeAreaProvider><InstallerSessionProvider><Stack screenOptions={{ headerStyle: { backgroundColor: colors.white }, headerTintColor: colors.forest, headerTitleStyle: { fontWeight: '800', color: colors.navy }, headerShadowVisible: false, contentStyle: { backgroundColor: colors.bg } }}>
     <Stack.Screen name="index" options={{ title: 'RPM Mobile' }} />
-    <Stack.Screen name="login" options={{ title: 'Installer sign in' }} />
+    <Stack.Screen name="login" options={{ title: 'RPM Mobile sign in' }} />
     <Stack.Screen name="sites" options={{ title: 'Sites' }} />
     <Stack.Screen name="job/[id]" options={{ title: 'Job detail' }} />
   </Stack></InstallerSessionProvider></SafeAreaProvider>;
