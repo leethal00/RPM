@@ -46,6 +46,8 @@ export function UserManager() {
     const [clientId, setClientId] = useState<string | null>("none")
     const [departmentId, setDepartmentId] = useState("none")
     const [departments, setDepartments] = useState<{id:string;name:string}[]>([])
+    const [installJobs, setInstallJobs] = useState<{id:string;title:string;job_number:string|null}[]>([])
+    const [assignedJobIds, setAssignedJobIds] = useState<string[]>([])
     const [developerMode, setDeveloperMode] = useState(false)
 
     // Only the current super_admin can grant/revoke developer_mode, and the
@@ -92,6 +94,7 @@ export function UserManager() {
         fetchClients()
         fetchCurrentUser()
         void supabase.from("departments").select("id,name").order("name").then(({data}: {data: {id:string;name:string}[] | null})=>setDepartments(data || []))
+        void supabase.from("costing_jobs").select("id,title,job_number").eq("is_template",false).in("status",["approved","in_progress","complete"]).order("created_at",{ascending:false}).limit(1000).then(({data}: {data: {id:string;title:string;job_number:string|null}[] | null})=>setInstallJobs(data || []))
     }, [fetchUsers, fetchClients, fetchCurrentUser, supabase])
 
     const openCreateDialog = () => {
@@ -103,6 +106,7 @@ export function UserManager() {
         setClientId("none")
         setDeveloperMode(false)
         setDepartmentId("none")
+        setAssignedJobIds([])
         setIsDialogOpen(true)
     }
 
@@ -115,6 +119,11 @@ export function UserManager() {
         setClientId(user.client_id || "none")
         setDeveloperMode(Boolean(user.developer_mode))
         setDepartmentId(user.department_id || "none")
+        setAssignedJobIds([])
+        if (user.role === "installer") {
+            void supabase.from("installer_jobs").select("job_id").eq("user_id",user.id)
+                .then(({data,error}: {data: {job_id:string}[] | null; error: {message:string} | null}) => { if (error) toast.error(error.message); else setAssignedJobIds((data || []).map(item=>item.job_id)) })
+        }
         setIsDialogOpen(true)
     }
 
@@ -126,6 +135,7 @@ export function UserManager() {
             if (role === "department_operator" && departmentId === "none") throw new Error("Select a department for this operator")
             const finalClientId = role === "department_operator" || clientId === "none" ? null : clientId
 
+            let savedUserId = editingUserId
             if (editingUserId) {
                 // Edit user in our table. developer_mode is only included in
                 // the update payload when the caller is a super_admin; the
@@ -186,7 +196,24 @@ export function UserManager() {
                     throw dbError
                 }
 
+                savedUserId = authData.user.id
+
                 toast.success("User created successfully")
+            }
+
+            if (savedUserId && role === "installer") {
+                const { data: existing, error: assignmentError } = await supabase.from("installer_jobs").select("job_id").eq("user_id",savedUserId)
+                if (assignmentError) throw assignmentError
+                const existingIds = new Set<string>(((existing || []) as {job_id:string}[]).map(item=>item.job_id))
+                const desiredIds = new Set<string>(assignedJobIds)
+                const visibleIds = new Set(installJobs.map(job=>job.id))
+                const removed = [...existingIds].filter(id=>visibleIds.has(id) && !desiredIds.has(id))
+                const added = [...desiredIds].filter(id=>!existingIds.has(id))
+                if (removed.length) { const {error} = await supabase.from("installer_jobs").delete().eq("user_id",savedUserId).in("job_id",removed); if (error) throw error }
+                if (added.length) { const {error} = await supabase.from("installer_jobs").insert(added.map(job_id=>({job_id,user_id:savedUserId}))); if (error) throw error }
+            } else if (savedUserId) {
+                const {error} = await supabase.from("installer_jobs").delete().eq("user_id",savedUserId)
+                if (error) throw error
             }
 
             setIsDialogOpen(false)
@@ -303,7 +330,7 @@ export function UserManager() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{editingUserId ? "Edit User" : "Create New User"}</DialogTitle>
                         <DialogDescription>
@@ -359,6 +386,7 @@ export function UserManager() {
                                     <SelectItem value="super_admin">Super Admin</SelectItem>
                                     <SelectItem value="rodier_admin">Rodier Admin</SelectItem>
                                     <SelectItem value="department_operator">Department Operator (CNC / production)</SelectItem>
+                                    <SelectItem value="installer">Installer (mobile only)</SelectItem>
                                     <SelectItem value="technician">Technician</SelectItem>
                                     <SelectItem value="client_hq">Client HQ</SelectItem>
                                     <SelectItem value="client_store">Client Store</SelectItem>
@@ -368,6 +396,7 @@ export function UserManager() {
 
                         <div className="space-y-2">
                             {role === "department_operator" && <div className="space-y-2"><Label htmlFor="department_id">Department</Label><select id="department_id" className="w-full rounded border p-2" value={departmentId} onChange={e=>setDepartmentId(e.target.value)} required><option value="none">Select department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="text-xs text-muted-foreground">Only assigned production jobs, time and material usage. No pricing or administration.</p></div>}
+                            {role === "installer" && <div className="space-y-2"><Label>Assigned installer jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">Only selected jobs appear in RPM Install.</p></div>}
                             <Label htmlFor="client_id">Assign to Client (Optional)</Label>
                             <Select value={clientId || "none"} onValueChange={(val) => setClientId(val)}>
                                 <SelectTrigger>

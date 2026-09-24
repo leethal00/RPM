@@ -165,6 +165,8 @@ export default function JobCardPage() {
   const [bomLines, setBomLines] = useState<BomLine[]>([])
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [installationNotes, setInstallationNotes] = useState("")
+  const [notesStatus, setNotesStatus] = useState("")
 
   useEffect(() => {
     let live = true
@@ -190,6 +192,7 @@ export default function JobCardPage() {
         const nextJob = jobData as CostingJob & { production_title?: string | null; production_details?: string | null }
         const nextLines = (lineData || []) as BomLine[]
         setJob(nextJob)
+        setInstallationNotes(nextJob.installation_notes || "")
         setItems((itemData || []) as JobItem[])
         setBomLines(nextLines)
         const departmentLines = itemId ? nextLines.filter((line) => line.item_id === itemId) : nextLines
@@ -264,6 +267,14 @@ export default function JobCardPage() {
       : [...current, department])
   }
 
+  const saveInstallationNotes = async () => {
+    setNotesStatus("Saving…")
+    const { error } = await supabase.from("costing_jobs")
+      .update({ installation_notes: installationNotes.trim() || null })
+      .eq("id", id)
+    setNotesStatus(error ? error.message : "Saved for RPM Install")
+  }
+
   const qrUrl = typeof window !== "undefined"
     ? `https://quickchart.io/qr?size=180&margin=0&text=${encodeURIComponent(window.location.href)}`
     : ""
@@ -320,6 +331,13 @@ export default function JobCardPage() {
         <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white">
           <Printer className="size-4" /> Print / Save as PDF
         </button>
+      </div>
+      <div className="no-print mx-auto max-w-4xl bg-white p-4 text-sm">
+        <label htmlFor="installation-notes" className="font-semibold">Installation notes for the mobile team</label>
+        <textarea id="installation-notes" value={installationNotes} onChange={e => setInstallationNotes(e.target.value)}
+          className="mt-2 min-h-24 w-full rounded border p-2" placeholder="Site access, install steps, safety details…" />
+        <div className="flex items-center gap-3"><button type="button" onClick={() => void saveInstallationNotes()}
+          className="rounded bg-neutral-900 px-3 py-2 text-white">Save installation notes</button><span>{notesStatus}</span></div>
       </div>
 
       <Sheet>

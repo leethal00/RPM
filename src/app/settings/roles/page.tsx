@@ -16,6 +16,7 @@ interface RoleInfo {
 }
 
 const ROLES: RoleInfo[] = [
+    { role: "installer", label: "Installer", description: "Mobile access to assigned jobs, all active sites, installation notes, permitted documents, timers and photos. No pricing or finance.", icon: Hammer, headcountHint: "Installation team" },
     { role: "department_operator", label: "Department Operator", description: "Assigned production jobs, time and material usage. No sales, pricing or administration.", icon: Hammer, headcountHint: "CNC and future departments" },
     {
         role: "super_admin",
@@ -60,10 +61,16 @@ interface Resource {
     key: string
     label: string
     description: string
-    matrix: Record<UserRole, Cell>
+    matrix: Partial<Record<UserRole, Cell>>
 }
 
 const RESOURCES: Resource[] = [
+    {
+        key: "installer_mobile",
+        label: "Installer mobile",
+        description: "Assigned job details, all active sites, travel and work timers, photos and installation notes through restricted APIs.",
+        matrix: { installer: "own", super_admin: "full", rodier_admin: "full" },
+    },
     {
         key: "production",
         label: "Department production",
@@ -301,7 +308,7 @@ export default function RolePermissionsPage() {
                                         </td>
                                         {ROLES.map(r => (
                                             <td key={r.role} className="py-3 px-3">
-                                                <CellGlyph value={res.matrix[r.role]} />
+                                                <CellGlyph value={res.matrix[r.role] ?? "none"} />
                                             </td>
                                         ))}
                                     </tr>

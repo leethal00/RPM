@@ -12,3 +12,13 @@ describe("department operator access", () => {
     it("fails closed without a profile",()=>expect(canOpenRoute(null,"/production")).toBe(false))
     it("preserves administrator routes",()=>expect(canOpenRoute("super_admin","/settings/production")).toBe(true))
 })
+
+describe("installer web boundary", () => {
+    it("lands on the limited profile page", () => expect(homeForRole("installer")).toBe("/profile"))
+    it.each(["/", "/active-jobs", "/quoting", "/quoting/jobs/123", "/leads", "/settings/users", "/api/xero/import-job", "/api/xero/webhook", "/profile/admin"])("denies %s", path => {
+        expect(canOpenRoute("installer", path)).toBe(false)
+    })
+    it.each(["/profile", "/reset-password", "/login", "/forgot-password"])("allows %s", path => {
+        expect(canOpenRoute("installer", path)).toBe(true)
+    })
+})
