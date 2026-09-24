@@ -36,6 +36,8 @@ describe("production job card internal BOM notes", () => {
 
     const firstNote = await screen.findByText("Use the blue backing", { exact: false })
     expect(firstNote).not.toHaveTextContent("Front sign")
+    expect(screen.getByText("Front sign")).toBeInTheDocument()
+    expect(screen.getByText("Side sign")).toBeInTheDocument()
     expect(screen.getByText("Keep this note private", { exact: false })).toBeInTheDocument()
     expect(screen.queryByText("INTERNAL BOM NOTES")).not.toBeInTheDocument()
   })
@@ -45,6 +47,8 @@ describe("production job card internal BOM notes", () => {
     render(<JobCardPage />)
 
     expect(await screen.findByText("Use the blue backing", { exact: false })).toBeInTheDocument()
+    expect(screen.getByText("Front sign")).toBeInTheDocument()
+    expect(screen.queryByText("Side sign")).not.toBeInTheDocument()
     expect(screen.queryByText("Keep this note private", { exact: false })).not.toBeInTheDocument()
   })
 })
