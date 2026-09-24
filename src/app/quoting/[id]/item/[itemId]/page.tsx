@@ -39,7 +39,7 @@ export default function ItemCostSheetPage() {
         let active = true
         ;(async () => {
             const [{ data: j }, { data: i }] = await Promise.all([
-                supabase.from("costing_jobs").select("id, title, is_template, status").eq("id", jobId).single(),
+                supabase.from("costing_jobs").select("id, title, is_template, status, xero_invoice_import_status").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
             ])
             if (!active) return
@@ -51,10 +51,15 @@ export default function ItemCostSheetPage() {
     }, [supabase, jobId, itemId])
 
     const isTemplate = !!job?.is_template
+    const approvedImportLine = !!item?.xero_imported_line && (job?.xero_invoice_import_status === "AUTHORISED" || job?.xero_invoice_import_status === "PAID")
     const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
     const backPath = isTemplate ? "/quoting/products" : isJobStage ? `/quoting/jobs/${jobId}` : `/quoting/${jobId}`
 
     async function patchItem(patch: Partial<CostingItem>) {
+        if (approvedImportLine && ["name", "details", "qty", "unit_price", "sort"].some(key => key in patch)) {
+            toast.error("Approved Xero sales values are locked. Edit the BOM instead.")
+            return
+        }
         const previous = item
         setItem((prev) => (prev ? { ...prev, ...patch } : prev))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", itemId)
@@ -158,6 +163,7 @@ export default function ItemCostSheetPage() {
                                 </div>
                                 <input
                                     defaultValue={item.name}
+                                    readOnly={approvedImportLine}
                                     onBlur={(e) => { if (e.target.value !== item.name) patchItem({ name: e.target.value }) }}
                                     className="min-w-0 flex-1 text-lg leading-tight font-semibold tracking-tight bg-transparent outline-none border-b border-transparent focus:border-input"
                                     placeholder="Item name"
@@ -178,6 +184,8 @@ export default function ItemCostSheetPage() {
                             )}
                         </div>
 
+                        {approvedImportLine && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs">Imported from an approved Xero invoice. The sales line is locked; material, labour and production BOM costs remain editable. BOM changes stay in RPM.</div>}
+
                         <div className="rounded-lg border border-border/60 p-2">
                             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] gap-3">
                                 <div className="min-w-0 space-y-1.5">
@@ -186,7 +194,7 @@ export default function ItemCostSheetPage() {
                                         <div>
                                             <label className="mb-0.5 block text-[11px] text-muted-foreground">Qty</label>
                                             <div className="h-8 flex items-center rounded-md border border-input bg-background px-1.5">
-                                                <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />
+                                                {approvedImportLine ? <span className="px-1 text-sm tabular-nums">{item.qty}</span> : <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />}
                                             </div>
                                         </div>
                                         <div>
@@ -209,6 +217,7 @@ export default function ItemCostSheetPage() {
                                     <div>
                                         <label className="mb-0.5 block text-[11px] text-muted-foreground">Details</label>
                                         <textarea defaultValue={item.details ?? ""} placeholder="How it's made — extrusion, bracing, finish, face, LED, etc."
+                                            readOnly={approvedImportLine}
                                             onBlur={(e) => { if (e.target.value !== (item.details ?? "")) patchItem({ details: e.target.value || null }) }}
                                             className="min-h-[54px] w-full resize-y rounded-md border border-input bg-background px-2.5 py-1.5 text-sm leading-5 outline-none focus:border-ring" />
                                     </div>

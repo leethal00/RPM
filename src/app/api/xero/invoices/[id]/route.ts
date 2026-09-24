@@ -79,7 +79,7 @@ async function access() {
 
 async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
-    admin.from("costing_jobs").select("id,title,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
+    admin.from("costing_jobs").select("id,title,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,xero_invoice_import_status,clients(name),stores(name)").eq("id", id).single(),
     admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
     admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
   ])
@@ -190,6 +190,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     if (body.action === "push") {
+      if (job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID") return NextResponse.json({ error: "This job was imported from an approved Xero invoice. Its sales values are locked." }, { status: 409 })
       if (!job.xero_invoice_id || !job.xero_invoice_number) return NextResponse.json({ error: "Link a Xero invoice first." }, { status: 409 })
       if (!body.expectedUpdatedAt) return NextResponse.json({ error: "Preview the invoice before pushing changes." }, { status: 400 })
       if (!proposedLines.some((line) => line.Quantity != null)) return NextResponse.json({ error: "Add at least one selling item before pushing to Xero." }, { status: 400 })

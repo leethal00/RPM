@@ -32,6 +32,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const linked = !!job.xero_invoice_id
+  const approvedImport = job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID"
   const baseUrl = "/api/xero/invoices/" + encodeURIComponent(job.id)
 
   async function findContacts(search = contactSearch) {
@@ -123,7 +124,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
       Create Xero invoice
     </Button>}
     <Button variant="outline" size="sm" className="h-8" onClick={() => { setOpen(true); setError(""); setPreview(null); setNumber(job.xero_invoice_number || "") }}>
-      {linked ? "Update Xero invoice" : "Link existing Xero invoice"}
+      {approvedImport ? "Approved Xero invoice" : linked ? "Update Xero invoice" : "Link existing Xero invoice"}
     </Button>
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
       <DialogContent className="sm:max-w-[600px]">
@@ -157,9 +158,11 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{linked ? "Update linked Xero invoice" : "Link existing Xero invoice"}</DialogTitle>
+          <DialogTitle>{approvedImport ? "Imported approved Xero invoice" : linked ? "Update linked Xero invoice" : "Link existing Xero invoice"}</DialogTitle>
           <DialogDescription>
-            {linked
+            {approvedImport
+              ? `${job.xero_invoice_number} was imported from an approved Xero invoice. Its sales values are locked in RPM; BOM changes stay in RPM and do not update Xero.`
+              : linked
               ? "Review both sets of lines. Pushing replaces every line on this draft invoice with the RPM selling lines."
               : "Find the draft sales invoice by its existing number. Linking does not change it in Xero."}
           </DialogDescription>
@@ -169,7 +172,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
             <Input aria-label="Xero invoice number" value={number} onChange={(event) => { setNumber(event.target.value); setPreview(null) }} placeholder="Existing invoice number" />
             <Button variant="secondary" onClick={showPreview} disabled={busy || !number.trim()}>Find</Button>
           </div>}
-          {linked && !preview && <Button variant="secondary" onClick={showPreview} disabled={busy}>{busy ? "Loading…" : "Preview changes"}</Button>}
+          {linked && !approvedImport && !preview && <Button variant="secondary" onClick={showPreview} disabled={busy}>{busy ? "Loading…" : "Preview changes"}</Button>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {preview && <div className="space-y-3 text-sm">
             <div className="rounded-md border p-3">

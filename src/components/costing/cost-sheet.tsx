@@ -523,7 +523,9 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     // ── totals (per one of this item) ───────────────────────────
     const cost = lines.reduce((s, l) => s + lineCost(l), 0)
     const calculatedSell = lines.reduce((s, l) => s + lineSell(l), 0)
-    const finalSell = effectiveBuildSell(calculatedSell, item.unit_price)
+    const finalSell = item.xero_imported_line && item.xero_line_amount != null && Number(item.qty) !== 0
+        ? Number(item.xero_line_amount) / Number(item.qty)
+        : effectiveBuildSell(calculatedSell, item.unit_price)
     const margin = sellMargin(cost, finalSell)
     const totalHours = lines.filter((l) => l.section === "Labour").reduce((s, l) => s + Number(l.qty), 0)
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)

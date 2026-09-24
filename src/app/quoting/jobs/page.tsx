@@ -550,7 +550,11 @@ export default function ActiveJobsPage() {
                                             <div className="mt-2 font-semibold tabular-nums">{nz(preview.total)}</div>
                                         </div>
                                     </div>
-                                    <div className="pt-2 border-t text-xs text-muted-foreground">{preview.lines.length} {preview.lines.length === 1 ? "line item" : "line items"} will be imported as editable RPM items. Xero does not contain RPM cost/BOM data, so imported item cost starts at $0 until you add it.</div>
+                                    <div className="pt-2 border-t text-xs text-muted-foreground">{preview.lines.length} {preview.lines.length === 1 ? "line item" : "line items"} will be imported for BOMs. Xero does not contain RPM cost/BOM data, so imported item cost starts at $0 until you add it.</div>
+                                    <div className="max-h-36 overflow-y-auto divide-y text-xs">
+                                        {preview.lines.map((line) => <div key={line.index} className="flex justify-between gap-3 py-1.5"><span className="min-w-0 truncate">{line.description || line.itemCode || `Line ${line.index + 1}`}</span><span className="shrink-0 tabular-nums">{line.quantity} × {nz(line.unitAmount)} · {nz(line.lineAmount)}</span></div>)}
+                                    </div>
+                                    {(preview.status === "AUTHORISED" || preview.status === "PAID") && <div className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-foreground">Approved invoice: RPM will preserve these sales values. You can build BOMs under the lines; BOM changes will not update Xero.</div>}
                                 </div>
 
                                 <div className="grid gap-4 sm:grid-cols-2">

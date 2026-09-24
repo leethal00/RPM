@@ -4,6 +4,7 @@ import { NextRequest } from "next/server"
 const state = vi.hoisted(() => ({
   existingInvoiceId: null as string | null,
   existingInvoiceNumber: null as string | null,
+  importedStatus: null as string | null,
   saved: null as Record<string, unknown> | null,
   productionDetails: "To manufacture and install the new site graphics package",
   productionContact: "Store manager",
@@ -27,7 +28,7 @@ vi.mock("@/lib/xero", () => ({
           details: "Original quote scope", production_details: state.productionDetails,
           contact_name: "Original quote contact", production_contact_name: state.productionContact,
           is_template: false, status: "in_progress", xero_quote_id: null,
-          xero_invoice_id: state.existingInvoiceId, xero_invoice_number: state.existingInvoiceNumber,
+          xero_invoice_id: state.existingInvoiceId, xero_invoice_number: state.existingInvoiceNumber, xero_invoice_import_status: state.importedStatus,
           clients: { name: "Mcdonalds" }, stores: { name: "Hewletts Road" },
         }, error: null }) }) }),
         update: (payload: Record<string, unknown>) => {
@@ -48,6 +49,7 @@ describe("RPM-first Xero invoice creation", () => {
   beforeEach(() => {
     state.existingInvoiceId = null
     state.existingInvoiceNumber = null
+    state.importedStatus = null
     state.saved = null
     state.productionDetails = "To manufacture and install the new site graphics package"
     state.productionContact = "Store manager"
@@ -135,6 +137,17 @@ describe("RPM-first Xero invoice creation", () => {
       method: "POST", body: JSON.stringify({ action: "create", contactId }),
     })
     const response = await POST(request, { params: Promise.resolve({ id: "job-1" }) })
+    expect(response.status).toBe(409)
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it("never pushes sales changes for an imported approved invoice", async () => {
+    state.existingInvoiceId = "invoice-1"
+    state.existingInvoiceNumber = "INV-9000"
+    state.importedStatus = "AUTHORISED"
+    const response = await POST(new NextRequest("http://localhost/api/xero/invoices/job-1", {
+      method: "POST", body: JSON.stringify({ action: "push", expectedUpdatedAt: "2026-09-24T00:00:00Z" }),
+    }), { params: Promise.resolve({ id: "job-1" }) })
     expect(response.status).toBe(409)
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
   })

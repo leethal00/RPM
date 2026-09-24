@@ -49,7 +49,10 @@ export function EstVsActual({ job }: { job: CostingJob }) {
     const estMatCost = matLines.reduce((s, l) => s + qtyOf(l) * Number(l.qty) * Number(l.unit_cost), 0)
     const estSimpleCost = simpleItems.reduce((s, i) => s + Number(i.qty) * Number(i.unit_cost), 0)
     const estTotalCost = estLabourCost + estMatCost + estSimpleCost
-    const sell = job.adjusted_total != null
+    const approvedImport = job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID"
+    const sell = approvedImport
+        ? items.reduce((s, item) => s + Number(item.xero_line_amount ?? (Number(item.qty) * Number(item.unit_price))), 0)
+        : job.adjusted_total != null
         ? Number(job.adjusted_total)
         : lines.reduce((s, l) => s + qtyOf(l) * Number(l.qty) * unitSell(l), 0)
           + simpleItems.reduce((s, i) => s + Number(i.qty) * Number(i.unit_price), 0)

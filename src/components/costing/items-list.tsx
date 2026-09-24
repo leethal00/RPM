@@ -28,6 +28,8 @@ type XeroProduct = { id: string; code: string; name: string; description: string
 type Suggestion = { key: string; source: "rpm" | "xero"; name: string; detail: string; sell: number; rpm?: CostingItem; xero?: XeroProduct }
 
 export function ItemsList({ job }: { job: CostingJob }) {
+    const approvedImport = job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID"
+    const lockedLine = (item: CostingItem) => approvedImport && item.xero_imported_line
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
     const [items, setItems] = useState<CostingItem[]>([])
@@ -88,6 +90,13 @@ export function ItemsList({ job }: { job: CostingJob }) {
 
     function unit(it: CostingItem) {
         if (isSectionHeading(it) || isNote(it)) return { cost: 0, sell: 0 }
+        if (lockedLine(it)) {
+            const itemLines = lines.filter(line => line.item_id === it.id)
+            return {
+                cost: it.mode === "simple" ? Number(it.unit_cost) : itemLines.reduce((total, line) => total + lineCost(line), 0),
+                sell: Number(it.xero_unit_amount ?? it.unit_price),
+            }
+        }
         if (it.mode === "simple") return { cost: Number(it.unit_cost), sell: Number(it.unit_price) }
         const ls = lines.filter(l => l.item_id === it.id)
         const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
@@ -128,8 +137,8 @@ export function ItemsList({ job }: { job: CostingJob }) {
 
     const rows = items.map(it => {
         const u = unit(it)
-        const qty = Number(it.qty) || 1
-        return { it, unitCost: u.cost, unitSell: u.sell, totalCost: qty * u.cost, totalSell: qty * u.sell }
+        const qty = Number(it.qty ?? 1)
+        return { it, unitCost: u.cost, unitSell: u.sell, totalCost: qty * u.cost, totalSell: lockedLine(it) && it.xero_line_amount != null ? Number(it.xero_line_amount) : qty * u.sell }
     })
     const jobCost = rows.reduce((a, r) => a + r.totalCost, 0)
     const jobSell = rows.reduce((a, r) => a + r.totalSell, 0)
@@ -137,6 +146,11 @@ export function ItemsList({ job }: { job: CostingJob }) {
     const margin = sellMargin(jobCost, jobSell)
 
     async function patchItem(id: string, patch: Partial<CostingItem>) {
+        const current = items.find(item => item.id === id)
+        if (current && lockedLine(current) && ["name", "details", "qty", "unit_price", "sort", "xero_line_amount", "xero_unit_amount"].some(key => key in patch)) {
+            toast.error("Approved Xero sales values are locked. Edit the BOM instead.")
+            return
+        }
         setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i))
         const { error } = await supabase.from("costing_items").update(patch).eq("id", id)
         if (error) toast.error(error.message)
@@ -400,14 +414,14 @@ export function ItemsList({ job }: { job: CostingJob }) {
     return (
         <div className="mt-6 space-y-5">
             <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Items in this job — drag the handle or use the arrows to change the order sent to Xero.</p>
-                <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">{approvedImport ? "Imported Xero sales lines are fixed. Open a line to build its BOM and track costs." : "Items in this job — drag the handle or use the arrows to change the order sent to Xero."}</p>
+                {!approvedImport && <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-xs" onClick={openProducts}><Package2 className="size-3.5" /> Add product</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => addItem("build")}><Plus className="size-3.5" /> Build item</Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => addItem("simple")}><Plus className="size-3.5" /> Simple item</Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={addSectionHeading}><Plus className="size-3.5" /> Section heading</Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={addNote}><Plus className="size-3.5" /> Note</Button>
-                </div>
+                </div>}
             </div>
 
             {rows.length === 0 ? (
@@ -425,7 +439,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const heading = isSectionHeading(it)
                                 const note = isNote(it)
                                 const sectionNumber = heading ? items.slice(0, rowIndex + 1).filter(isSectionHeading).length : 0
-                                const m = us > 0 ? 1 - unitCost / us : 0
+                                const m = totalSell > 0 ? 1 - Number(it.qty ?? 1) * unitCost / totalSell : 0
                                 const build = it.mode === "build"
                                 const suggestions = !heading && !build && editingName === it.id ? suggestionsFor(it) : []
                                 const showDetails = hasQuoteFacingDetails(it)
@@ -439,13 +453,24 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                         <FileText className="size-3.5" />
                                     </Link>
                                 ) : null
+                                if (lockedLine(it)) return <tr key={it.id} className="border-t border-border/60 bg-amber-500/5">
+                                    <td className="px-2 py-1.5" />
+                                    <td className="px-3 py-1.5 align-top"><div className="font-medium">{it.name}</div>{it.details && <div className="whitespace-pre-line text-xs text-muted-foreground">{it.details}</div>}<div className="text-[11px] text-muted-foreground">Approved Xero sales line · BOM editable</div></td>
+                                    <td className="px-2 py-1.5 align-top"><button type="button" onClick={() => void openItemEditor(it)}><Badge variant="secondary">{build ? "Build" : "Add BOM"}</Badge></button></td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums align-top">{it.qty}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums align-top">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={value => patchItem(it.id, { unit_cost: value ?? 0 })} />}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums align-top">{it.xero_unit_amount ?? it.unit_price}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums font-medium align-top">{nz(totalSell)}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground align-top">{pct(m)}</td>
+                                    <td className="px-1 py-1.5 text-right align-top">{build && <button onClick={() => void openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{jobCardLink}</td>
+                                </tr>
                                 const handleCell = <td className="pl-1 pr-0 py-1 align-middle"><div className="flex items-center gap-0"><button type="button" draggable onDragStart={e => { setDraggingId(it.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.id) }} onDragEnd={() => setDraggingId(null)} className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/60 hover:text-foreground" title="Drag to reorder"><GripVertical className="size-3.5" /></button><div className="flex flex-col"><button type="button" disabled={rowIndex === 0} onClick={() => void moveItem(it.id, -1)} className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20"><ArrowUp className="size-3" /></button><button type="button" disabled={rowIndex === rows.length - 1} onClick={() => void moveItem(it.id, 1)} className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-20"><ArrowDown className="size-3" /></button></div></div></td>
                                 if (note) return <tr key={it.id} onDragOver={e => { if (!draggingId || draggingId === it.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move" }} onDrop={e => { e.preventDefault(); if (draggingId) void reorderItems(draggingId, it.id) }} className={`border-t border-border/60 group bg-amber-50/30 dark:bg-amber-950/10 ${draggingId === it.id ? "opacity-50" : ""}`}>{handleCell}<td colSpan={7} className="px-3 py-2"><textarea autoFocus={editingName === it.id} value={nameDraft[it.id] ?? it.name ?? ""} placeholder={"NOTES:\n- Details\n- Terms\n- Comments"} onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })) }} onChange={e => setNameDraft(d => ({ ...d, [it.id]: e.target.value }))} onBlur={() => void commitName(it)} rows={4} className="w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-sm leading-5 outline-none focus:border-ring" /></td><td className="px-1 py-1.5 text-right"><button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></td></tr>
                                 if (heading) return <tr key={it.id} onDragOver={e => { if (!draggingId || draggingId === it.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move" }} onDrop={e => { e.preventDefault(); if (draggingId) void reorderItems(draggingId, it.id) }} className={`border-t border-border/60 group bg-muted/35 ${draggingId === it.id ? "opacity-50" : ""}`}>{handleCell}<td colSpan={7} className="px-3 py-2"><div className="flex items-center gap-2 font-semibold tracking-wide"><span className="shrink-0 tabular-nums">{sectionNumber}.</span><input autoFocus={editingName === it.id} value={nameDraft[it.id] ?? it.name ?? ""} placeholder="SECTION HEADING" onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })) }} onChange={e => setNameDraft(d => ({ ...d, [it.id]: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") setEditingName(null) }} onBlur={() => void commitName(it)} className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold uppercase tracking-wide outline-none hover:border-input focus:border-input" /></div></td><td className="px-1 py-1.5 text-right"><button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></td></tr>
                                 return <tr key={it.id} onDragOver={e => { if (!draggingId || draggingId === it.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move" }} onDrop={e => { e.preventDefault(); if (draggingId) void reorderItems(draggingId, it.id) }} className={`border-t border-border/60 group ${draggingId === it.id ? "opacity-50" : ""}`}>{handleCell}<td className="px-3 py-1.5 relative align-top">{build ? <div><div className="flex items-start gap-1">{detailToggle}<div className="min-w-0 flex-1"><TextCell value={it.name} placeholder="Item name" onCommit={v => patchItem(it.id, { name: v })} /></div></div>{detailsOpen && quoteFacingDetailRows(it)}</div> : <><div className="flex items-start gap-1">{detailToggle}<input value={nameDraft[it.id] ?? it.name ?? ""} placeholder="Start typing an item…" onFocus={() => { setEditingName(it.id); setNameDraft(d => ({ ...d, [it.id]: d[it.id] ?? it.name ?? "" })); loadLibraries() }} onChange={e => { setNameDraft(d => ({ ...d, [it.id]: e.target.value })); setEditingName(it.id) }} onKeyDown={e => { if (e.key === "Enter" && suggestions[0]) { e.preventDefault(); chooseSuggestion(it, suggestions[0]) } else if (e.key === "Escape") setEditingName(null) }} onBlur={() => setTimeout(() => commitName(it), 150)} className="min-w-0 flex-1 rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none" /></div>{detailsOpen && quoteFacingDetailRows(it)}{suggestions.length > 0 && <div className="absolute z-50 left-3 right-0 top-[calc(100%-2px)] bg-background border border-border rounded-md shadow-lg overflow-hidden min-w-[420px]">{suggestions.map(s => <button key={s.key} type="button" onMouseDown={e => e.preventDefault()} onClick={() => chooseSuggestion(it, s)} className="w-full px-3 py-2 text-left hover:bg-muted/60 border-b last:border-b-0 flex gap-3 items-start"><span className="flex-1 min-w-0"><span className="flex items-center gap-2"><span className="font-medium">{s.name}</span><Badge variant="secondary" className={s.source === "rpm" ? "text-[10px] bg-violet-500/15 text-violet-600" : "text-[10px] bg-blue-500/15 text-blue-600"}>{s.source === "rpm" ? "RPM" : "Xero"}</Badge></span>{s.detail && <span className="block text-xs text-muted-foreground truncate">{s.detail}</span>}</span><span className="tabular-nums text-sm">{s.sell ? nz(s.sell) : ""}</span></button>)}</div>}</>}</td><td className="px-2 py-1.5 align-top"><button type="button" onClick={() => openItemEditor(it)}><Badge variant="secondary" className={build ? "bg-violet-500/15 text-violet-600" : "bg-slate-500/15 text-slate-600"}>{build ? "Build" : "Simple"}</Badge></button></td><td className="px-2 py-1.5 align-top"><NumCell value={it.qty} onCommit={v => patchItem(it.id, { qty: v ?? 1 })} /></td><td className="px-2 py-1.5 text-right tabular-nums align-top">{build ? nz(unitCost) : <NumCell value={Number(it.unit_cost)} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_cost: v ?? 0 })} />}</td><td className="px-2 py-1.5 text-right tabular-nums align-top"><NumCell value={us} decimals={2} step="0.01" onCommit={v => patchItem(it.id, { unit_price: v ?? 0 })} /></td><td className="px-2 py-1.5 text-right tabular-nums font-medium align-top">{nz(totalSell)}</td><td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground align-top">{pct(m)}</td><td className="px-1 py-1.5 align-top"><div className="flex justify-end gap-1">{build && <button onClick={() => openItemEditor(it)} className="inline-flex items-center text-xs text-primary hover:underline">BOM <ChevronRight className="size-3.5" /></button>}{jobCardLink}{build && <button onClick={() => saveAsProduct(it)} className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100"><Package2 className="size-3.5" /></button>}<button onClick={() => setCopyTarget(it)} className="p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100" title="Copy item"><Copy className="size-3.5" /></button><button onClick={() => setDeleteTarget(it)} className="p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"><Trash2 className="size-3.5" /></button></div></td></tr>
                             })}
                         </tbody>
-                        <tfoot className="bg-muted/20 border-t border-border/70"><tr><td></td><td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">Quote totals</td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td><td></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td></tr></tfoot>
+                        <tfoot className="bg-muted/20 border-t border-border/70"><tr><td></td><td colSpan={3} className="px-3 py-3 text-right text-xs font-medium text-muted-foreground">{approvedImport ? "Xero sales / RPM costs" : "Quote totals"}</td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Cost</div><div className="font-semibold tabular-nums">{nz(jobCost)}</div></td><td></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Total</div><div className="font-semibold tabular-nums">{nz(jobSell)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Margin</div><div className="font-semibold tabular-nums">{pct(margin)}</div></td><td className="px-2 py-3 text-right"><div className="text-[11px] text-muted-foreground">Profit</div><div className={`font-semibold tabular-nums ${profit < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{nz(profit)}</div></td></tr></tfoot>
                     </table>
                 </div>
             )}
