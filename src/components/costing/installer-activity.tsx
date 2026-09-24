@@ -6,23 +6,27 @@ import { createClient } from "@/lib/supabase/client"
 
 type Session = { id: string; kind: string; started_at: string; stopped_at: string | null; user_id: string; users?: {name:string|null} | null }
 type Photo = { id: string; storage_path: string; caption: string | null; captured_at: string; user_id: string; users?: {name:string|null} | null; url?: string }
+type InstallerNote = { id: string; body: string; created_at: string; user_id: string; users?: {name:string|null} | null }
 
 export function InstallerActivity({ jobId }: { jobId: string }) {
   const supabase = useMemo(() => createClient(), [])
   const [sessions, setSessions] = useState<Session[]>([])
   const [photos, setPhotos] = useState<Photo[]>([])
+  const [notes, setNotes] = useState<InstallerNote[]>([])
   const [error, setError] = useState("")
 
   useEffect(() => {
     let live = true
     ;(async () => {
-      const [timeResult, photoResult] = await Promise.all([
+      const [timeResult, photoResult, noteResult] = await Promise.all([
         supabase.from("installer_time_sessions").select("id,kind,started_at,stopped_at,user_id,users(name)").eq("job_id",jobId).order("started_at",{ascending:false}),
         supabase.from("installer_photos").select("id,storage_path,caption,captured_at,user_id,users(name)").eq("job_id",jobId).order("captured_at",{ascending:false}),
+        supabase.from("installer_job_notes").select("id,body,created_at,user_id,users(name)").eq("job_id",jobId).order("created_at",{ascending:false}),
       ])
       if (!live) return
-      if (timeResult.error || photoResult.error) { setError(timeResult.error?.message || photoResult.error?.message || "Could not load installer activity"); return }
+      if (timeResult.error || photoResult.error || noteResult.error) { setError(timeResult.error?.message || photoResult.error?.message || noteResult.error?.message || "Could not load installer activity"); return }
       setSessions((timeResult.data || []) as Session[])
+      setNotes((noteResult.data || []) as InstallerNote[])
       const photoRows = (photoResult.data || []) as Photo[]
       const signed = await Promise.all(photoRows.map(async photo => {
         const { data } = await supabase.storage.from("installer-photos").createSignedUrl(photo.storage_path, 300)
@@ -35,6 +39,12 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
 
   return <div className="space-y-5 py-3">
     {error && <p className="text-sm text-destructive">{error}</p>}
+    <section><h3 className="font-semibold">Installer notes</h3>
+      {notes.length ? <div className="mt-2 divide-y rounded border">{notes.map(note => <div key={note.id} className="p-3 text-sm">
+        <p className="whitespace-pre-wrap">{note.body}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{note.users?.name || "Installer"} · {new Date(note.created_at).toLocaleString("en-NZ")}</p>
+      </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No installer notes yet.</p>}
+    </section>
     <section><h3 className="font-semibold">Travel and work</h3>
       {sessions.length ? <div className="mt-2 divide-y rounded border">{sessions.map(s => <div key={s.id} className="flex justify-between gap-3 p-3 text-sm">
         <span className="capitalize">{s.users?.name || "Installer"} · {s.kind}</span><span>{new Date(s.started_at).toLocaleString("en-NZ")}</span>
@@ -49,3 +59,4 @@ export function InstallerActivity({ jobId }: { jobId: string }) {
     </section>
   </div>
 }
+

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Linking, Text, TextInput, View } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Document, Photo, SitePhoto, Timer, documentUrl, photoUrl, timerAction, workspace } from '../../lib/api';
+import { Document, InstallerNote, Photo, SitePhoto, Timer, addJobNote, documentUrl, jobNotes, photoUrl, timerAction, workspace } from '../../lib/api';
 import { enqueuePhoto, queuedFor, syncPhotos } from '../../lib/photo-queue';
 import { useInstallerSession } from '../../lib/session';
 import { Button, Card, ErrorText, Loading, Page, Title, colors, styles } from '../../lib/ui';
@@ -15,13 +15,17 @@ export default function JobDetail() {
   const [job, setJob] = useState<Awaited<ReturnType<typeof workspace>>['job']>(null);
   const [docs, setDocs] = useState<Document[]>([]); const [photos, setPhotos] = useState<Photo[]>([]);
   const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([]);
+  const [notes, setNotes] = useState<InstallerNote[]>([]);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const [timer, setTimer] = useState<Timer | null>(null); const [pending, setPending] = useState(0);
   const [caption, setCaption] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(0); const [photoUrls, setPhotoUrls] = useState<Record<string,string>>({});
   const refresh = useCallback(async () => {
     if (!allowed || !session || !id) return;
     try {
-      const data = await workspace(id); setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setError('');
+      const [data, savedNotes] = await Promise.all([workspace(id), jobNotes(id)]);
+      setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setError('');
       setPending((await queuedFor(session.user.id)).filter(p => p.jobId === id).length);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not load job.'); }
   }, [allowed, session, id]);
@@ -29,7 +33,7 @@ export default function JobDetail() {
   useEffect(() => { const interval = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(interval); }, []);
   useEffect(() => { photos.forEach(p => { void photoUrl(p.path).then(url => setPhotoUrls(prev => ({ ...prev, [p.id]: url }))).catch(() => {}); }); }, [photos]);
   if (!ready) return <Loading />;
-  if (!allowed || !session) { router.replace('/login'); return null; }
+  if (!allowed || !session) return <Redirect href="/login" />;
   async function changeTimer(kind: 'travel' | 'work', action: 'start' | 'stop') {
     if (!id) return; setBusy(true); setError('');
     try { await timerAction(id, kind, action); await refresh(); }
@@ -61,6 +65,16 @@ export default function JobDetail() {
     try { await Linking.openURL(await documentUrl(path)); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not open document.'); }
   }
+  async function saveNote() {
+    if (!id || !noteDraft.trim() || savingNote) return;
+    setSavingNote(true); setError('');
+    try {
+      const saved = await addJobNote(id, noteDraft.trim());
+      setNotes(current => [saved, ...current]);
+      setNoteDraft('');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save note. Try again when connected.'); }
+    finally { setSavingNote(false); }
+  }
   if (!job) return <Page>{error ? <ErrorText message={error} /> : <Loading />}</Page>;
   const elapsed = timer ? Math.max(0, Math.floor((now-new Date(timer.started_at).getTime())/1000)) : 0;
   const clock = `${Math.floor(elapsed/3600).toString().padStart(2,'0')}:${Math.floor(elapsed%3600/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`;
@@ -78,7 +92,18 @@ export default function JobDetail() {
       })}
       {!canRecord ? <Text style={styles.muted}>Time entry is closed for this job.</Text> : null}
     </Card>
-    <Card><Text style={styles.heading}>Installation notes</Text><Text style={styles.muted}>{job.installation_notes || 'No installation notes yet.'}</Text></Card>
+    <Card><Text style={styles.heading}>Installation instructions</Text><Text style={styles.muted}>{job.installation_notes || 'No installation instructions yet.'}</Text></Card>
+    <Card><Text style={styles.heading}>Installer notes</Text>
+      {canRecord ? <>
+        <TextInput style={[styles.input, { minHeight: 110, textAlignVertical: 'top' }]} multiline
+          placeholder="Add an update from site…" value={noteDraft} onChangeText={setNoteDraft} maxLength={4000} />
+        <Button disabled={savingNote || !noteDraft.trim()} onPress={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to RPM'}</Button>
+      </> : <Text style={styles.muted}>Notes can be added when this job is approved or in progress.</Text>}
+      {notes.length ? notes.map(note => <View key={note.id} style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }}>
+        <Text style={{ color: colors.ink }}>{note.body}</Text>
+        <Text style={styles.muted}>{note.author} · {new Date(note.created_at).toLocaleString()}</Text>
+      </View>) : <Text style={styles.muted}>No installer notes yet.</Text>}
+    </Card>
     <Card><Text style={styles.heading}>Photos</Text>
       <TextInput style={styles.input} placeholder="Optional photo caption" value={caption} onChangeText={setCaption} maxLength={500} />
       <Button disabled={!canRecord} onPress={() => void addPhotos(true)}>Take photo</Button>
@@ -93,3 +118,4 @@ export default function JobDetail() {
     </Card>
   </Page>;
 }
+
