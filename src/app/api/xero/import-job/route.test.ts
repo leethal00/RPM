@@ -70,7 +70,7 @@ describe("Xero invoice import", () => {
             ok: true,
             text: async () => JSON.stringify({ Invoices: [{
                 InvoiceID: "xero-invoice-1", InvoiceNumber: invoiceNumber, Type: "ACCREC", Status: state.status,
-                Reference: "Gateway signs", Total: 1115.5, Contact: { Name: "Brave Design", ContactID: "contact-1" },
+                Reference: "Gateway signs", DateString: "2026-09-21T00:00:00", Total: 1115.5, Contact: { Name: "Brave Design", ContactID: "contact-1" },
                 ...(input.includes("/Invoices/xero-invoice-1") && state.detailLines ? { LineItems: [
                     { LineItemID: "line-1", Description: "Gateway Plinth Signs\nFabricated steel", Quantity: 2, UnitAmount: 485, LineAmount: 970 },
                     { LineItemID: "line-2", Description: "Discounted fitting", Quantity: 1, UnitAmount: 150, LineAmount: 145.5 },
@@ -84,7 +84,7 @@ describe("Xero invoice import", () => {
         const body = await response.json()
 
         expect(response.status).toBe(200)
-        expect(body.invoice).toMatchObject({ invoiceNumber, status: "AUTHORISED", total: 1115.5 })
+        expect(body.invoice).toMatchObject({ invoiceNumber, status: "AUTHORISED", date: "2026-09-21T00:00:00", total: 1115.5 })
         expect(body.invoice.lines).toHaveLength(2)
         expect(body.invoice.lines[1].lineAmount).toBe(145.5)
         expect(body.invoice.contactName).toBe("Brave Design")
@@ -106,6 +106,7 @@ describe("Xero invoice import", () => {
             xero_invoice_number: invoiceNumber,
             client_id: "client-1",
             store_id: "site-1",
+            completion_date: "2026-09-21",
         })
         expect(state.lines).toMatchObject([
             { job_id: "job-1", name: "Gateway Plinth Signs", details: "Fabricated steel", qty: 2, unit_price: 485, xero_imported_line: true, xero_line_item_id: "line-1", xero_line_amount: 970 },
@@ -115,6 +116,15 @@ describe("Xero invoice import", () => {
         expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
         expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBeUndefined()
         expect(vi.mocked(fetch).mock.calls[1][1]?.method).toBeUndefined()
+    })
+
+    it("keeps a completion date chosen in RPM", async () => {
+        const response = await POST(new NextRequest(url, {
+            method: "POST",
+            body: JSON.stringify({ invoiceNumber, completionDate: "2026-10-02" }),
+        }))
+        expect(response.status).toBe(200)
+        expect(state.job?.completion_date).toBe("2026-10-02")
     })
 
     it("retains the existing draft import path", async () => {

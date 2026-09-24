@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
                 status: "in_progress",
                 xero_invoice_id: invoice.InvoiceID,
                 xero_invoice_number: invoiceNumber,
-                completion_date: body.completionDate || null,
+                completion_date: body.completionDate || invoice.DateString?.slice(0, 10) || null,
                 is_template: false,
                 created_by: auth.user.id,
                 quoted_by: auth.user.id,

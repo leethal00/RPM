@@ -331,6 +331,7 @@ export default function ActiveJobsPage() {
         setCreatingSite(false)
         setPreview(null)
         setImportError(null)
+        setCompletionDate("")
         setSelectedClient("auto")
         setSelectedStore("none")
         if (!clients.length || !stores.length) {
@@ -372,6 +373,7 @@ export default function ActiveJobsPage() {
             const invoice = body.invoice as ImportPreview
             setPreview(invoice)
             setImportTitle(invoice.reference || invoice.invoiceNumber)
+            setCompletionDate(invoice.date?.slice(0, 10) || "")
             const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
             setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
             setSelectedStore("none")
@@ -518,7 +520,7 @@ export default function ActiveJobsPage() {
                 </Dialog>
 
                 <Dialog open={importOpen} onOpenChange={setImportOpen}>
-                    <DialogContent className="sm:max-w-[680px]">
+                    <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-[680px]">
                         <DialogHeader>
                             <DialogTitle>{creatingSite ? "Create new site" : "Import a Xero invoice as a job"}</DialogTitle>
                             {!creatingSite && <DialogDescription>Use this when the invoice already exists in Xero. Start new work with New job instead.</DialogDescription>}
@@ -534,8 +536,8 @@ export default function ActiveJobsPage() {
                                 onCancel={() => setCreatingSite(false)}
                             />
                         ) : <>
-                        <div className="space-y-4">
-                            <div className="flex gap-2">
+                        <div className="min-w-0 space-y-4">
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                                 <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void lookupInvoice() }} placeholder="Invoice number, e.g. INV-7569" />
                                 <Button onClick={lookupInvoice} disabled={lookingUp || !invoiceSearch.trim()}>{lookingUp ? "Looking…" : "Find invoice"}</Button>
                             </div>
@@ -543,48 +545,48 @@ export default function ActiveJobsPage() {
                             {importError && <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{importError}</div>}
 
                             {preview && <>
-                                <div className="rounded-lg border border-border/60 p-4 space-y-2">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
+                                <div className="min-w-0 rounded-lg border border-border/60 p-4 space-y-2">
+                                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                                        <div className="min-w-0 break-words">
                                             <div className="font-semibold">{preview.invoiceNumber}</div>
                                             <div className="text-sm text-muted-foreground">{preview.contactName || "No Xero contact"}</div>
                                             {preview.reference && <div className="text-sm mt-1">Reference: {preview.reference}</div>}
                                         </div>
-                                        <div className="text-right">
+                                        <div className="shrink-0 sm:text-right">
                                             <Badge variant="secondary">{preview.status || "Xero invoice"}</Badge>
                                             <div className="mt-2 font-semibold tabular-nums">{nz(preview.total)}</div>
                                         </div>
                                     </div>
                                     <div className="pt-2 border-t text-xs text-muted-foreground">{preview.lines.length} {preview.lines.length === 1 ? "line item" : "line items"} will be imported for BOMs. Xero does not contain RPM cost/BOM data, so imported item cost starts at $0 until you add it.</div>
                                     <div className="max-h-36 overflow-y-auto divide-y text-xs">
-                                        {preview.lines.map((line) => <div key={line.index} className="flex justify-between gap-3 py-1.5"><span className="min-w-0 truncate">{line.description || line.itemCode || `Line ${line.index + 1}`}</span><span className="shrink-0 tabular-nums">{line.quantity} × {nz(line.unitAmount)} · {nz(line.lineAmount)}</span></div>)}
+                                        {preview.lines.map((line) => <div key={line.index} className="flex min-w-0 flex-col gap-1 py-1.5 sm:flex-row sm:justify-between sm:gap-3"><span className="min-w-0 truncate">{line.description || line.itemCode || `Line ${line.index + 1}`}</span><span className="shrink-0 tabular-nums">{line.quantity} × {nz(line.unitAmount)} · {nz(line.lineAmount)}</span></div>)}
                                     </div>
                                     {(preview.status === "AUTHORISED" || preview.status === "PAID") && <div className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-foreground">Approved invoice: RPM will preserve these sales values. You can build BOMs under the lines; BOM changes will not update Xero.</div>}
                                 </div>
 
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <div className="grid gap-2 sm:col-span-2">
+                                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                                    <div className="grid min-w-0 gap-2 sm:col-span-2">
                                         <Label>RPM job title</Label>
                                         <Input value={importTitle} onChange={(event) => setImportTitle(event.target.value)} />
                                     </div>
-                                    <div className="grid gap-2">
+                                    <div className="grid min-w-0 gap-2">
                                         <Label>Customer</Label>
-                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none") }} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none") }} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm">
                                             <option value="auto">{preview.contactName ? `Use Xero customer: ${preview.contactName}` : "Use Xero customer"}</option>
                                             {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                                         </select>
                                     </div>
-                                    <div className="grid gap-2">
-                                        <div className="flex items-center justify-between gap-2">
+                                    <div className="grid min-w-0 gap-2">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
                                             <Label htmlFor="import-site">Site</Label>
                                             <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "auto"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
                                         </div>
-                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto"} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto"} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
                                             <option value="none">Manufacture only / No site</option>
                                             {siteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
                                     </div>
-                                    <div className="grid gap-2">
+                                    <div className="grid min-w-0 gap-2">
                                         <Label>Complete by</Label>
                                         <Input type="date" value={completionDate} onChange={(event) => setCompletionDate(event.target.value)} />
                                     </div>
