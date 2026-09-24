@@ -10,14 +10,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "nz.co.rpm.installer",
+      "buildNumber": "1",
       "infoPlist": { "NSCameraUsageDescription": "Take installation photos for RPM jobs.", "NSPhotoLibraryUsageDescription": "Attach installation photos to RPM jobs." }
     },
     "android": {
       "package": "nz.co.rpm.installer",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#174B38",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
