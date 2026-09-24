@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import JobCardPage from "./page"
 
@@ -32,23 +32,33 @@ describe("production job card internal BOM notes", () => {
   beforeEach(() => { selectedItemId = null })
 
   it("shows each private note on the full job card", async () => {
-    render(<JobCardPage />)
+    const { container } = render(<JobCardPage />)
+    const card = await waitFor(() => {
+      const visibleCard = container.querySelector<HTMLElement>(".job-card-sheet")
+      expect(visibleCard).not.toBeNull()
+      return within(visibleCard!)
+    })
 
-    const firstNote = await screen.findByText("Use the blue backing", { exact: false })
+    const firstNote = card.getByText("Use the blue backing", { exact: false })
     expect(firstNote).not.toHaveTextContent("Front sign")
-    expect(screen.getByText("Front sign")).toBeInTheDocument()
-    expect(screen.getByText("Side sign")).toBeInTheDocument()
-    expect(screen.getByText("Keep this note private", { exact: false })).toBeInTheDocument()
-    expect(screen.queryByText("INTERNAL BOM NOTES")).not.toBeInTheDocument()
+    expect(card.getByText("Front sign")).toBeInTheDocument()
+    expect(card.getByText("Side sign")).toBeInTheDocument()
+    expect(card.getByText("Keep this note private", { exact: false })).toBeInTheDocument()
+    expect(card.queryByText("INTERNAL BOM NOTES")).not.toBeInTheDocument()
   })
 
   it("shows only the selected BOM item's note on its job card", async () => {
     selectedItemId = "first"
-    render(<JobCardPage />)
+    const { container } = render(<JobCardPage />)
+    const card = await waitFor(() => {
+      const visibleCard = container.querySelector<HTMLElement>(".job-card-sheet")
+      expect(visibleCard).not.toBeNull()
+      return within(visibleCard!)
+    })
 
-    expect(await screen.findByText("Use the blue backing", { exact: false })).toBeInTheDocument()
-    expect(screen.getByText("Front sign")).toBeInTheDocument()
-    expect(screen.queryByText("Side sign")).not.toBeInTheDocument()
-    expect(screen.queryByText("Keep this note private", { exact: false })).not.toBeInTheDocument()
+    expect(card.getByText("Use the blue backing", { exact: false })).toBeInTheDocument()
+    expect(card.getByText("Front sign")).toBeInTheDocument()
+    expect(card.queryByText("Side sign")).not.toBeInTheDocument()
+    expect(card.queryByText("Keep this note private", { exact: false })).not.toBeInTheDocument()
   })
 })

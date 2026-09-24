@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -20,6 +20,7 @@ import {
   Hospital,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { paginateJobCard, type JobCardPagePlan } from "@/lib/job-card-pagination"
 import type { CostingJob } from "@/types/database"
 
 const GREEN = "#155f4c"
@@ -102,6 +103,8 @@ type BomLine = {
   sort: number | null
   materials?: { unit?: string | null; is_labour?: boolean | null } | { unit?: string | null; is_labour?: boolean | null }[] | null
 }
+
+type MaterialEntry = { key: string; line: BomLine | null }
 
 function materialMeta(line: BomLine) {
   return Array.isArray(line.materials) ? line.materials[0] : line.materials
@@ -257,6 +260,10 @@ export default function JobCardPage() {
     if (/misc\s*-?\s*consumables?/i.test(line.description)) return false
     return Number(line.qty || 0) !== 0
   })
+  const materialEntries: MaterialEntry[] = [
+    ...materialRows.map((line) => ({ key: line.id, line })),
+    ...rows(Math.max(0, 6 - materialRows.length)).map((_, index) => ({ key: `blank-${index}`, line: null })),
+  ]
 
   const toggleDepartment = (department: string) => {
     setSelectedDepartments((current) => current.includes(department)
@@ -296,6 +303,7 @@ export default function JobCardPage() {
           }
           .job-card-page { width: 210mm; min-height: 0; margin: 0; padding: 0; }
           .no-print { display: none !important; }
+          .job-card-measure { display: none !important; }
           .sheet, .sheet * { box-sizing: border-box; }
           .sheet {
             width: 210mm;
@@ -321,7 +329,7 @@ export default function JobCardPage() {
           <Printer className="size-4" /> Print / Save as PDF
         </button>
       </div>
-      <Sheet>
+      <PaginatedJobCard number={number} materialEntries={materialEntries} intro={<>
         {header}
 
         <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
@@ -359,15 +367,13 @@ export default function JobCardPage() {
           </Box>
         </div>
 
-        <Bar>MATERIALS / PARTS USED</Bar>
-        <MaterialsGrid lines={materialRows} />
-
+      </>} timeLog={<>
         <Bar>TIME LOG</Bar>
         <JobGrid />
         <div className="flex h-[8mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[11.8px] font-bold">
           <span>Total Hours:</span><span className="h-[7mm] w-[17mm] border border-[#7b9e92] bg-white" />
         </div>
-
+      </>} closeout={<>
         <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
           <Box title="ADDITIONAL NOTES / ISSUES" className="min-h-[44mm]">
             <div className="space-y-[1.5mm] break-words text-[11.5px]">
@@ -387,7 +393,7 @@ export default function JobCardPage() {
             </div>
           </Box>
         </div>
-      </Sheet>
+      </>} />
 
       <Sheet className="safety-sheet">
         {header}
@@ -453,9 +459,102 @@ export default function JobCardPage() {
   )
 }
 
+function PaginatedJobCard({
+  number,
+  materialEntries,
+  intro,
+  timeLog,
+  closeout,
+}: {
+  number: string
+  materialEntries: MaterialEntry[]
+  intro: React.ReactNode
+  timeLog: React.ReactNode
+  closeout: React.ReactNode
+}) {
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [pages, setPages] = useState<JobCardPagePlan[] | null>(null)
+
+  useLayoutEffect(() => {
+    const root = measureRef.current
+    if (!root) return
+    const sheet = root.querySelector<HTMLElement>(".sheet")
+    const introSection = root.querySelector<HTMLElement>("[data-measure-intro]")
+    const continuationSection = root.querySelector<HTMLElement>("[data-measure-continuation]")
+    const materialsSection = root.querySelector<HTMLElement>("[data-measure-materials]")
+    const timeSection = root.querySelector<HTMLElement>("[data-measure-time]")
+    const closeoutSection = root.querySelector<HTMLElement>("[data-measure-closeout]")
+    const firstRow = materialsSection?.querySelector<HTMLElement>("[data-material-row]")
+    if (!sheet || !introSection || !continuationSection || !materialsSection || !timeSection || !closeoutSection || !firstRow) return
+
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const sheetHeight = sheet.getBoundingClientRect().height
+      if (sheetHeight === 0) {
+        // Environments without layout measurements (for example JSDOM) can
+        // still render the complete card content.
+        setPages([{ materialIndexes: materialEntries.map((_, index) => index), showTimeLog: true, showCloseout: true }])
+        return
+      }
+      const sheetStyle = getComputedStyle(sheet)
+      // Leave space for the printed continuation cue and a small rounding allowance.
+      const availableHeight = sheetHeight
+        - parseFloat(sheetStyle.paddingTop) - parseFloat(sheetStyle.paddingBottom)
+        - 10 * 96 / 25.4
+      setPages(paginateJobCard({
+        availableHeight,
+        introHeight: introSection.getBoundingClientRect().height,
+        continuationHeight: continuationSection.getBoundingClientRect().height,
+        materialsHeadingHeight: firstRow.getBoundingClientRect().top - materialsSection.getBoundingClientRect().top,
+        materialRowHeights: Array.from(materialsSection.querySelectorAll<HTMLElement>("[data-material-row]"), (row) => row.getBoundingClientRect().height),
+        timeLogHeight: timeSection.getBoundingClientRect().height,
+        closeoutHeight: closeoutSection.getBoundingClientRect().height,
+      }))
+    }
+
+    measure()
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
+    ;[introSection, continuationSection, materialsSection, timeSection, closeoutSection].forEach((section) => observer?.observe(section))
+    document.fonts?.ready.then(measure)
+    window.addEventListener("resize", measure)
+    return () => { active = false; observer?.disconnect(); window.removeEventListener("resize", measure) }
+  }, [intro, materialEntries, number, timeLog, closeout])
+
+  return <>
+    <div ref={measureRef} className="job-card-measure pointer-events-none invisible absolute -left-[10000px] top-0" aria-hidden="true">
+      <Sheet>
+        <div data-measure-intro className="flow-root">{intro}</div>
+        <div data-measure-continuation className="flow-root"><ContinuationHeader number={number} /></div>
+        <section data-measure-materials className="flow-root"><Bar>MATERIALS / PARTS USED</Bar><MaterialsGrid entries={materialEntries} /></section>
+        <section data-measure-time className="flow-root">{timeLog}</section>
+        <section data-measure-closeout className="flow-root">{closeout}</section>
+      </Sheet>
+    </div>
+    {pages?.map((page, index) => <Sheet key={index} className="job-card-sheet">
+      {index === 0 ? <div className="flow-root">{intro}</div> : <ContinuationHeader number={number} />}
+      {page.materialIndexes.length > 0 && <section className="flow-root">
+        <Bar>MATERIALS / PARTS USED{index > 0 ? " (continued)" : ""}</Bar>
+        <MaterialsGrid entries={page.materialIndexes.map((rowIndex) => materialEntries[rowIndex]).filter((entry): entry is MaterialEntry => !!entry)} />
+      </section>}
+      {page.showTimeLog && <section className="flow-root">{timeLog}</section>}
+      {page.showCloseout && <section className="flow-root">{closeout}</section>}
+      <div className="absolute bottom-[4mm] right-[10mm] text-[10px] font-bold tracking-wide" style={{ color: GREEN }}>
+        {index < pages.length - 1 ? "Continued on next page →" : "Safety information on next page →"}
+      </div>
+    </Sheet>)}
+  </>
+}
+
+function ContinuationHeader({ number }: { number: string }) {
+  return <div className="flex h-[12mm] items-center justify-between border-b-2 border-[#155f4c] text-[14px] font-black" style={{ color: GREEN }}>
+    <span>JOB CARD — CONTINUED</span><span className="text-[12px]">Job No. {number}</span>
+  </div>
+}
+
 function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`sheet box-border mx-auto my-6 h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
+    <div className={`sheet relative box-border mx-auto my-6 h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
       {children}
     </div>
   )
@@ -582,25 +681,23 @@ function JobGrid() {
   )
 }
 
-function MaterialsGrid({ lines }: { lines: BomLine[] }) {
+function MaterialsGrid({ entries }: { entries: MaterialEntry[] }) {
   const headers = ["Date", "Item / Description", "Qty", "Unit", "Notes"]
   const widths = ["9%", "44%", "9%", "9%", "29%"]
-  const blankRows = Math.max(0, 6 - lines.length)
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
       <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
       <tbody>
-        {lines.map((line) => (
-          <tr key={line.id}>
+        {entries.map(({ key, line }) => (
+          <tr key={key} data-material-row>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1.5mm] text-[10.5px]">{line.description}</td>
+            <td className="h-[5.8mm] break-words border border-[#b9c5c1] px-[1.5mm] text-[10.5px]">{line?.description || ""}</td>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.5px]">{materialMeta(line)?.unit || ""}</td>
+            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.5px]">{line ? materialMeta(line)?.unit || "" : ""}</td>
             <td className="h-[5.8mm] border border-[#b9c5c1]" />
           </tr>
         ))}
-        {rows(blankRows).map((_, r) => <tr key={`blank-${r}`}>{headers.map((h) => <td key={h} className="h-[5.8mm] border border-[#b9c5c1]" />)}</tr>)}
       </tbody>
     </table>
   )
