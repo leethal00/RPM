@@ -2,6 +2,7 @@
   "expo": {
     "name": "RPM Mobile",
     "slug": "rpm-mobile",
+    "owner": "rodier-rpm",
     "scheme": "rpminstall",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,7 +30,12 @@
     "plugins": [
       "expo-router",
       ["expo-image-picker", { "cameraPermission": "Take installation photos for RPM jobs.", "photosPermission": "Attach installation photos to RPM jobs." }]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0c2cd86f-9144-43c4-b685-df9e6f9b4744"
+      }
+    }
   }
 }
 
