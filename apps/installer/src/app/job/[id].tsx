@@ -3,7 +3,7 @@ import { Alert, Image, Linking, Pressable, Text, TextInput, View } from 'react-n
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Document, InstallerNote, Material, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, deletablePhotoIds, deleteJobPhoto, documentUrl, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
+import { Document, InstallerNote, Material, MaterialUsed, Photo, PhotoCategory, SitePhoto, TimeEntry, Timer, addJobNote, addMaterialUsed, deletablePhotoIds, deleteJobPhoto, documentUrl, jobMaterials, jobNotes, photoUrl, saveTimeEntry, timerAction, workspace } from '../../lib/api';
 import { enqueuePhoto, queuedFor, syncPhotos } from '../../lib/photo-queue';
 import { useInstallerSession } from '../../lib/session';
 import { Button, Card, ErrorText, Loading, Page, SectionLabel, StatusPill, Title, colors, styles } from '../../lib/ui';
@@ -17,6 +17,13 @@ export default function JobDetail() {
   const [sitePhotos, setSitePhotos] = useState<SitePhoto[]>([]);
   const [notes, setNotes] = useState<InstallerNote[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [usedMaterials, setUsedMaterials] = useState<MaterialUsed[]>([]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [materialDescription, setMaterialDescription] = useState('');
+  const [materialQty, setMaterialQty] = useState('');
+  const [materialUnit, setMaterialUnit] = useState('each');
+  const [materialSupplier, setMaterialSupplier] = useState('');
+  const [savingMaterial, setSavingMaterial] = useState(false);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [editingTimeId, setEditingTimeId] = useState<string | undefined>();
   const [timeDate, setTimeDate] = useState(new Date().toISOString().slice(0, 10));
@@ -35,8 +42,8 @@ export default function JobDetail() {
   const refresh = useCallback(async () => {
     if (!allowed || !session || !id) return;
     try {
-      const [data, savedNotes, canDelete] = await Promise.all([workspace(id), jobNotes(id), role === 'installer' ? deletablePhotoIds(id) : Promise.resolve([])]);
-      setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setMaterials(data.materials ?? []); setTimeEntries(data.time_entries ?? []); setError('');
+      const [data, savedNotes, canDelete, materialData] = await Promise.all([workspace(id), jobNotes(id), role === 'installer' ? deletablePhotoIds(id) : Promise.resolve([]), jobMaterials(id)]);
+      setJob(data.job); setDocs(data.documents); setPhotos(data.photos); setSitePhotos(data.site_photos); setTimer(data.timer); setNotes(savedNotes); setMaterials(materialData.planned); setUsedMaterials(materialData.used); setTimeEntries(data.time_entries ?? []); setError('');
       setDeletablePhotos(role === 'super_admin' ? data.photos.map(photo => photo.id) : canDelete);
       setCategory(data.job?.store_id ? 'Installation' : 'Production');
       setPending((await queuedFor(session.user.id)).filter(p => p.jobId === id).length);
@@ -136,6 +143,25 @@ export default function JobDetail() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save time.'); }
     finally { setSavingTime(false); }
   }
+  function chooseMaterial(item: Material | null) {
+    setSelectedMaterialId(item?.id ?? null);
+    setMaterialDescription(item?.description ?? '');
+    setMaterialUnit(item?.unit || 'each');
+  }
+  async function saveMaterial() {
+    if (!id || savingMaterial) return;
+    const qty = Number(materialQty.replace(',', '.'));
+    if (!materialDescription.trim() || !materialUnit.trim() || !Number.isFinite(qty) || qty <= 0 || qty > 99999999) {
+      setError('Enter a material, unit, and quantity greater than zero.'); return;
+    }
+    setSavingMaterial(true); setError('');
+    try {
+      const saved = await addMaterialUsed(id, { lineId: selectedMaterialId, description: materialDescription.trim(), qty, unit: materialUnit.trim(), supplier: materialSupplier.trim() });
+      setUsedMaterials(current => [saved, ...current]);
+      chooseMaterial(null); setMaterialQty(''); setMaterialSupplier('');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save material. Try again when connected.'); }
+    finally { setSavingMaterial(false); }
+  }
   if (!job) return <Page>{error ? <ErrorText message={error} /> : <Loading />}</Page>;
   const elapsed = timer ? Math.max(0, Math.floor((now-new Date(timer.started_at).getTime())/1000)) : 0;
   const clock = `${Math.floor(elapsed/3600).toString().padStart(2,'0')}:${Math.floor(elapsed%3600/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`;
@@ -191,9 +217,6 @@ export default function JobDetail() {
         <Button disabled={savingTime || !canRecord} onPress={() => void saveTime()}>{savingTime ? 'Saving…' : editingTimeId ? 'Save changes' : 'Add time'}</Button>
         {editingTimeId ? <Button secondary onPress={() => { setEditingTimeId(undefined); setTimeHours(''); setTimeDescription(''); }}>Cancel edit</Button> : null}
       </Card>
-      <Card><Text style={styles.heading}>Materials</Text>
-        {materials.length ? materials.map(item => <View key={item.id} style={{ marginTop: 8 }}><Text style={styles.muted}>{item.description} · {item.qty} {item.unit || ''}</Text></View>) : <Text style={styles.muted}>No materials listed for this job.</Text>}
-      </Card>
       {(job.details || job.production_details || job.notes) ? <Card><Text style={styles.heading}>Job details and notes</Text><Text style={styles.muted}>{job.details || ''}</Text><Text style={styles.muted}>{job.production_details || ''}</Text><Text style={styles.muted}>{job.notes || ''}</Text></Card> : null}
     </> : null}
 
@@ -201,6 +224,41 @@ export default function JobDetail() {
     <Card>
       <Text style={styles.heading}>Job instructions</Text>
       <Text style={styles.muted}>{job.installation_notes || 'No job instructions yet.'}</Text>
+    </Card>
+
+    <Card>
+      <Text style={styles.heading}>Materials used</Text>
+      <Text style={[styles.muted, { marginBottom: 14 }]}>Record what was actually used. The office can add costs in RPM Actuals.</Text>
+      {canRecord ? <>
+        {materials.length ? <>
+          <Text style={[styles.muted, { marginBottom: 8 }]}>Choose from this job</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            {materials.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: selectedMaterialId === item.id }}
+              onPress={() => chooseMaterial(item)} style={{ backgroundColor: selectedMaterialId === item.id ? colors.forest : colors.pale, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 }}>
+              <Text style={{ color: selectedMaterialId === item.id ? colors.white : colors.forest, fontWeight: '700' }}>{item.description}</Text>
+            </Pressable>)}
+          </View>
+        </> : null}
+        <Button secondary onPress={() => chooseMaterial(null)}>{selectedMaterialId ? 'Enter a different material' : 'Enter an extra material'}</Button>
+        <TextInput style={styles.input} placeholder="Material description" placeholderTextColor={colors.muted} value={materialDescription}
+          editable={!selectedMaterialId} onChangeText={setMaterialDescription} maxLength={500} />
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Quantity" placeholderTextColor={colors.muted}
+            keyboardType="decimal-pad" value={materialQty} onChangeText={setMaterialQty} />
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Unit (e.g. each)" placeholderTextColor={colors.muted}
+            value={materialUnit} onChangeText={setMaterialUnit} maxLength={40} />
+        </View>
+        <TextInput style={styles.input} placeholder="Supplier (optional)" placeholderTextColor={colors.muted}
+          value={materialSupplier} onChangeText={setMaterialSupplier} maxLength={150} />
+        <Button disabled={savingMaterial || !materialDescription.trim() || !materialQty.trim()} onPress={() => void saveMaterial()}>
+          {savingMaterial ? 'Saving…' : 'Add material used'}
+        </Button>
+      </> : <Text style={styles.muted}>Materials can be added when this job is approved or in progress.</Text>}
+      {usedMaterials.length ? <View style={{ marginTop: 8 }}>{usedMaterials.map(item => <View key={item.id}
+        style={{ borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12, marginTop: 12 }}>
+        <Text style={{ color: colors.ink, fontWeight: '700' }}>{item.description}</Text>
+        <Text style={styles.muted}>{item.qty} {item.unit} · {item.used_on}{item.supplier ? ` · ${item.supplier}` : ''}</Text>
+      </View>)}</View> : <Text style={[styles.muted, { marginTop: 8 }]}>No materials recorded yet.</Text>}
     </Card>
 
     <Card>
@@ -251,3 +309,4 @@ export default function JobDetail() {
     </Card> : null}
   </Page>;
 }
+

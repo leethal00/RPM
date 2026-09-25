@@ -11,6 +11,8 @@ export type GalleryPhoto = SitePhoto & { album_id: string | null; album_name: st
 export type SiteGallery = { site: Pick<Site, 'id' | 'name' | 'address' | 'lat' | 'lng' | 'client_name'>; photos: GalleryPhoto[] };
 export type InstallerNote = { id: string; body: string; created_at: string; author: string };
 export type Material = { id: string; description: string; qty: number; unit: string | null; section: string | null };
+export type MaterialUsed = { id: string; description: string; qty: number; unit: string | null; supplier: string | null; used_on: string | null; line_id: string | null };
+export type JobMaterials = { planned: Material[]; used: MaterialUsed[] };
 export type TimeEntry = { id: string; work_date: string; person_name: string | null; hours: number; description: string | null; labour_type: string | null };
 export type Workspace = { jobs: Job[]; sites: Site[]; job: Job | null; documents: Document[]; photos: Photo[]; site_photos: SitePhoto[]; timer: Timer | null; materials?: Material[]; time_entries?: TimeEntry[] };
 export type SuperuserPhotoJob = { job_id: string; job_number: string | null; title: string; client_name: string | null; site_name: string | null; photo_count: number; latest_photo_at: string };
@@ -42,6 +44,21 @@ export async function saveTimeEntry(jobId: string, entry: { id?: string; work_da
   const { data, error } = await supabase.rpc('mobile_admin_save_time_entry', { p_job_id: jobId, p_entry_id: entry.id ?? null, p_work_date: entry.work_date, p_hours: entry.hours, p_description: entry.description, p_labour_type: entry.labour_type });
   if (error) throw error;
   return data as TimeEntry;
+}
+
+export async function jobMaterials(jobId: string): Promise<JobMaterials> {
+  const { data, error } = await supabase.rpc('mobile_job_materials', { p_job_id: jobId });
+  if (error) throw error;
+  return data as JobMaterials;
+}
+
+export async function addMaterialUsed(jobId: string, entry: { lineId: string | null; description: string; qty: number; unit: string; supplier: string }) {
+  const { data, error } = await supabase.rpc('mobile_add_material_used', {
+    p_job_id: jobId, p_line_id: entry.lineId, p_description: entry.description,
+    p_qty: entry.qty, p_unit: entry.unit, p_supplier: entry.supplier,
+  });
+  if (error) throw error;
+  return data as MaterialUsed;
 }
 
 export async function timerAction(jobId: string, kind: 'travel' | 'work', action: 'start' | 'stop') {
@@ -97,3 +114,4 @@ export async function superuserPhotoJobs(search: string, offset = 0): Promise<Su
   if (error) throw error;
   return data as SuperuserPhotoJob[];
 }
+

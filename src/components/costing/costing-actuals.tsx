@@ -69,13 +69,14 @@ export function CostingActuals({ job }: { job: CostingJob }) {
 
     const totalHours = time.reduce((s, r) => s + Number(r.hours), 0)
     const totalMatCost = mats.reduce((s, r) => s + (Number(r.qty ?? 1) * Number(r.cost ?? 0)), 0)
+    const unpricedMaterials = mats.filter((r) => r.cost == null).length
 
     if (loading) return <div className="h-40 rounded-lg bg-muted/40 animate-pulse mt-6" />
 
     return (
         <div className="mt-6 space-y-6">
             <p className="text-sm text-muted-foreground">
-                Log what actually happened on the job — hours worked and materials bought. These feed the
+                Log what actually happened on the job — hours worked and materials used or bought. These feed the
                 Estimated vs Actual comparison. (This is the data the printed job card currently captures by hand.)
             </p>
 
@@ -121,12 +122,13 @@ export function CostingActuals({ job }: { job: CostingJob }) {
             {/* Materials */}
             <section className="rounded-lg border border-border/60 overflow-hidden">
                 <div className="flex items-center justify-between bg-muted/40 px-4 py-2.5">
-                    <h3 className="text-sm font-semibold flex items-center gap-1.5"><Package className="size-3.5" /> Materials bought</h3>
+                    <h3 className="text-sm font-semibold flex items-center gap-1.5"><Package className="size-3.5" /> Materials used / bought</h3>
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground tabular-nums">{nz(totalMatCost)}</span>
                         <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={addMat}><Plus className="size-3" /> Add</Button>
                     </div>
                 </div>
+                {unpricedMaterials > 0 && <p className="px-3 py-2 text-xs text-amber-700">{unpricedMaterials} material {unpricedMaterials === 1 ? "entry needs" : "entries need"} a unit cost before the total is complete.</p>}
                 {mats.length > 0 && (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -163,3 +165,4 @@ export function CostingActuals({ job }: { job: CostingJob }) {
         </div>
     )
 }
+
