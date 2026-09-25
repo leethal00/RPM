@@ -11,7 +11,7 @@ import { MaterialPicker } from "./material-picker"
 import { MaterialCombobox } from "./material-combobox"
 import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
-import { effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
+import { bomTotals, effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 import { totalBomHours } from "@/lib/costing/bom-hours"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
@@ -523,12 +523,12 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     }
 
     // ── totals (per one of this item) ───────────────────────────
-    const cost = lines.reduce((s, l) => s + lineCost(l), 0)
-    const calculatedSell = lines.reduce((s, l) => s + lineSell(l), 0)
-    const finalSell = item.xero_imported_line && item.xero_line_amount != null && Number(item.qty) !== 0
+    const { cost, sell: calculatedSell, margin } = bomTotals(lines)
+    const importedPrice = !!item.xero_imported_line && item.xero_line_amount != null && Number(item.qty) !== 0
+    const finalSell = importedPrice
         ? Number(item.xero_line_amount) / Number(item.qty)
         : effectiveBuildSell(calculatedSell, item.unit_price)
-    const margin = sellMargin(cost, finalSell)
+    const finalMargin = sellMargin(cost, finalSell)
     const totalHours = totalBomHours(lines, Object.fromEntries(Object.entries(catalogueCosts).map(([id, material]) => [id, material.unit])))
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
     // Galvanising must only use items in the Steel section, even when other materials carry weights.
@@ -941,10 +941,10 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
 
             {/* Item totals (per one of this item) */}
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-                <div className={`grid grid-cols-2 gap-4 ${isProduct ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     <Tile label="Cost" value={nz(cost)} />
-                    <Tile label={isProduct ? "Calculated Sell" : "Sell"} value={nz(isProduct ? calculatedSell : finalSell)} />
-                    {isProduct && <div>
+                    <Tile label={isProduct ? "Calculated Sell" : "BOM Sell"} value={nz(calculatedSell)} />
+                    {importedPrice ? <Tile label="Final Sell" value={nz(finalSell)} /> : <div>
                         <label htmlFor="final-sell" className="text-xs text-muted-foreground">Final Sell</label>
                         <div className="mt-0.5 flex items-center gap-1">
                             <span className="text-sm text-muted-foreground">$</span>
@@ -983,9 +983,10 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                             <RotateCcw className="size-3" /> Use calculated price
                         </button>}
                     </div>}
-                    <Tile label="Margin" value={pct(margin)} />
+                    <Tile label={isProduct ? "Margin" : "BOM margin"} value={pct(isProduct ? finalMargin : margin)} />
                     <Tile label="Total hours" value={totalHours.toFixed(2)} />
                 </div>
+                {!isProduct && finalSell !== calculatedSell && <div className="mt-3 text-xs text-muted-foreground">Final Sell margin: {pct(finalMargin)}</div>}
                 {(itemQty !== 1 || showWeights) && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-border/60">
                         {itemQty !== 1 && <Tile label={`Line total (× ${itemQty})`} value={nz(finalSell * itemQty)} />}
