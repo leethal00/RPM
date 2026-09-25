@@ -24,7 +24,7 @@ The `production` profile is reserved for later App Store / Google Play builds. I
 
 Workers can delete only their own unpublished job photos in RPM Mobile. A super user can delete any job photo in the mobile job screen, search all jobs with photos in the mobile app, or delete it from the desktop job screen. Deletion removes the private photo file and job record. A separately published site gallery copy remains until managed from the site gallery.
 
-On an approved or active job, **Materials used** lets field staff select an existing job material or enter an extra item, quantity, unit, and optional supplier. The entry is saved to `costing_material_actuals` and appears in the desktop job's Actuals tab. The mobile app never reads or enters unit costs; office staff can add costs and correct entries in RPM. This requires migration `20260925020034_mobile_material_used.sql` and a new phone build.
+On an approved or active job, **Materials used** lets field staff select an existing job material or enter an extra item, quantity, unit, and optional supplier. The entry is saved to `costing_material_actuals` and appears in the desktop job's Actuals tab. The mobile app never reads or enters unit costs; office staff can add costs and correct entries in RPM. This requires migration `20260925022042_mobile_material_used.sql` and a new phone build.
 
 In the RPM web job detail, **Job photos & mobile** shows uploaded photos and recorded travel/work sessions. Only a reviewed copy of a site-linked photo can be published to a site's gallery.
 
