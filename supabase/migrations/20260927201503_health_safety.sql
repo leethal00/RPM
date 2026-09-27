@@ -185,17 +185,17 @@ revoke insert, update on public.hs_audit from authenticated;
 grant usage, select on sequence public.hs_audit_id_seq to authenticated;
 
 create policy hs_templates_read on public.hs_templates for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_templates_write on public.hs_templates for all to authenticated
   using (rpm_private.current_role() in ('super_admin','rodier_admin'))
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_records_read on public.hs_records for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_records_write on public.hs_records for all to authenticated
   using (rpm_private.current_role() in ('super_admin','rodier_admin'))
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_attendees_read on public.hs_attendees for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_attendees_write on public.hs_attendees for insert to authenticated
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_attendees_sign on public.hs_attendees for update to authenticated
@@ -204,16 +204,16 @@ create policy hs_attendees_sign on public.hs_attendees for update to authenticat
   with check (user_id = auth.uid() and signed_by = auth.uid() and signed_at is not null and exists
     (select 1 from public.hs_records r where r.id = record_id and r.status = 'completed'));
 create policy hs_attachments_read on public.hs_attachments for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_attachments_write on public.hs_attachments for insert to authenticated
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_training_read on public.hs_training for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_training_write on public.hs_training for all to authenticated
   using (rpm_private.current_role() in ('super_admin','rodier_admin'))
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_policies_read on public.hs_policies for select to authenticated
-  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_policies_write on public.hs_policies for insert to authenticated
   with check (rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_audit_read on public.hs_audit for select to authenticated
@@ -224,16 +224,34 @@ values ('health-safety', 'health-safety', false, 20971520,
   array['application/pdf','image/jpeg','image/png','image/webp','application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
 on conflict (id) do nothing;
 create policy hs_files_read on storage.objects for select to authenticated
-  using (bucket_id = 'health-safety' and rpm_private.current_role() in ('super_admin','rodier_admin','technician'));
+  using (bucket_id = 'health-safety' and rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'));
 create policy hs_files_upload on storage.objects for insert to authenticated
   with check (bucket_id = 'health-safety' and rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_files_boundary on storage.objects as restrictive for all to authenticated
-  using (bucket_id <> 'health-safety' or rpm_private.current_role() in ('super_admin','rodier_admin','technician'))
+  using (bucket_id <> 'health-safety' or rpm_private.current_role() in ('super_admin','rodier_admin','technician','installer','mobile_admin','department_operator'))
   with check (bucket_id <> 'health-safety' or rpm_private.current_role() in ('super_admin','rodier_admin'));
 create policy hs_files_no_change on storage.objects as restrictive for update to authenticated
   using (bucket_id <> 'health-safety') with check (bucket_id <> 'health-safety');
 create policy hs_files_no_delete on storage.objects as restrictive for delete to authenticated
   using (bucket_id <> 'health-safety');
+
+-- Existing restrictive mobile/production storage boundaries predate this bucket.
+-- Extend their read side only; uploads to H&S remain administrator-only.
+drop policy if exists installer_storage_boundary on storage.objects;
+create policy installer_storage_boundary on storage.objects as restrictive for all to authenticated
+  using (coalesce(rpm_private.current_role(),'') not in ('installer','mobile_admin')
+    or bucket_id = 'health-safety'
+    or (bucket_id = 'installer-photos' and
+      (rpm_private.current_role() = 'mobile_admin' or (storage.foldername(name))[2] = auth.uid()::text)
+      and rpm_private.installer_can_access_job((storage.foldername(name))[1]))
+    or (bucket_id = 'construction-drawings' and rpm_private.installer_can_access_site((storage.foldername(name))[1])))
+  with check (coalesce(rpm_private.current_role(),'') not in ('installer','mobile_admin')
+    or (bucket_id = 'installer-photos' and (storage.foldername(name))[2] = auth.uid()::text
+      and rpm_private.installer_can_access_job((storage.foldername(name))[1])));
+drop policy if exists department_operator_storage_boundary on storage.objects;
+create policy department_operator_storage_boundary on storage.objects as restrictive for all to authenticated
+  using (coalesce(rpm_private.current_role(),'') <> 'department_operator' or bucket_id = 'health-safety')
+  with check (coalesce(rpm_private.current_role(),'') <> 'department_operator');
 
 insert into public.hs_templates(kind, title, body) values
   ('toolbox', 'Weekly team toolbox meeting', '{"scope":"","run_by":"","previous_actions":"","safety_topics":"","operations":"","actions":"","notes":""}'::jsonb),

@@ -6,7 +6,7 @@ describe("department operator access", () => {
     it.each(["/", "/leads", "/quoting", "/quoting/jobs/123", "/quoting/catalogue", "/settings/users", "/settings/production", "/analysis", "/tasks", "/api/xero/import-job", "/api/xero/callback", "/api/xero/webhook", "/production/admin", "/production-other", "/profile/admin"])("denies %s", path => {
         expect(canOpenRoute("department_operator",path)).toBe(false)
     })
-    it.each(["/production","/profile","/reset-password","/login","/forgot-password"])("allows %s", path=> {
+    it.each(["/production","/health-safety","/profile","/reset-password","/login","/forgot-password"])("allows %s", path=> {
         expect(canOpenRoute("department_operator",path)).toBe(true)
     })
     it("fails closed without a profile",()=>expect(canOpenRoute(null,"/production")).toBe(false))
@@ -18,7 +18,7 @@ describe("installer web boundary", () => {
     it.each(["/", "/active-jobs", "/quoting", "/quoting/jobs/123", "/leads", "/settings/users", "/api/xero/import-job", "/api/xero/webhook", "/profile/admin"])("denies %s", path => {
         expect(canOpenRoute("installer", path)).toBe(false)
     })
-    it.each(["/profile", "/reset-password", "/login", "/forgot-password"])("allows %s", path => {
+    it.each(["/profile", "/health-safety", "/reset-password", "/login", "/forgot-password"])("allows %s", path => {
         expect(canOpenRoute("installer", path)).toBe(true)
     })
 })
@@ -29,4 +29,5 @@ describe("mobile admin web boundary", () => {
         expect(canOpenRoute("mobile_admin", path)).toBe(false)
     })
     it("leaves Rodier admin web access intact", () => expect(canOpenRoute("rodier_admin", "/quoting/jobs")).toBe(true))
+    it("allows H&S acknowledgements", () => expect(canOpenRoute("mobile_admin", "/health-safety")).toBe(true))
 })

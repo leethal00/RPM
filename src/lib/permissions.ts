@@ -9,9 +9,9 @@ export const homeForRole = (role: UserRole | string | null) => isProductionOpera
 /** Default-deny route surface for department operators; data authorization lives in Postgres. */
 export function canOpenRoute(role: string | null | undefined, path: string) {
     if (!role) return false
-    if (isInstaller(role) || isMobileAdmin(role)) return path === "/profile" || path === "/reset-password" || path === "/login" || path === "/forgot-password"
+    if (isInstaller(role) || isMobileAdmin(role)) return path === "/profile" || path === "/health-safety" || path === "/reset-password" || path === "/login" || path === "/forgot-password"
     if (!isProductionOperator(role)) return true
-    return path === "/production" || path === "/profile" || path === "/reset-password"
+    return path === "/production" || path === "/health-safety" || path === "/profile" || path === "/reset-password"
         || path === "/login" || path === "/forgot-password"
         || path === "/sw.js" || path === "/manifest.webmanifest"
 }
