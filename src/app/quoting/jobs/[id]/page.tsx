@@ -21,6 +21,7 @@ import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { TimeEntries } from "@/components/costing/time-entries"
 import { JobXeroInvoice } from "@/components/costing/job-xero-invoice"
 import { InstallerActivity } from "@/components/costing/installer-activity"
+import { JobHealthSafety } from "@/components/costing/job-health-safety"
 import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
 
@@ -41,7 +42,7 @@ export default function ActiveJobDetailPage() {
   const searchParams = useSearchParams()
   const { id } = useParams<{ id: string }>()
   const requestedTab = searchParams.get("tab")
-  const activeTab = requestedTab === "time" || requestedTab === "actuals" || requestedTab === "est-vs-actual" || requestedTab === "install" ? requestedTab : "items"
+  const activeTab = requestedTab === "time" || requestedTab === "actuals" || requestedTab === "est-vs-actual" || requestedTab === "install" || requestedTab === "health-safety" ? requestedTab : "items"
   const [editOpen, setEditOpen] = useState(false)
   const [editingDate, setEditingDate] = useState(false)
   const [dateValue, setDateValue] = useState("")
@@ -202,12 +203,14 @@ export default function ActiveJobDetailPage() {
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
           <TabsTrigger value="install">Job photos & mobile</TabsTrigger>
+          <TabsTrigger value="health-safety">Health & Safety</TabsTrigger>
         </TabsList>
         <TabsContent value="items" className="mt-0 [&>div]:!mt-2 [&>div]:!space-y-3"><ItemsList job={job}/></TabsContent>
         <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>
         <TabsContent value="actuals" className="mt-1"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual" className="mt-1"><EstVsActual job={job}/></TabsContent>
         <TabsContent value="install" className="mt-1"><InstallerActivity jobId={id} canDeletePhotos={canDeleteJobPhotos}/></TabsContent>
+        <TabsContent value="health-safety" className="mt-1"><JobHealthSafety jobId={id}/></TabsContent>
       </Tabs>
     </>}
   </PageShell></DashboardLayout>

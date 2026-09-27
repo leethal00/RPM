@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock, Truck } from "lucide-react"
+import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock, Truck, ShieldCheck } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -26,6 +26,7 @@ const quotingItems = [
     { title: "Leads & To Do", url: "/leads", icon: ClipboardList },
     { title: "Quotes", url: "/quoting", icon: Calculator },
     { title: "Jobs", url: "/quoting/jobs", icon: Briefcase },
+    { title: "Health & Safety", url: "/health-safety", icon: ShieldCheck },
     { title: "Department Jobs", url: "/quoting/production", icon: ClipboardList },
     { title: "Time Entries", url: "/quoting/time", icon: Clock },
     { title: "Products", url: "/quoting/products", icon: Package2 },
