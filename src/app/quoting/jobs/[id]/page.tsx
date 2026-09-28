@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { ItemsList } from "@/components/costing/items-list"
+import { JobDrawings } from "@/components/costing/job-drawings"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { TimeEntries } from "@/components/costing/time-entries"
@@ -42,7 +43,7 @@ export default function ActiveJobDetailPage() {
   const searchParams = useSearchParams()
   const { id } = useParams<{ id: string }>()
   const requestedTab = searchParams.get("tab")
-  const activeTab = requestedTab === "time" || requestedTab === "actuals" || requestedTab === "est-vs-actual" || requestedTab === "install" || requestedTab === "health-safety" ? requestedTab : "items"
+  const activeTab = requestedTab === "drawings" || requestedTab === "time" || requestedTab === "actuals" || requestedTab === "est-vs-actual" || requestedTab === "install" || requestedTab === "health-safety" ? requestedTab : "items"
   const [editOpen, setEditOpen] = useState(false)
   const [editingDate, setEditingDate] = useState(false)
   const [dateValue, setDateValue] = useState("")
@@ -199,6 +200,7 @@ export default function ActiveJobDetailPage() {
       <Tabs value={activeTab} onValueChange={(value) => router.replace(`/quoting/jobs/${id}${value === "items" ? "" : `?tab=${value}`}`)} className="mt-1">
         <TabsList>
           <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="drawings">Drawings</TabsTrigger>
           <TabsTrigger value="time">Time</TabsTrigger>
           <TabsTrigger value="actuals">Actuals</TabsTrigger>
           <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>
@@ -206,6 +208,7 @@ export default function ActiveJobDetailPage() {
           <TabsTrigger value="health-safety">Health & Safety</TabsTrigger>
         </TabsList>
         <TabsContent value="items" className="mt-0 [&>div]:!mt-2 [&>div]:!space-y-3"><ItemsList job={job}/></TabsContent>
+        <TabsContent value="drawings" className="mt-1"><JobDrawings jobId={id}/></TabsContent>
         <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>
         <TabsContent value="actuals" className="mt-1"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual" className="mt-1"><EstVsActual job={job}/></TabsContent>

@@ -13,6 +13,7 @@ import { PageShell } from "@/components/page-shell"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ItemsList } from "@/components/costing/items-list"
+import { JobDrawings } from "@/components/costing/job-drawings"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { CostingJobForm } from "@/components/costing-job-form"
@@ -216,12 +217,14 @@ export default function CostingJobDetailPage() {
                         <Tabs defaultValue={isJobStage ? "actuals" : "items"} className="mt-2">
                             <TabsList>
                                 <TabsTrigger value="items">{isJobStage ? "Quoted Items" : "Items"}</TabsTrigger>
+                                <TabsTrigger value="drawings">Drawings</TabsTrigger>
                                 {isJobStage && <TabsTrigger value="actuals">Actuals</TabsTrigger>}
                                 {isJobStage && <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>}
                             </TabsList>
                             <TabsContent value="items">
                                 <div className={isJobStage ? "pointer-events-none select-none" : ""}><ItemsList job={job} /></div>
                             </TabsContent>
+                            <TabsContent value="drawings"><JobDrawings jobId={job.id} /></TabsContent>
                             {isJobStage && <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>}
                             {isJobStage && <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>}
                         </Tabs>
