@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Plus, Trash2, Clock, Package } from "lucide-react"
 import { toast } from "sonner"
+import Link from "next/link"
 import { NumCell, TextCell, DateCell } from "./cells"
 import type { CostingJob, CostingTimeEntry, CostingMaterialActual } from "@/types/database"
 
@@ -15,17 +16,20 @@ export function CostingActuals({ job }: { job: CostingJob }) {
     const [time, setTime] = useState<CostingTimeEntry[]>([])
     const [mats, setMats] = useState<CostingMaterialActual[]>([])
     const [loading, setLoading] = useState(true)
+    const [scans, setScans] = useState<{ id: string; attachment_name: string | null; confirmed_at: string | null }[]>([])
 
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [{ data: t }, { data: m }] = await Promise.all([
+            const [{ data: t }, { data: m }, { data: cards }] = await Promise.all([
                 supabase.from("costing_time_entries").select("*").eq("job_id", job.id).order("work_date").order("created_at"),
                 supabase.from("costing_material_actuals").select("*").eq("job_id", job.id).order("order_date").order("created_at"),
+                supabase.from("job_card_scans").select("id,attachment_name,confirmed_at").eq("job_id", job.id).eq("status", "processed").order("confirmed_at", { ascending: false }),
             ])
             if (!active) return
             setTime((t as CostingTimeEntry[]) || [])
             setMats((m as CostingMaterialActual[]) || [])
+            setScans(cards || [])
             setLoading(false)
         })()
         return () => { active = false }
@@ -75,6 +79,7 @@ export function CostingActuals({ job }: { job: CostingJob }) {
 
     return (
         <div className="mt-6 space-y-6">
+            {scans.length > 0 && <section className="rounded-lg border border-border/60 p-4"><h3 className="mb-2 text-sm font-semibold">Confirmed scanned job cards</h3><div className="space-y-1">{scans.map(scan => <div key={scan.id} className="flex items-center justify-between text-sm"><Link href={`/quoting/time/scans/${scan.id}`} className="underline">{scan.attachment_name || "Scanned job card"}</Link><span className="text-muted-foreground">{scan.confirmed_at ? new Date(scan.confirmed_at).toLocaleString("en-NZ") : ""}</span></div>)}</div></section>}
             <p className="text-sm text-muted-foreground">
                 Log what actually happened on the job — hours worked and materials used or bought. These feed the
                 Estimated vs Actual comparison. (This is the data the printed job card currently captures by hand.)
