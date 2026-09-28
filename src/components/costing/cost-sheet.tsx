@@ -13,6 +13,7 @@ import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { bomTotals, effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 import { totalBomHours } from "@/lib/costing/bom-hours"
+import { WIRING_MODULES_PER_HOUR, wiringHours } from "@/lib/costing/wiring-hours"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
@@ -37,7 +38,6 @@ const isAutoArgon = (l: CostingLine) => {
 }
 // Weight (kg) for galvanising = factor × size × qty (manual; independent of cost qty).
 const lineWeight = (l: CostingLine) => Number(l.wt_factor ?? 0) * Number(l.wt_size ?? 0) * Number(l.wt_qty ?? 0)
-const MODULES_PER_HOUR = 20
 const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
 const isLedDriver = (l: CostingLine) => {
     const description = l.description.toLowerCase()
@@ -669,7 +669,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                 const ledRequired = modLines.reduce((s, l) => s + Number(l.qty) * Number(l.watts ?? 0), 0)
                 const driverCap = isWiring ? secLines.filter(isLedDriver).reduce((s, l) => s + Number(l.qty) * driverRatedWatts(l), 0) : 0
                 const moduleCount = modLines.reduce((s, l) => s + Number(l.qty), 0)
-                const wiringHrs = moduleCount / MODULES_PER_HOUR
+                const wiringHrs = wiringHours(moduleCount)
                 return (
                     <section
                         key={section}
@@ -843,7 +843,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                             {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(wiringHrs * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
-                                                                    title="Set wiring labour to modules ÷ 20">
+                                                                    title={`Set wiring labour to modules ÷ ${WIRING_MODULES_PER_HOUR}`}>
                                                                     = {wiringHrs.toFixed(2)} hr
                                                                 </button>
                                                             )}
