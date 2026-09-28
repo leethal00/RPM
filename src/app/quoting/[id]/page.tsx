@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ItemsList } from "@/components/costing/items-list"
 import { JobDrawings } from "@/components/costing/job-drawings"
+import { JobEmails } from "@/components/costing/job-emails"
+import { JobInternalNotes } from "@/components/costing/job-internal-notes"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { CostingJobForm } from "@/components/costing-job-form"
@@ -218,6 +220,8 @@ export default function CostingJobDetailPage() {
                             <TabsList>
                                 <TabsTrigger value="items">{isJobStage ? "Quoted Items" : "Items"}</TabsTrigger>
                                 <TabsTrigger value="drawings">Drawings</TabsTrigger>
+                                <TabsTrigger value="emails">Emails</TabsTrigger>
+                                <TabsTrigger value="notes">Notes</TabsTrigger>
                                 {isJobStage && <TabsTrigger value="actuals">Actuals</TabsTrigger>}
                                 {isJobStage && <TabsTrigger value="est-vs-actual">Est vs Actual</TabsTrigger>}
                             </TabsList>
@@ -225,6 +229,8 @@ export default function CostingJobDetailPage() {
                                 <div className={isJobStage ? "pointer-events-none select-none" : ""}><ItemsList job={job} /></div>
                             </TabsContent>
                             <TabsContent value="drawings"><JobDrawings jobId={job.id} /></TabsContent>
+                            <TabsContent value="emails"><JobEmails jobId={job.id} /></TabsContent>
+                            <TabsContent value="notes"><JobInternalNotes jobId={job.id} /></TabsContent>
                             {isJobStage && <TabsContent value="actuals"><CostingActuals job={job} /></TabsContent>}
                             {isJobStage && <TabsContent value="est-vs-actual"><EstVsActual job={job} /></TabsContent>}
                         </Tabs>
