@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
+import { IncidentRegister } from "@/components/health-safety/incident-register"
 
 type Kind = "toolbox" | "swms"
 type WorkStep = { task: string; hazard: string; risk: string; control: string; responsible: string }
@@ -43,7 +44,7 @@ export default function HealthSafetyPage() {
   const db = useMemo(() => createClient(), [])
   const params = useSearchParams()
   const jobFromUrl = params.get("job") || ""
-  const [tab, setTab] = useState("overview")
+  const [tab, setTab] = useState(params.get("tab") === "incidents" ? "incidents" : "overview")
   const [clockDate] = useState(today)
   const [soonDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
   const [userId, setUserId] = useState("")
@@ -266,16 +267,17 @@ export default function HealthSafetyPage() {
   }
 
   return <DashboardLayout><PageShell width="full" className="px-4 xl:px-6 py-4">
-    <PageHeader icon={ShieldCheck} kicker="Job & Project Management" title="Health & Safety" description="Toolbox talks, SWMS/TAs, training and the company policy in one internal register." />
+    <PageHeader icon={ShieldCheck} kicker="Job & Project Management" title="Health & Safety" description="Toolbox talks, SWMS/TAs, incident reports, training and the company policy in one internal register." />
     {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}. The H&S database migration may still need to be applied.</div>}
     {jobFromUrl && <div className="text-sm">Showing H&S records for this job. <Link className="underline" href="/health-safety">Show all</Link></div>}
     <Tabs value={tab} onValueChange={setTab} className="mt-3">
-      <TabsList className="h-auto flex-wrap"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="records">History</TabsTrigger><TabsTrigger value="templates">Templates</TabsTrigger><TabsTrigger value="training">Training matrix</TabsTrigger><TabsTrigger value="policy">Policy</TabsTrigger>{tab === "form" && <TabsTrigger value="form">Record</TabsTrigger>}</TabsList>
+      <TabsList className="h-auto flex-wrap"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="records">History</TabsTrigger><TabsTrigger value="incidents">Incidents</TabsTrigger><TabsTrigger value="templates">Templates</TabsTrigger><TabsTrigger value="training">Training matrix</TabsTrigger><TabsTrigger value="policy">Policy</TabsTrigger>{tab === "form" && <TabsTrigger value="form">Record</TabsTrigger>}</TabsList>
       <TabsContent value="overview" className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-3">{[["Completed records", visibleRecords.filter(r => r.status === "completed").length], ["Open drafts", visibleRecords.filter(r => r.status === "draft").length], ["Training due in 30 days", due.length]].map(([label, count]) => <div key={label} className="rounded-lg border p-4"><div className="text-sm text-muted-foreground">{label}</div><div className="mt-1 text-3xl font-semibold">{count}</div></div>)}</div>
-        {canManage && <div className="flex flex-wrap gap-2"><Button onClick={() => newRecord("toolbox")}>New toolbox meeting</Button><Button onClick={() => newRecord("swms")} variant="outline">New SWMS/TA</Button></div>}
+        <div className="flex flex-wrap gap-2">{canManage && <><Button onClick={() => newRecord("toolbox")}>New toolbox meeting</Button><Button onClick={() => newRecord("swms")} variant="outline">New SWMS/TA</Button></>}<Button onClick={() => setTab("incidents")} variant="outline">Report an incident or hazard</Button></div>
         <div><h2 className="mb-2 font-semibold">Recent activity</h2>{visibleRecords.slice(0, 8).map(r => <button key={r.id} onClick={() => openRecord(r)} className="flex w-full justify-between gap-3 border-b py-2 text-left text-sm hover:bg-muted/40"><span>{r.title} <span className="text-muted-foreground">· {r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}</span></span><span>{niceDate(r.work_date)} · {r.status}</span></button>)}{visibleRecords.length === 0 && <p className="text-sm text-muted-foreground">No H&S records yet.</p>}</div>
       </TabsContent>
+      <TabsContent value="incidents"><IncidentRegister jobFromUrl={jobFromUrl} jobs={jobs} userId={userId} canManage={canManage} /></TabsContent>
       <TabsContent value="records" className="space-y-3">
         <div className="flex flex-wrap gap-2"><Input aria-label="Search H&S records" placeholder="Search title, site, job or scope" value={search} onChange={e => setSearch(e.target.value)} className="max-w-xs"/><select aria-label="Record type" className="rounded-md border bg-background px-2 text-sm" value={filterKind} onChange={e => setFilterKind(e.target.value)}><option value="all">All types</option><option value="toolbox">Toolbox</option><option value="swms">SWMS/TA</option></select><select aria-label="Record status" className="rounded-md border bg-background px-2 text-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="completed">Completed</option></select>{canManage && <Button onClick={() => newRecord("swms")}>New record</Button>}</div>
         <div className="rounded-lg border">{filtered.map(r => <button key={r.id} className="flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-3 text-left text-sm last:border-0 hover:bg-muted/40" onClick={() => openRecord(r)}><span><strong>{r.title}</strong><span className="ml-2 text-muted-foreground">{r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}{r.job_reference ? ` · ${r.job_reference}` : ""}</span></span><span>{niceDate(r.work_date)} · {r.status} · rev {r.revision}</span></button>)}{filtered.length === 0 && <p className="p-5 text-sm text-muted-foreground">No matching records.</p>}</div>
@@ -337,3 +339,4 @@ export default function HealthSafetyPage() {
     </Tabs>
   </PageShell></DashboardLayout>
 }
+
