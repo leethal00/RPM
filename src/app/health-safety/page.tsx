@@ -84,8 +84,10 @@ export default function HealthSafetyPage() {
   const [policyVersion, setPolicyVersion] = useState("")
   const [policyEffective, setPolicyEffective] = useState("")
   const [policyReview, setPolicyReview] = useState("")
+  const [policyPreview, setPolicyPreview] = useState<{ path: string; url: string; error: string } | null>(null)
   const canManage = role === "super_admin" || role === "rodier_admin"
   const current = records.find(r => r.id === selected)
+  const latestPolicy = policies[0]
 
   const refresh = useCallback(async () => {
     const results = await Promise.all([
@@ -122,6 +124,16 @@ export default function HealthSafetyPage() {
       await refresh()
     })()
   }, [db, refresh])
+
+  useEffect(() => {
+    if (!latestPolicy?.storage_path) return
+    let active = true
+    void (async () => {
+      const { data, error } = await db.storage.from("health-safety").createSignedUrl(latestPolicy.storage_path, 3600)
+      if (active) setPolicyPreview({ path: latestPolicy.storage_path, url: data?.signedUrl || "", error: error?.message || "" })
+    })()
+    return () => { active = false }
+  }, [db, latestPolicy?.storage_path])
 
   const filtered = records.filter(r => {
     const term = search.toLowerCase()
@@ -336,7 +348,15 @@ export default function HealthSafetyPage() {
           </tr> })}</tbody>
         </table>{training.length === 0 && <p className="p-4 text-sm text-muted-foreground">No training entries yet.</p>}</div>
       </TabsContent>
-      <TabsContent value="policy" className="space-y-4"><p className="text-sm text-muted-foreground">Upload the company policy and future versions here. The full policy review is a separate project.</p>{canManage && <div className="grid gap-2 rounded-lg border p-3 sm:grid-cols-2"><Input aria-label="Policy title" value={policyTitle} onChange={e => setPolicyTitle(e.target.value)} /><Input aria-label="Version" placeholder="Version (e.g. 2026.1)" value={policyVersion} onChange={e => setPolicyVersion(e.target.value)} /><label className="text-xs">Effective date<Input type="date" value={policyEffective} onChange={e => setPolicyEffective(e.target.value)} /></label><label className="text-xs">Review due<Input type="date" value={policyReview} onChange={e => setPolicyReview(e.target.value)} /></label><Input aria-label="Upload policy" type="file" accept=".pdf,.docx" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadPolicy(file) }} /></div>}{policies.map((p, i) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><strong>{p.title}</strong> · version {p.version} {i === 0 && <span className="ml-1 rounded bg-primary/10 px-1.5 text-xs">Latest upload</span>}<div className="text-xs text-muted-foreground">Effective {niceDate(p.effective_on)} · Review due {niceDate(p.review_due_on)} · Uploaded {niceDate(p.created_at)}</div></div><Button variant="outline" size="sm" onClick={() => void openFile(p.storage_path)}>Open {p.file_name}</Button></div>)}{policies.length === 0 && <p className="text-sm text-muted-foreground">No policy uploaded yet.</p>}</TabsContent>
+      <TabsContent value="policy" className="space-y-4">
+        {latestPolicy ? <>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{latestPolicy.title}</h2><p className="text-sm text-muted-foreground">Version {latestPolicy.version} · Effective {niceDate(latestPolicy.effective_on)} · Review due {niceDate(latestPolicy.review_due_on)}</p></div><Button variant="outline" onClick={() => void openFile(latestPolicy.storage_path)}>Open document</Button></div>
+          {latestPolicy.file_name.toLowerCase().endsWith(".pdf") && policyPreview?.path === latestPolicy.storage_path && policyPreview.url
+            ? <iframe title={latestPolicy.title} src={policyPreview.url} className="min-h-[75vh] w-full rounded-lg border bg-white" />
+            : <p className="rounded-lg border p-4 text-sm text-muted-foreground">{policyPreview?.path === latestPolicy.storage_path && policyPreview.error ? `Preview unavailable: ${policyPreview.error}. Use Open document.` : "Use Open document to read the policy."}</p>}
+        </> : <p className="rounded-lg border p-5 text-sm text-muted-foreground">The company H&S policy has not been added yet.</p>}
+        {canManage && <details className="rounded-lg border p-3 text-sm"><summary className="cursor-pointer font-medium">Manage policy versions</summary><div className="mt-4 space-y-4"><div className="grid gap-2 sm:grid-cols-2"><Input aria-label="Policy title" value={policyTitle} onChange={e => setPolicyTitle(e.target.value)} /><Input aria-label="Version" placeholder="Version (e.g. 2026.1)" value={policyVersion} onChange={e => setPolicyVersion(e.target.value)} /><label>Effective date<Input type="date" value={policyEffective} onChange={e => setPolicyEffective(e.target.value)} /></label><label>Review due<Input type="date" value={policyReview} onChange={e => setPolicyReview(e.target.value)} /></label><Input aria-label="Upload policy" type="file" accept=".pdf,.docx" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadPolicy(file) }} /></div>{policies.map(p => <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"><span>{p.title} · version {p.version} · uploaded {niceDate(p.created_at)}</span><Button variant="link" size="sm" onClick={() => void openFile(p.storage_path)}>Open {p.file_name}</Button></div>)}</div></details>}
+      </TabsContent>
     </Tabs>
   </PageShell></DashboardLayout>
 }
