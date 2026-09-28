@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock, Truck } from "lucide-react"
+import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock, Truck, ShieldCheck } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -26,6 +26,7 @@ const quotingItems = [
     { title: "Leads & To Do", url: "/leads", icon: ClipboardList },
     { title: "Quotes", url: "/quoting", icon: Calculator },
     { title: "Jobs", url: "/quoting/jobs", icon: Briefcase },
+    { title: "Health & Safety", url: "/health-safety", icon: ShieldCheck },
     { title: "Department Jobs", url: "/quoting/production", icon: ClipboardList },
     { title: "Time Entries", url: "/quoting/time", icon: Clock },
     { title: "Products", url: "/quoting/products", icon: Package2 },
@@ -59,6 +60,7 @@ export function AppSidebar({ activeQuotingItem, sidebarWidth, onSidebarResize, o
         <SidebarHeader className="border-b border-sidebar-border p-4"><div className="flex items-center gap-2 px-2"><div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Building2 className="size-4" /></div><div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden"><span className="font-semibold text-sidebar-foreground">RPM</span><span className="text-xs text-sidebar-foreground/60">Rodier Property</span></div></div></SidebarHeader>
         <SidebarContent>
             {isOperator && <SidebarGroup><SidebarGroupLabel>Production</SidebarGroupLabel><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname === "/production"}><Link href="/production"><Hammer className="size-4" /><span>My department jobs</span></Link></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroup>}
+            {(isOperator || isMobileOnly) && <SidebarGroup><SidebarGroupLabel>Staff</SidebarGroupLabel><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={pathname === "/health-safety"}><Link href="/health-safety"><ShieldCheck className="size-4" /><span>Health & Safety</span></Link></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroup>}
             {!loading && !isOperator && !isMobileOnly && <>
             <SidebarGroup><div className="px-2 pt-2 mb-2"><SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground font-medium"><Link href="/jobs/new"><PlusCircle className="size-4" /><span>Report Fault</span></Link></SidebarMenuButton></div><SidebarGroupLabel>Main Navigation</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{navItems.map(item => <SidebarMenuItem key={item.title}><SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.url}><Link href={item.url}><item.icon className="size-4" /><span>{item.title}</span></Link></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup>
             {!isClientUser && <>
