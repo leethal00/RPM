@@ -206,7 +206,7 @@ INSERT INTO materials (description, supplier, section, subsection, unit_cost, de
   ('High End T/X HLG-120H-12 (7year, 120watts)', 'Wellforces', 'Wiring - LED', 'Transformers', 120.5, 0.5, '2024-03-18', NULL, false),
   ('High End T/X HLG-80H-12 (7year, 60watts)', 'Wellforces', 'Wiring - LED', 'Transformers', 96.3, 0.5, '2024-03-18', NULL, false),
   ('High End T/X HLG-40H-12 (7year, 40watts)', 'Wellforces', 'Wiring - LED', 'Transformers', 79.22, 0.5, '2024-03-18', NULL, false),
-  ('Wiring Labour (20 modules per hour as a guide)', NULL, 'Wiring - LED', 'Transformers', 65.0, 0.1, NULL, NULL, false),
+  ('Wiring Labour (25 modules per hour as a guide)', NULL, 'Wiring - LED', 'Transformers', 65.0, 0.1, NULL, NULL, false),
   ('General charge to start wiring job, connectors, heatshrink, wire', NULL, 'Wiring - LED', 'Misc', 45.0, 0.5, NULL, NULL, false),
   ('Wire - Maser Garden, Black, 2 core, UV Stable, 4mm2', 'Active', 'Wiring - LED', 'Misc', 3.942, 0.5, '2024-07-09', NULL, false),
   ('Wire - Tycab, Grey/Black, 2 core, 0.75mm, per m', 'Active', 'Wiring - LED', 'Misc', 2.262, 0.5, '2024-07-09', NULL, false),
