@@ -39,7 +39,7 @@ export default function ItemCostSheetPage() {
         let active = true
         ;(async () => {
             const [{ data: j }, { data: i }] = await Promise.all([
-                supabase.from("costing_jobs").select("id, title, is_template, status, xero_invoice_import_status").eq("id", jobId).single(),
+                supabase.from("costing_jobs").select("id, title, is_template, status, xero_invoice_import_status, stores(address,lat,lng,location_approximate)").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
             ])
             if (!active) return
@@ -274,6 +274,8 @@ export default function ItemCostSheetPage() {
                         )}
 
                         <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
+                            siteAddress={job?.stores?.address || null}
+                            sitePoint={job?.stores?.lat != null && job?.stores?.lng != null && !job.stores.location_approximate ? { lat: job.stores.lat, lng: job.stores.lng } : null}
                             onFinalSellChange={(price) => patchItem({ unit_price: price })} />
 
                         {item.mode === "build" && (

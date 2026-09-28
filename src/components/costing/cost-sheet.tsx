@@ -12,7 +12,8 @@ import { MaterialCombobox } from "./material-combobox"
 import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { bomTotals, effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
-import { totalBomHours } from "@/lib/costing/bom-hours"
+import { isHourUnit, totalBomHours } from "@/lib/costing/bom-hours"
+import { TravelCalculator } from "./travel-calculator"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
@@ -123,11 +124,13 @@ function CostColumnHeader({ column, width, onResize }: {
 
 // Scoped to a single item's BOM. Lines carry both job_id (for job-level rollups)
 // and item_id (this item).
-export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }: {
+export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange, siteAddress = null, sitePoint = null }: {
     jobId: string
     item: CostingItem
     isProduct?: boolean
     onFinalSellChange?: (price: number) => void
+    siteAddress?: string | null
+    sitePoint?: { lat: number; lng: number } | null
 }) {
     const supabase = useMemo(() => createClient(), [])
     const [lines, setLines] = useState<CostingLine[]>([])
@@ -151,6 +154,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const [dragOverLineId, setDragOverLineId] = useState<string | null>(null)
     const [jobStatus, setJobStatus] = useState<string>("draft")
     const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null; unit: string | null }>>({})
+    const [applyingTravel, setApplyingTravel] = useState(false)
     const syncingArgon = useRef(false)
 
     // Keep one catalogue Argon/Filler line equal to the combined welding hours.
@@ -293,6 +297,57 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         if (m) setCatalogueCosts((current) => ({ ...current, [m.id]: { unit_cost: Number(m.unit_cost), date_last_checked: m.date_last_checked, unit: m.unit } }))
         if (isWeldingTime(added)) await syncArgonFromWelding(next)
         if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
+    }
+
+    async function applyTravel(km: number, hours: number, kmLineId: string, hoursLineId: string) {
+        if (applyingTravel) return
+        setApplyingTravel(true)
+        try {
+            const needsKm = kmLineId === "__new__"
+            const needsHours = hoursLineId === "__new__"
+            const { data: materials, error: materialError } = needsKm || needsHours
+                ? await supabase.from("materials").select("*").in("description", ["Km rate", "Travel Labour"]).eq("active", true)
+                : { data: [], error: null }
+            if (materialError) throw materialError
+            const catalogue = (materials || []) as Material[]
+            const kmMaterial = catalogue.find((material) => material.description === "Km rate" && material.unit?.trim().toLowerCase() === "km")
+            const hoursMaterial = catalogue.find((material) => material.description === "Travel Labour" && isHourUnit(material.unit))
+            if (needsKm && !kmMaterial) throw new Error("An active Km rate catalogue item with unit km is required.")
+            if (needsHours && !hoursMaterial) throw new Error("An active Travel Labour catalogue item measured in hours is required.")
+
+            async function saveQuantity(lineId: string, quantity: number, material?: Material) {
+                if (lineId !== "__new__") {
+                    const { data, error } = await supabase.from("costing_lines").update({ qty: quantity }).eq("id", lineId).eq("item_id", item.id).select("id").single()
+                    if (error) throw error
+                    if (!data) throw new Error("The selected BOM line could not be updated.")
+                    return
+                }
+                if (!material) throw new Error("Catalogue item not found")
+                const sort = Math.max(0, ...lines.filter((line) => line.section === material.section).map((line) => line.sort)) + 1
+                const { error } = await supabase.from("costing_lines").insert({
+                    job_id: jobId, item_id: item.id, section: material.section, subsection: material.subsection,
+                    material_id: material.id, description: material.description, supplier: material.supplier,
+                    qty: quantity, unit_cost: material.unit_cost, markup: material.default_markup,
+                    catalogue_unit_cost_snapshot: material.unit_cost, sort,
+                })
+                if (error) throw error
+            }
+
+            await saveQuantity(kmLineId, km, kmMaterial)
+            await saveQuantity(hoursLineId, hours, hoursMaterial)
+            setCatalogueCosts((current) => ({
+                ...current,
+                ...Object.fromEntries(catalogue.map((material) => [material.id, { unit_cost: Number(material.unit_cost), date_last_checked: material.date_last_checked, unit: material.unit }])),
+            }))
+            toast.success("Travel distance and hours applied to BOM")
+        } catch (error) {
+            toast.error(`Could not apply travel: ${error instanceof Error ? error.message : String(error)}`)
+        } finally {
+            const { data, error } = await supabase.from("costing_lines").select("*").eq("item_id", item.id)
+            if (error) toast.error(`Could not refresh BOM: ${error.message}`)
+            else setLines((data as CostingLine[]) || [])
+            setApplyingTravel(false)
+        }
     }
 
     // Stage a picked material (from the top box or an in-section add row).
@@ -529,7 +584,11 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         ? Number(item.xero_line_amount) / Number(item.qty)
         : effectiveBuildSell(calculatedSell, item.unit_price)
     const finalMargin = sellMargin(cost, finalSell)
-    const totalHours = totalBomHours(lines, Object.fromEntries(Object.entries(catalogueCosts).map(([id, material]) => [id, material.unit])))
+    const unitsByMaterialId = Object.fromEntries(Object.entries(catalogueCosts).map(([id, material]) => [id, material.unit]))
+    for (const line of lines) {
+        if (line.material_id && /^km rate\b/i.test(line.description)) unitsByMaterialId[line.material_id] = "km"
+    }
+    const totalHours = totalBomHours(lines, unitsByMaterialId)
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
     // Galvanising must only use items in the Steel section, even when other materials carry weights.
     const totalSteelWeight = lines.filter((l) => l.section === "Steel").reduce((s, l) => s + lineWeight(l), 0)
@@ -558,6 +617,9 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         ...withLines.filter((s) => !definedSections.includes(s)),
     ]
     const addableSections = definedSections.filter((s) => !activeSections.includes(s))
+    const kmLines = lines.filter((line) => line.section === "Labour" && (catalogueCosts[line.material_id || ""]?.unit?.trim().toLowerCase() === "km" || /^km rate\b/i.test(line.description)))
+    const hourLines = lines.filter((line) => line.section === "Labour" && /travel.*(labour|hours)|travel labour/i.test(line.description) && !kmLines.some((kmLine) => kmLine.id === line.id) && isHourUnit(catalogueCosts[line.material_id || ""]?.unit))
+    const showTravelCalculator = !isProduct && (/travel|mileage/i.test(item.name) || kmLines.length > 0 || hourLines.length > 0)
     const visibleColumns = COST_COLUMNS.filter((column) => showWeights || !column.weight)
     const tableWidth = visibleColumns.reduce((total, column) => total + (widths[column.key] ?? column.width), 0) + 64
 
@@ -618,6 +680,13 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                     </Button>
                 </div>
             )}
+
+            {showTravelCalculator && <TravelCalculator
+                siteAddress={siteAddress} sitePoint={sitePoint}
+                kmLines={kmLines.map((line) => ({ id: line.id, description: line.description }))}
+                hourLines={hourLines.map((line) => ({ id: line.id, description: line.description }))}
+                onApply={applyTravel} applying={applyingTravel}
+            />}
 
             {/* Add-item type-ahead — builds sections/subsections from what you pick */}
             <div className="flex items-center gap-2">
