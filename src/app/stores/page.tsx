@@ -471,7 +471,7 @@ export default function StoresListPage() {
                                             {store.manager_name || "\u2014"}
                                         </TableCell>
                                         <TableCell className="text-sm hidden xl:table-cell text-muted-foreground py-3">
-                                            <span className="truncate max-w-[200px] inline-block align-middle">
+                                            <span className="inline-block align-middle">
                                                 {formatHoursShort(store.hours_of_operation)}
                                             </span>
                                         </TableCell>

@@ -19,6 +19,7 @@ import type { Region, Client, Store, ClientBrand } from "@/types/database"
 import { siteSchema, getValidationErrors } from "@/lib/validations"
 import { BrandChip, brandsFromStore } from "@/components/brand-chip"
 import { normalizedSiteName } from "@/lib/site-name"
+import { DAYS_OF_WEEK, isClosedDay, parseHours, type DayHours } from "@/lib/hours"
 
 interface GeocodeSuggestion {
     display_name: string
@@ -99,44 +100,44 @@ export function SiteForm({ site, initialClientId, initialClientName, lockClient 
     }
 
     // State for structured hours
-    const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    const initialHours = parseHours(site?.hours_of_operation)
     const [is24Hours, setIs24Hours] = useState<boolean>(() => {
-        try {
-            return JSON.parse(site?.hours_of_operation || "{}").type === "always"
-        } catch {
-            return false
-        }
+        return initialHours?.type === "always"
     })
     const [hoursType, setHoursType] = useState<"daily" | "weekly">(() => {
-        try {
-            const parsed = JSON.parse(site?.hours_of_operation || "{}")
-            return parsed.type === "weekly" ? "weekly" : "daily"
-        } catch {
-            return "daily"
-        }
+        return initialHours?.type === "weekly" ? "weekly" : "daily"
     })
 
-    interface DayHours { start: string; end: string }
-    const [dailyHours, setDailyHours] = useState<DayHours>(() => {
-        try {
-            const parsed = JSON.parse(site?.hours_of_operation || "{}")
-            return parsed.type === "daily" ? parsed.hours : { start: "09:00", end: "17:00" }
-        } catch {
-            return { start: "09:00", end: "17:00" }
-        }
+    const [dailyHours, setDailyHours] = useState<{ start: string; end: string }>(() => {
+        return initialHours?.type === "daily" && !isClosedDay(initialHours.hours)
+            ? initialHours.hours
+            : { start: "09:00", end: "17:00" }
     })
 
     const [weeklyHours, setWeeklyHours] = useState<Record<string, DayHours>>(() => {
-        try {
-            const parsed = JSON.parse(site?.hours_of_operation || "{}")
-            if (parsed.type === "weekly") return parsed.days
-            const defaultHours = { start: "09:00", end: "17:00" }
-            return daysOfWeek.reduce((acc, day) => ({ ...acc, [day]: defaultHours }), {})
-        } catch {
-            const defaultHours = { start: "09:00", end: "17:00" }
-            return daysOfWeek.reduce((acc, day) => ({ ...acc, [day]: defaultHours }), {})
-        }
+        const defaultHours = initialHours?.type === "daily" && !isClosedDay(initialHours.hours)
+            ? initialHours.hours
+            : { start: "09:00", end: "17:00" }
+        return Object.fromEntries(DAYS_OF_WEEK.map(day => [
+            day,
+            initialHours?.type === "weekly" ? initialHours.days[day] ?? { ...defaultHours } : { ...defaultHours },
+        ]))
     })
+
+    const setDayClosed = (day: string, closed: boolean) => {
+        setWeeklyHours(previous => ({
+            ...previous,
+            [day]: closed ? { closed: true } : { start: "09:00", end: "17:00" },
+        }))
+    }
+
+    const setDayTime = (day: string, field: "start" | "end", value: string) => {
+        setWeeklyHours(previous => {
+            const current = previous[day]
+            if (!current || isClosedDay(current)) return previous
+            return { ...previous, [day]: { ...current, [field]: value } }
+        })
+    }
 
     useEffect(() => {
         async function fetchCustomers() {
@@ -570,26 +571,42 @@ export function SiteForm({ site, initialClientId, initialClientName, lockClient 
                         </div>
                     ) : (
                         <div className="space-y-1">
-                            {daysOfWeek.map(day => (
-                                <div key={day} className="flex items-center justify-between p-2 hover:bg-accent/30 rounded-md transition-colors text-sm">
+                            {DAYS_OF_WEEK.map(day => {
+                                const hours = weeklyHours[day]
+                                const closed = isClosedDay(hours)
+                                return <div key={day} className="flex flex-wrap items-center justify-between gap-2 p-2 hover:bg-accent/30 rounded-md transition-colors text-sm">
                                     <span className="font-medium w-20">{day}</span>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none mr-2">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`${day} closed`}
+                                                checked={closed}
+                                                onChange={(e) => setDayClosed(day, e.target.checked)}
+                                                className="size-4 accent-primary"
+                                            />
+                                            Closed
+                                        </label>
                                         <Input
                                             type="time"
-                                            value={weeklyHours[day].start}
-                                            onChange={(e) => setWeeklyHours({ ...weeklyHours, [day]: { ...weeklyHours[day], start: e.target.value } })}
+                                            aria-label={`${day} open`}
+                                            value={closed ? "" : hours.start}
+                                            disabled={closed}
+                                            onChange={(e) => setDayTime(day, "start", e.target.value)}
                                             className="h-7 w-24 text-xs"
                                         />
                                         <span className="text-muted-foreground text-xs">–</span>
                                         <Input
                                             type="time"
-                                            value={weeklyHours[day].end}
-                                            onChange={(e) => setWeeklyHours({ ...weeklyHours, [day]: { ...weeklyHours[day], end: e.target.value } })}
+                                            aria-label={`${day} close`}
+                                            value={closed ? "" : hours.end}
+                                            disabled={closed}
+                                            onChange={(e) => setDayTime(day, "end", e.target.value)}
                                             className="h-7 w-24 text-xs"
                                         />
                                     </div>
                                 </div>
-                            ))}
+                            })}
                         </div>
                     )}
                 </div>
