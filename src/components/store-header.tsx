@@ -2,6 +2,7 @@ import { MapPin, Phone, User } from "lucide-react"
 import type { Store } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { computeHealthScore, type HealthInputAsset, type HealthInputJob } from "@/lib/health-score"
+import { DAYS_OF_WEEK, formatDayHours, parseHours } from "@/lib/hours"
 
 interface StoreHeaderProps {
     store: Store
@@ -23,6 +24,7 @@ export function StoreHeader({ store, assets, jobs }: StoreHeaderProps) {
         health.label === "attention" ? "bg-amber-500" :
         "bg-destructive"
     const brands = brandsFromStore(store)
+    const hours = parseHours(store.hours_of_operation)
 
     return (
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between py-6 border-b border-border/60">
@@ -90,6 +92,16 @@ export function StoreHeader({ store, assets, jobs }: StoreHeaderProps) {
                         <span>{store.manager_phone || <span className="text-muted-foreground">—</span>}</span>
                     </div>
                 </div>
+                {hours && <div className="col-span-2 flex flex-col gap-1 pt-2">
+                    <span className="text-xs text-muted-foreground">Hours of operation</span>
+                    {hours.type === "weekly" ? (
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+                            {DAYS_OF_WEEK.map(day => <div key={day} className="flex justify-between gap-3">
+                                <span>{day}</span><span className="font-medium">{formatDayHours(hours.days[day])}</span>
+                            </div>)}
+                        </div>
+                    ) : <span>{hours.type === "always" ? "24 hours" : formatDayHours(hours.hours)}</span>}
+                </div>}
             </div>
         </div>
     )
