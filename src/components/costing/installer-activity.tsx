@@ -11,7 +11,7 @@ type Session = { id: string; kind: string; started_at: string; stopped_at: strin
 type Photo = { id: string; storage_path: string; caption: string | null; category: string; captured_at: string; user_id: string; published_site_photo_id: string | null; users?: {name:string|null} | null; url?: string }
 type InstallerNote = { id: string; body: string; created_at: string; user_id: string; users?: {name:string|null} | null }
 
-export function InstallerActivity({ jobId, canDeletePhotos = false }: { jobId: string; canDeletePhotos?: boolean }) {
+export function InstallerActivity({ jobId, canDeletePhotos = false, canDeleteNotes = false }: { jobId: string; canDeletePhotos?: boolean; canDeleteNotes?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
   const [sessions, setSessions] = useState<Session[]>([])
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -19,6 +19,7 @@ export function InstallerActivity({ jobId, canDeletePhotos = false }: { jobId: s
   const [brokenPhotoIds, setBrokenPhotoIds] = useState<string[]>([])
   const [error, setError] = useState("")
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null)
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -42,6 +43,23 @@ export function InstallerActivity({ jobId, canDeletePhotos = false }: { jobId: s
     return () => { live = false }
   }, [supabase, jobId])
 
+  async function deleteNote(note: InstallerNote) {
+    if (!canDeleteNotes || deletingNoteId !== null) return
+    if (!window.confirm("Delete this installer note? This cannot be undone.")) return
+    setDeletingNoteId(note.id)
+    try {
+      const { data, error } = await supabase.from("installer_job_notes").delete().eq("id", note.id).eq("job_id", jobId).select("id").single()
+      if (error) throw error
+      if (!data) throw new Error("The note could not be deleted. Refresh and try again.")
+      setNotes(current => current.filter(item => item.id !== note.id))
+      toast.success("Installer note deleted")
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not delete installer note")
+    } finally {
+      setDeletingNoteId(null)
+    }
+  }
+
   async function deletePhoto(photo: Photo) {
     const publishedNote = photo.published_site_photo_id ? " Its separately published site gallery copy will remain." : ""
     if (!window.confirm(`Delete this job photo? This cannot be undone.${publishedNote}`)) return
@@ -64,7 +82,10 @@ export function InstallerActivity({ jobId, canDeletePhotos = false }: { jobId: s
     {error && <p className="text-sm text-destructive">{error}</p>}
     <section><h3 className="font-semibold">Installer notes</h3>
       {notes.length ? <div className="mt-2 divide-y rounded border">{notes.map(note => <div key={note.id} className="p-3 text-sm">
-        <p className="whitespace-pre-wrap">{note.body}</p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 whitespace-pre-wrap break-words">{note.body}</p>
+          {canDeleteNotes && <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 gap-1.5 px-2 text-destructive hover:text-destructive" disabled={deletingNoteId !== null} onClick={() => void deleteNote(note)}><Trash2 className="h-3.5 w-3.5" />{deletingNoteId === note.id ? "Deleting…" : "Delete note"}</Button>}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">{note.users?.name || "Installer"} · {new Date(note.created_at).toLocaleString("en-NZ")}</p>
       </div>)}</div> : <p className="mt-2 text-sm text-muted-foreground">No installer notes yet.</p>}
     </section>
