@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { createPortal, flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowUpDown, Briefcase, Download, Plus, RotateCcw, Search } from "lucide-react"
+import { ArrowUpDown, Briefcase, Download, Plus, Printer, RotateCcw, Search } from "lucide-react"
 import { TablePagination } from "@/components/table-pagination"
 import { useCustomerFilter } from "@/lib/customer-filter"
 import { PageShell } from "@/components/page-shell"
@@ -144,6 +145,59 @@ function JobColumnHeader({
     )
 }
 
+function JobsPrintReport({ jobs, view, printedAt, filters, sortLabel }: {
+    jobs: JobRow[]
+    view: JobView
+    printedAt: Date
+    filters: string[]
+    sortLabel: string
+}) {
+    return (
+        <div id="rpm-jobs-print-report" aria-label="Jobs print report">
+            <style>{`
+                #rpm-jobs-print-report { display: none; }
+                @media print {
+                    @page { size: A4 landscape; margin: 12mm; }
+                    body > :not(#rpm-jobs-print-report) { display: none !important; }
+                    #rpm-jobs-print-report { display: block !important; color: #111; background: white; font: 10pt Arial, sans-serif; }
+                    #rpm-jobs-print-report h1 { font-size: 18pt; margin: 0 0 3mm; }
+                    #rpm-jobs-print-report .report-meta { color: #444; margin: 0 0 5mm; }
+                    #rpm-jobs-print-report table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                    #rpm-jobs-print-report thead { display: table-header-group; }
+                    #rpm-jobs-print-report th, #rpm-jobs-print-report td { border-bottom: 1px solid #ccc; padding: 2.5mm 2mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+                    #rpm-jobs-print-report th { background: #eee; font-weight: 700; }
+                    #rpm-jobs-print-report tr { break-inside: avoid; }
+                    #rpm-jobs-print-report .muted { color: #555; font-size: 9pt; }
+                }
+            `}</style>
+            <h1>{view === "active" ? "Active Jobs" : "Completed Jobs"} report</h1>
+            <p className="report-meta">
+                {jobs.length} {jobs.length === 1 ? "job" : "jobs"} · {printedAt.toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "short" })}
+                {filters.length > 0 && <> · Filters: {filters.join("; ")}</>} · Sorted by {sortLabel}
+            </p>
+            <table>
+                <colgroup>
+                    <col style={{ width: "11%" }} /><col style={{ width: "27%" }} /><col style={{ width: "24%" }} />
+                    <col style={{ width: "15%" }} /><col style={{ width: "12%" }} /><col style={{ width: "11%" }} />
+                </colgroup>
+                <thead><tr><th>Job #</th><th>Job</th><th>Client / Site</th><th>People</th><th>Complete by</th><th>Status</th></tr></thead>
+                <tbody>
+                    {jobs.map((job) => (
+                        <tr key={job.id}>
+                            <td>{job.job_number || job.xero_invoice_number || "—"}</td>
+                            <td><strong>{job.production_title || job.title}</strong>{job.reference && <div className="muted">{job.reference}</div>}</td>
+                            <td>{job.clients?.name || "Ad-hoc"}<div className="muted">{job.stores?.name || "Manufacture only / No site"}</div></td>
+                            <td>{job.job_lead_name || "Unassigned"}<div className="muted">Quoted: {job.quoted_by_name || "—"}</div></td>
+                            <td>{formatDate(job.completion_date)}</td>
+                            <td>{STATUS[job.status as keyof typeof STATUS]?.label || job.status}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    )
+}
+
 export default function ActiveJobsPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
@@ -174,6 +228,7 @@ export default function ActiveJobsPage() {
     const [selectedStore, setSelectedStore] = useState("none")
     const [importTitle, setImportTitle] = useState("")
     const [completionDate, setCompletionDate] = useState("")
+    const [reportDate, setReportDate] = useState<Date | null>(null)
 
     const statuses = view === "active" ? ["in_progress"] : ["complete", "invoiced", "cancelled"]
     const key = `costing-jobs-all-${view}-${clientId ?? "all"}`
@@ -286,6 +341,21 @@ export default function ActiveJobsPage() {
     const siteLabelCounts = new Map<string, number>()
     for (const { label } of siteLabels) siteLabelCounts.set(label, (siteLabelCounts.get(label) || 0) + 1)
     const totalColumnWeight = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0) || 1
+    const reportFilters = [
+        clientId ? `Customer: ${filterClients.find((client) => client.id === clientId)?.name || "Selected customer"}` : null,
+        search.trim() ? `Search: ${search.trim()}` : null,
+        clientFilter !== "all" ? `Customer: ${filterClients.find((client) => client.id === clientFilter)?.name || clientFilter}` : null,
+        siteFilter !== "all" ? `Site: ${filterStores.find((store) => store.id === siteFilter)?.name || siteFilter}` : null,
+        leadFilter !== "all" ? `Job lead: ${leadFilter}` : null,
+        dateFilter !== "all" ? `Complete by: ${dateFilter === "next7" ? "Next 7 days" : dateFilter === "none" ? "No date" : dateFilter}` : null,
+        statusFilter !== "all" ? `Status: ${statusFilter}` : null,
+    ].filter((value): value is string => Boolean(value))
+
+    function printReport() {
+        flushSync(() => setReportDate(new Date()))
+        window.addEventListener("afterprint", () => setReportDate(null), { once: true })
+        window.print()
+    }
 
     function changeView(next: JobView) {
         setView(next)
@@ -461,6 +531,7 @@ export default function ActiveJobsPage() {
                     )}
                     <Button size="sm" className="h-8 gap-1.5" onClick={() => setNewJobOpen(true)}><Plus className="size-3.5"/> New job</Button>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openImport}><Download className="size-3.5"/> Import from Xero</Button>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={printReport} disabled={isLoading || totalCount === 0}><Printer className="size-3.5" /> Print report</Button>
                     <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={resetFilters}>Clear filters</Button>
                     <span className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "job" : "jobs"}</span>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-xs text-muted-foreground" onClick={reset} title="Reset column order and widths"><RotateCcw className="size-3.5" /> Reset columns</Button>
@@ -603,6 +674,7 @@ export default function ActiveJobsPage() {
                     </DialogContent>
                 </Dialog>
             </PageShell>
+            {reportDate && createPortal(<JobsPrintReport jobs={sortedJobs} view={view} printedAt={reportDate} filters={reportFilters} sortLabel={`${JOB_COLUMN_BY_KEY[sortKey].label} (${sortDirection === "asc" ? "ascending" : "descending"})`} />, document.body)}
         </DashboardLayout>
     )
 }
