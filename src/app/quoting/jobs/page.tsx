@@ -17,6 +17,7 @@ import { useCustomerFilter } from "@/lib/customer-filter"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
+import { compareJobNumbers } from "@/lib/costing/job-number-sort"
 import { toast } from "sonner"
 import { SiteForm } from "@/components/site-form"
 import { CostingJobForm } from "@/components/costing-job-form"
@@ -131,7 +132,7 @@ function JobColumnHeader({
                 const from = event.dataTransfer.getData("text/plain")
                 if (from) onMove(from, column.key)
             }}
-            className="relative border-b border-border/60 p-0 select-none"
+            className="relative sticky top-0 z-20 border-b border-border/60 bg-muted p-0 select-none"
             title="Drag to reorder column"
         >
             <button type="button" onClick={() => onSort(column.key)} className="flex w-full items-center gap-1 px-2 py-2 text-left text-xs font-medium hover:text-foreground">
@@ -150,8 +151,8 @@ export default function ActiveJobsPage() {
     const [view, setView] = useState<JobView>("active")
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
-    const [sortKey, setSortKey] = useState<SortKey>("completion_date")
-    const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
+    const [sortKey, setSortKey] = useState<SortKey>("job_number")
+    const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
     const [clientFilter, setClientFilter] = useState("all")
     const [siteFilter, setSiteFilter] = useState("all")
     const [leadFilter, setLeadFilter] = useState("all")
@@ -250,6 +251,9 @@ export default function ActiveJobsPage() {
         const rows = [...filteredJobs]
         const direction = sortDirection === "asc" ? 1 : -1
         rows.sort((a, b) => {
+            if (sortKey === "job_number") {
+                return compareJobNumbers(a.job_number || a.xero_invoice_number, b.job_number || b.xero_invoice_number, sortDirection)
+            }
             let av = ""
             let bv = ""
             if (sortKey === "job") {
@@ -258,9 +262,6 @@ export default function ActiveJobsPage() {
             } else if (sortKey === "client") {
                 av = `${a.clients?.name || ""} ${a.stores?.name || ""}`
                 bv = `${b.clients?.name || ""} ${b.stores?.name || ""}`
-            } else if (sortKey === "job_number") {
-                av = a.job_number || a.xero_invoice_number || ""
-                bv = b.job_number || b.xero_invoice_number || ""
             } else if (sortKey === "job_lead") {
                 av = a.job_lead_name || ""
                 bv = b.job_lead_name || ""
@@ -289,8 +290,8 @@ export default function ActiveJobsPage() {
     function changeView(next: JobView) {
         setView(next)
         setPage(1)
-        setSortKey(next === "active" ? "completion_date" : "job")
-        setSortDirection("asc")
+        setSortKey(next === "active" ? "job_number" : "job")
+        setSortDirection(next === "active" ? "desc" : "asc")
         setClientFilter("all")
         setSiteFilter("all")
         setLeadFilter("all")
@@ -416,7 +417,7 @@ export default function ActiveJobsPage() {
 
     return (
         <DashboardLayout>
-            <PageShell width="full" className="px-4 xl:px-6 gap-2 py-4">
+            <PageShell width="full" className="px-4 xl:px-6 gap-2 py-4 lg:h-[calc(100dvh-4.25rem)] lg:min-h-0 lg:overflow-hidden">
                 <PageHeader icon={Briefcase} kicker="Job & Project Management" title="Jobs" description="Manage live production work and keep completed jobs available as history." />
 
                 <Tabs value={view} onValueChange={(value) => changeView(value as JobView)}>
@@ -469,7 +470,7 @@ export default function ActiveJobsPage() {
                     <div className="space-y-1">{[1,2,3,4].map((i) => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
                 ) : jobs.length ? (
                     <>
-                        <div className="border border-border/60 rounded-lg overflow-hidden">
+                        <div className="min-h-0 max-h-[60dvh] overflow-auto overscroll-contain rounded-lg border border-border/60 lg:max-h-none lg:flex-1">
                             <table className="w-full table-fixed text-sm">
                                 <colgroup>
                                     {order.map((key) => {
