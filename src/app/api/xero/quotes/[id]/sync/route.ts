@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
   const admin = xeroAdmin()
   const { data: job, error } = await admin
     .from("costing_jobs")
-    .select("id,title,status,xero_quote_id,xero_quote_number,xero_invoice_number,job_number")
+    .select("id,title,status,reference,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,job_number")
     .eq("id", id)
     .single()
 
@@ -30,5 +30,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     invoiceNumber: result.invoiceNumber || null,
     jobNumber: result.invoiceNumber || job.job_number || null,
     changedToJob: !!result.changedToJob,
+    warning: result.warning || null,
   })
 }

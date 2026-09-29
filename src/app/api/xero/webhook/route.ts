@@ -54,6 +54,9 @@ async function processInvoiceEvents(invoiceEvents: XeroWebhookEvent[]) {
 
     const results = await syncOpenQuotesForInvoices(invoices)
     const activated = results.filter((result) => result.ok && result.changedToJob)
+    for (const result of results.filter((result) => !result.ok)) {
+      console.error("Xero webhook linkback failed", result.jobId, result.error)
+    }
     console.info("Xero webhook processed", {
       events: invoiceEvents.length,
       invoices: invoices.length,
