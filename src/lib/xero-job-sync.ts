@@ -7,6 +7,7 @@ type CostingJobRow = {
   reference?: string | null
   xero_quote_id: string | null
   xero_quote_number: string | null
+  xero_invoice_id?: string | null
   xero_invoice_number: string | null
   job_number: string | null
 }
@@ -17,13 +18,22 @@ type SyncResult = {
   xeroStatus?: string
   invoiceNumber?: string | null
   changedToJob?: boolean
+  warning?: string
   error?: string
 }
 
 export type XeroRow = Record<string, unknown>
+type Connection = { accessToken: string; tenantId: string }
+type LinkedQuote = { job: CostingJobRow; quote: XeroRow }
+const JOB_FIELDS = "id,title,status,reference,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,job_number"
+const OPEN_STATUSES = ["quoted", "approved"]
+const INVOICE_STATUSES = ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID"]
+const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "INVOICED"]
 
-async function xeroJson(url: string, accessToken: string, tenantId: string) {
-  const response = await fetch(url, { headers: xeroHeaders(accessToken, tenantId), cache: "no-store" })
+async function xeroJson(path: string, xero: Connection) {
+  const response = await fetch(`${XERO_API}${path}`, {
+    headers: xeroHeaders(xero.accessToken, xero.tenantId), cache: "no-store",
+  })
   const text = await response.text()
   const body = text ? JSON.parse(text) : {}
   if (!response.ok) throw new Error(body?.Message || body?.Detail || `Xero API error ${response.status}`)
@@ -34,223 +44,211 @@ function normaliseText(value: unknown) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ")
 }
 
-function numeric(value: unknown) {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
 function contactId(row: XeroRow) {
-  const contact = row.Contact as Record<string, unknown> | undefined
-  return String(contact?.ContactID || "")
+  return String((row.Contact as XeroRow | undefined)?.ContactID || "").toLowerCase()
 }
 
-function lineDescriptions(row: XeroRow) {
-  const lines = Array.isArray(row.LineItems) ? row.LineItems as Array<Record<string, unknown>> : []
-  return lines.map((line) => normaliseText(line.Description)).filter(Boolean)
+function isSalesInvoice(row: XeroRow) {
+  return row.Type === "ACCREC" && !!row.InvoiceID && !!row.InvoiceNumber
+    && INVOICE_STATUSES.includes(String(row.Status).toUpperCase())
 }
 
 function sameMoney(a: unknown, b: unknown) {
-  const x = numeric(a)
-  const y = numeric(b)
-  return x != null && y != null && Math.abs(x - y) <= 0.02
+  if (a == null || b == null || a === "" || b === "") return false
+  return Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= 0.02
 }
 
-function invoiceScore(invoice: XeroRow, quote: XeroRow) {
-  if (String(invoice.Type || "").toUpperCase() !== "ACCREC") return -1
-
-  const quoteContact = contactId(quote)
-  const invoiceContact = contactId(invoice)
-  if (quoteContact && invoiceContact && quoteContact !== invoiceContact) return -1
-
-  let score = 0
-  if (quoteContact && invoiceContact === quoteContact) score += 6
-  if (sameMoney(invoice.Total, quote.Total)) score += 6
-
-  const quoteRef = normaliseText(quote.Reference)
-  const invoiceRef = normaliseText(invoice.Reference)
-  if (quoteRef && invoiceRef === quoteRef) score += 10
-
-  const qLines = lineDescriptions(quote)
-  const iLines = new Set(lineDescriptions(invoice))
-  const matchingLines = qLines.filter((description) => iLines.has(description)).length
-  if (matchingLines) score += Math.min(8, matchingLines * 3)
-
-  return score
+function descriptions(row: XeroRow) {
+  // Ignore headings and introductory notes: these are commonly reused across jobs.
+  return (Array.isArray(row.LineItems) ? row.LineItems as XeroRow[] : [])
+    .filter((line) => Number(line.Quantity) > 0 && Number(line.LineAmount ?? line.UnitAmount) > 0)
+    .map((line) => normaliseText(line.Description)).filter(Boolean)
 }
 
-async function findInvoiceForQuote(quote: XeroRow, accessToken: string, tenantId: string) {
-  const reference = String(quote.Reference || "").trim()
+function referenceMatches(invoice: unknown, quote: unknown) {
+  const invoiceRef = normaliseText(invoice)
+  const quoteRef = normaliseText(quote)
+  if (!quoteRef) return false
+  // Xero users commonly append a purchase order to the copied quote reference.
+  // Only recognise a delimited PO suffix, never a general title substring.
+  return invoiceRef === quoteRef
+    || invoiceRef.replace(/\s+(?:[-–|]\s*)?po\s*(?:#|:|no\.?\s).*$/, "").trim() === quoteRef
+}
 
-  if (reference) {
-    const where = encodeURIComponent(`Reference=="${reference.replaceAll('"', '\\"')}"`)
-    const exactResult = await xeroJson(
-      `${XERO_API}/Invoices?where=${where}&order=Date%20DESC`,
-      accessToken,
-      tenantId,
-    )
-    const exact = ((exactResult?.Invoices || []) as XeroRow[])
-      .find((row) => String(row.Type || "").toUpperCase() === "ACCREC")
-    if (exact?.InvoiceNumber) return exact
+export function invoiceMatchesQuote(invoice: XeroRow, quote: XeroRow) {
+  if (!isSalesInvoice(invoice) || !QUOTE_STATUSES.includes(String(quote.Status).toUpperCase())) return false
+  if (!contactId(quote) || contactId(invoice) !== contactId(quote)) return false
+  if (invoice.CurrencyCode && quote.CurrencyCode && invoice.CurrencyCode !== quote.CurrencyCode) return false
+
+  const quoteNumber = normaliseText(quote.QuoteNumber)
+  const referencedNumbers = normaliseText(invoice.Reference).match(/\bqu-\d+\b/g) || []
+  if (quoteNumber && referencedNumbers.length) return referencedNumbers.length === 1 && referencedNumbers[0] === quoteNumber
+
+  if (!referenceMatches(invoice.Reference, quote.Reference)) return false
+  const quoteLines = descriptions(quote).sort()
+  const invoiceLines = descriptions(invoice).sort()
+  const sameLines = quoteLines.length > 0 && quoteLines.length === invoiceLines.length
+    && quoteLines.every((line, index) => line === invoiceLines[index])
+  // Price changes are allowed when the copied sales descriptions and reference agree.
+  // Customer + amount alone (the old score threshold) is never sufficient.
+  return sameLines || sameMoney(invoice.Total, quote.Total)
+}
+
+export function xeroDate(value: unknown): string | null {
+  const text = String(value || "")
+  // DateString is a calendar date, not a local timestamp to shift into UTC.
+  const iso = /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(text) ? text.slice(0, 10) : null
+  if (iso) {
+    const parsed = new Date(iso + "T00:00:00Z")
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : null
   }
+  const legacy = /^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/.exec(text)
+  const date = legacy ? new Date(Number(legacy[1])) : new Date(NaN)
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : null
+}
 
-  const recentResult = await xeroJson(
-    `${XERO_API}/Invoices?page=1&order=Date%20DESC`,
-    accessToken,
-    tenantId,
-  )
-  const recent = ((recentResult?.Invoices || []) as XeroRow[])
-    .filter((row) => String(row.Type || "").toUpperCase() === "ACCREC")
+async function openJobs() {
+  const rows: CostingJobRow[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await xeroAdmin().from("costing_jobs").select(JOB_FIELDS)
+      .in("status", OPEN_STATUSES).not("xero_quote_id", "is", null).is("xero_invoice_id", null)
+      .is("xero_invoice_number", null).order("id").range(from, from + 999)
+    if (error) throw error
+    rows.push(...(data || []) as CostingJobRow[])
+    if (!data || data.length < 1000) return rows
+  }
+}
 
-  const scored = recent
-    .map((invoice) => ({ invoice, score: invoiceScore(invoice, quote) }))
-    .filter(({ score }) => score >= 12)
-    .sort((a, b) => b.score - a.score)
+async function quoteForJob(job: CostingJobRow, xero: Connection) {
+  const result = await xeroJson(`/Quotes/${encodeURIComponent(job.xero_quote_id!)}`, xero)
+  const quote = result?.Quotes?.[0] as XeroRow | undefined
+  if (!quote || quote.QuoteID !== job.xero_quote_id) throw new Error("Quote not found in Xero")
+  return quote
+}
 
-  if (!scored.length) return null
-  if (scored.length > 1 && scored[0].score === scored[1].score) return null
-  return scored[0].invoice
+async function linkedQuotes(xero: Connection, known?: LinkedQuote) {
+  const jobs = await openJobs()
+  if (known && !jobs.some((job) => job.id === known.job.id)) jobs.push(known.job)
+  const rows: LinkedQuote[] = []
+  for (const job of jobs) {
+    // Fail closed if a quote cannot be read: excluding it could conceal an ambiguous match.
+    const quote = known?.job.id === job.id ? known.quote : await quoteForJob(job, xero)
+    rows.push({ job, quote })
+  }
+  return rows
+}
+
+async function invoicesForContact(quote: XeroRow, xero: Connection) {
+  if (!contactId(quote)) return []
+  const rows = new Map<string, XeroRow>()
+  // Paginated invoice responses include LineItems. Search the customer's invoices,
+  // not just the newest page across the whole Xero organisation.
+  for (let page = 1; page <= 20; page++) {
+    const params = new URLSearchParams({ ContactIDs: contactId(quote), page: String(page),
+      pageSize: "100", order: "UpdatedDateUTC DESC", where: 'Type=="ACCREC"' })
+    const result = await xeroJson(`/Invoices?${params}`, xero)
+    const invoices = (result?.Invoices || []) as XeroRow[]
+    for (const invoice of invoices) if (isSalesInvoice(invoice)) rows.set(String(invoice.InvoiceID), invoice)
+    if (invoices.length < 100) return [...rows.values()]
+  }
+  throw new Error("Too many Xero invoices to safely check all matches. Link the invoice explicitly from the job.")
+}
+
+async function saveUnlinkedJob(job: CostingJobRow, updates: Record<string, unknown>) {
+  // The unique InvoiceID index plus this compare-and-set protect against repeated
+  // webhooks, concurrent checks, and a job being completed or linked during lookup.
+  const { data, error } = await xeroAdmin().from("costing_jobs").update(updates)
+    .eq("id", job.id).eq("status", job.status).eq("xero_quote_id", job.xero_quote_id)
+    .is("xero_invoice_id", null).is("xero_invoice_number", null).select("id")
+  if (error) throw error
+  if (!data?.length) throw new Error("This RPM record changed during sync. Refresh it and check again.")
 }
 
 async function activateJobFromInvoice(job: CostingJobRow, quote: XeroRow, invoice: XeroRow): Promise<SyncResult> {
-  const invoiceNumber = String(invoice.InvoiceNumber || "").trim()
-  if (!invoiceNumber) return { ok: false, jobId: job.id, error: "Matched Xero invoice has no invoice number" }
-
-  const updates: Record<string, unknown> = {
-    xero_quote_number: quote.QuoteNumber || job.xero_quote_number || null,
-    xero_invoice_number: invoiceNumber,
-    job_number: invoiceNumber,
-    status: "in_progress",
-    updated_at: new Date().toISOString(),
-  }
-
-  const dueDate = String(invoice.DueDateString || invoice.DueDate || "").slice(0, 10)
-  if (dueDate) updates.completion_date = dueDate
-
-  const admin = xeroAdmin()
-  const { error } = await admin.from("costing_jobs").update(updates).eq("id", job.id)
+  const invoiceId = String(invoice.InvoiceID)
+  const invoiceNumber = String(invoice.InvoiceNumber)
+  const { data: existing, error } = await xeroAdmin().from("costing_jobs").select("id")
+    .or(`xero_invoice_id.eq.${JSON.stringify(invoiceId)},xero_invoice_number.eq.${JSON.stringify(invoiceNumber)}`)
+    .neq("id", job.id).limit(1)
   if (error) throw error
+  if (existing?.length) throw new Error("This Xero invoice is already linked to another RPM job.")
 
-  return {
-    ok: true,
-    jobId: job.id,
-    xeroStatus: String(quote.Status || "").toUpperCase(),
-    invoiceNumber,
-    changedToJob: job.status !== "in_progress" || job.xero_invoice_number !== invoiceNumber,
-  }
+  const now = new Date().toISOString()
+  const dueDate = xeroDate(invoice.DueDateString || invoice.DueDate)
+  await saveUnlinkedJob(job, {
+    xero_quote_number: quote.QuoteNumber || job.xero_quote_number,
+    xero_invoice_id: invoiceId, xero_invoice_number: invoiceNumber,
+    job_number: invoiceNumber, status: "in_progress", updated_at: now,
+    ...(dueDate ? { completion_date: dueDate } : {}),
+  })
+  return { ok: true, jobId: job.id, xeroStatus: String(quote.Status), invoiceNumber, changedToJob: true }
+}
+
+async function uniqueInvoice(quote: XeroRow, xero: Connection) {
+  const matches = (await invoicesForContact(quote, xero)).filter((invoice) => invoiceMatchesQuote(invoice, quote))
+  if (matches.length > 1) throw new Error("Multiple Xero invoices match this quote. No link was changed; link the intended invoice explicitly.")
+  return matches[0] || null
 }
 
 export async function syncLinkedQuoteToJob(job: CostingJobRow): Promise<SyncResult> {
   if (!job.xero_quote_id) return { ok: false, jobId: job.id, error: "No Xero quote ID" }
-
-  const xero = await getValidXero()
-  if (!xero) return { ok: false, jobId: job.id, error: "Xero is not connected" }
-
+  if (job.xero_invoice_id || job.xero_invoice_number || !OPEN_STATUSES.includes(job.status)) {
+    return { ok: true, jobId: job.id, invoiceNumber: job.xero_invoice_number, changedToJob: false }
+  }
   try {
-    const quoteResult = await xeroJson(`${XERO_API}/Quotes/${job.xero_quote_id}`, xero.accessToken, xero.tenantId)
-    const quote = quoteResult?.Quotes?.[0] as XeroRow | undefined
-    if (!quote) return { ok: false, jobId: job.id, error: "Quote not found in Xero" }
-
+    const xero = await getValidXero()
+    if (!xero) throw new Error("Xero is not connected")
+    const quote = await quoteForJob(job, xero)
     const xeroStatus = String(quote.Status || "").toUpperCase()
-    if (xeroStatus === "INVOICED") {
-      const invoice = await findInvoiceForQuote(quote, xero.accessToken, xero.tenantId)
-      if (invoice?.InvoiceNumber) return activateJobFromInvoice(job, quote, invoice)
+    // Invoice creation and quote status changes need not be visible at the same time.
+    // A draft invoice is linkable; it does not need approval or an INVOICED quote.
+    const invoice = QUOTE_STATUSES.includes(xeroStatus) ? await uniqueInvoice(quote, xero) : null
+    if (invoice) {
+      const matches = (await linkedQuotes(xero, { job, quote })).filter((row) => invoiceMatchesQuote(invoice, row.quote))
+      if (matches.length !== 1 || matches[0].job.id !== job.id) throw new Error("This invoice matches multiple RPM quotes. No link was changed.")
+      return await activateJobFromInvoice(job, quote, invoice)
     }
-
-    const updates: Record<string, unknown> = {
-      xero_quote_number: quote.QuoteNumber || job.xero_quote_number || null,
+    await saveUnlinkedJob(job, {
+      xero_quote_number: quote.QuoteNumber || job.xero_quote_number,
       updated_at: new Date().toISOString(),
       status: xeroStatus === "ACCEPTED" || xeroStatus === "INVOICED" ? "approved" : "quoted",
-    }
-
-    const admin = xeroAdmin()
-    const { error: saveError } = await admin.from("costing_jobs").update(updates).eq("id", job.id)
-    if (saveError) throw saveError
-
-    return {
-      ok: true,
-      jobId: job.id,
-      xeroStatus,
-      invoiceNumber: job.xero_invoice_number,
-      changedToJob: false,
-      ...(xeroStatus === "INVOICED"
-        ? { error: "Xero marks this quote as invoiced, but RPM could not safely identify the invoice yet." }
-        : {}),
-    }
+    })
+    return { ok: true, jobId: job.id, xeroStatus, invoiceNumber: null, changedToJob: false,
+      warning: "No matching Xero invoice was found. The quote status was checked; no invoice link was changed." }
   } catch (error) {
     return { ok: false, jobId: job.id, error: error instanceof Error ? error.message : "Xero sync failed" }
   }
 }
 
-// Event-driven webhook matching: Xero gives RPM the invoice ID, not the originating QuoteID.
-// On an invoice webhook, compare that invoice against currently open RPM-linked Xero quotes.
-// This only runs when Xero tells us an invoice changed, so there is no idle polling.
 export async function syncOpenQuotesForInvoices(invoices: XeroRow[]) {
-  const salesInvoices = invoices.filter(
-    (invoice) => String(invoice.Type || "").toUpperCase() === "ACCREC" && invoice.InvoiceNumber
-  )
+  const salesInvoices = [...new Map(invoices.filter(isSalesInvoice).map((row) => [String(row.InvoiceID), row])).values()]
   if (!salesInvoices.length) return [] as SyncResult[]
-
   const xero = await getValidXero()
   if (!xero) throw new Error("Xero is not connected")
-
-  const admin = xeroAdmin()
-  const { data, error } = await admin
-    .from("costing_jobs")
-    .select("id,title,status,reference,xero_quote_id,xero_quote_number,xero_invoice_number,job_number")
-    .in("status", ["quoted", "approved"])
-    .not("xero_quote_id", "is", null)
-
-  if (error) throw error
-  const jobs = (data || []) as CostingJobRow[]
-  if (!jobs.length) return [] as SyncResult[]
-
-  const quoteRows: Array<{ job: CostingJobRow; quote: XeroRow }> = []
-  for (const job of jobs) {
+  const quotes = await linkedQuotes(xero)
+  const results: SyncResult[] = []
+  // Resolve the entire batch before writes so order cannot break ambiguity ties.
+  const matches = salesInvoices.map((invoice) => ({ invoice, quotes: quotes.filter((row) => invoiceMatchesQuote(invoice, row.quote)) }))
+  for (const match of matches) {
+    if (match.quotes.length !== 1) continue
+    const { job, quote } = match.quotes[0]
+    if (matches.filter((other) => other.quotes.some((row) => row.job.id === job.id)).length !== 1) continue
     try {
-      const result = await xeroJson(`${XERO_API}/Quotes/${job.xero_quote_id}`, xero.accessToken, xero.tenantId)
-      const quote = result?.Quotes?.[0] as XeroRow | undefined
-      if (quote && String(quote.Status || "").toUpperCase() === "INVOICED") quoteRows.push({ job, quote })
-    } catch (lookupError) {
-      console.error("Xero webhook quote lookup failed", job.xero_quote_id, lookupError)
+      // Check for competing invoices outside this webhook batch as well.
+      const invoice = await uniqueInvoice(quote, xero)
+      if (!invoice || invoice.InvoiceID !== match.invoice.InvoiceID) continue
+      results.push(await activateJobFromInvoice(job, quote, invoice))
+    } catch (error) {
+      results.push({ ok: false, jobId: job.id, error: error instanceof Error ? error.message : "Xero sync failed" })
     }
   }
-
-  const results: SyncResult[] = []
-  const claimedJobs = new Set<string>()
-
-  for (const invoice of salesInvoices) {
-    const scored = quoteRows
-      .filter(({ job }) => !claimedJobs.has(job.id))
-      .map(({ job, quote }) => ({ job, quote, score: invoiceScore(invoice, quote) }))
-      .filter(({ score }) => score >= 12)
-      .sort((a, b) => b.score - a.score)
-
-    if (!scored.length) continue
-    if (scored.length > 1 && scored[0].score === scored[1].score) continue
-
-    const best = scored[0]
-    const result = await activateJobFromInvoice(best.job, best.quote, invoice)
-    claimedJobs.add(best.job.id)
-    results.push(result)
-  }
-
   return results
 }
 
 export async function syncOpenQuotesForReferences(references: string[]) {
-  const unique = Array.from(new Set(references.map((value) => value.trim()).filter(Boolean)))
-  if (!unique.length) return [] as SyncResult[]
-
-  const admin = xeroAdmin()
-  const { data, error } = await admin
-    .from("costing_jobs")
-    .select("id,title,status,reference,xero_quote_id,xero_quote_number,xero_invoice_number,job_number")
-    .in("status", ["quoted", "approved"])
-    .not("xero_quote_id", "is", null)
-    .in("reference", unique)
-
-  if (error) throw error
-  const jobs = (data || []) as CostingJobRow[]
+  const unique = new Set(references.map(normaliseText).filter(Boolean))
+  if (!unique.size) return [] as SyncResult[]
+  const jobs = (await openJobs()).filter((job) => unique.has(normaliseText(job.reference)) || unique.has(normaliseText(job.title)))
   const results: SyncResult[] = []
   for (const job of jobs) results.push(await syncLinkedQuoteToJob(job))
   return results

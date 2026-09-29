@@ -111,6 +111,7 @@ export default function CostingJobDetailPage() {
             const body = await response.json()
             if (!response.ok) throw new Error(body.error || "Could not sync Xero status.")
             await mutate()
+            if (body.warning) setXeroError(body.warning)
         } catch (error) {
             setXeroError(error instanceof Error ? error.message : "Could not sync Xero status.")
         } finally {
