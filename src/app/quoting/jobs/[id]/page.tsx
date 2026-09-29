@@ -221,7 +221,7 @@ export default function ActiveJobDetailPage() {
         <TabsContent value="time" className="mt-1"><TimeEntries job={job}/></TabsContent>
         <TabsContent value="actuals" className="mt-1"><CostingActuals job={job}/></TabsContent>
         <TabsContent value="est-vs-actual" className="mt-1"><EstVsActual job={job}/></TabsContent>
-        <TabsContent value="install" className="mt-1"><InstallerActivity jobId={id} canDeletePhotos={canDeleteJobPhotos}/></TabsContent>
+        <TabsContent value="install" className="mt-1"><InstallerActivity jobId={id} canDeletePhotos={canDeleteJobPhotos} canDeleteNotes={canDeleteJobPhotos}/></TabsContent>
         <TabsContent value="health-safety" className="mt-1"><JobHealthSafety jobId={id}/></TabsContent>
       </Tabs>
     </>}
