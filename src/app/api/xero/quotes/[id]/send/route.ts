@@ -189,10 +189,9 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
             }
         })
 
-        const siteLabel = store?.name ? `${clientName} ${store.name}`.trim() : clientName
         const introDescription = [
-            `${siteLabel}:`,
-            job.details?.trim() || job.reference?.trim() || job.title.trim(),
+            job.title.trim(),
+            job.details?.trim(),
             job.contact_name?.trim() ? `Contact: ${job.contact_name.trim()}` : null,
         ].filter(Boolean).join("\n")
 
