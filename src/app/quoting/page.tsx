@@ -23,6 +23,17 @@ import type { CostingJob } from "@/types/database"
 const PAGE_SIZE = 20
 type QuoteRow = CostingJob & { clients?: { name: string } | null; stores?: { name: string } | null }
 type QuoteView = "active" | "completed"
+type FilterRow = Pick<QuoteRow, "store_id" | "stores" | "quoted_by_name" | "xero_quote_number">
+const EMPTY_FILTERS = { client: "all", site: "all", quotedBy: "all", xero: "all", status: "all" }
+
+function QuoteFilter({ label, allLabel, value, options, disabled, onChange }: {
+    label: string; allLabel: string; value: string; options: { value: string; label: string }[]; disabled: boolean; onChange: (value: string) => void
+}) {
+    return <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger size="sm" aria-label={label} className="w-full"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="all">{allLabel}</SelectItem>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+    </Select>
+}
 
 const STATUS: Record<string, { label: string; className: string }> = {
     quote: { label: "Draft Quote", className: "bg-slate-500/15 text-slate-600 dark:text-slate-300" },
@@ -38,13 +49,13 @@ export default function QuotesPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
     const { clientId, customers, isAdmin } = useCustomerFilter()
-    const [filters, setFilters] = useState({ client: "all", site: "", quotedBy: "", xero: "", status: "all" })
+    const [filters, setFilters] = useState(EMPTY_FILTERS)
     const [previousClientId, setPreviousClientId] = useState(clientId)
     const [page, setPage] = useState(1)
     // Reset local filters and pagination when the shared customer scope changes.
     if (previousClientId !== clientId) {
         setPreviousClientId(clientId)
-        setFilters({ client: "all", site: "", quotedBy: "", xero: "", status: "all" })
+        setFilters(EMPTY_FILTERS)
         setPage(1)
     }
     const [search, setSearch] = useState("")
@@ -55,29 +66,65 @@ export default function QuotesPage() {
     const [deleting, setDeleting] = useState(false)
     const statuses = view === "active" ? ["quote", "quoted"] : ["approved", "in_progress", "complete", "invoiced", "cancelled"]
     const key = JSON.stringify(["quotes", view, page, clientId, search, filters])
-    const hasFilters = search.trim() !== "" || Object.entries(filters).some(([key, value]) => value !== (key === "client" || key === "status" ? "all" : ""))
+    const hasFilters = search.trim() !== "" || Object.values(filters).some(value => value !== "all")
 
     function updateFilter(name: keyof typeof filters, value: string) {
-        setFilters(current => ({ ...current, [name]: value }))
+        setFilters(current => ({ ...(name === "client" ? EMPTY_FILTERS : current), [name]: value }))
         setPage(1)
     }
 
     function clearFilters() {
-        setFilters({ client: "all", site: "", quotedBy: "", xero: "", status: "all" })
+        setFilters(EMPTY_FILTERS)
         setSearch("")
         setPage(1)
     }
 
+    // Load choices across every page, independently of the selected column values.
+    const { data: filterRows, error: optionsError, isLoading: optionsLoading, mutate: refreshOptions } = useSupabaseQuery<FilterRow[]>(JSON.stringify(["quote-filter-options", view, clientId, filters.client]), async () => {
+        const rows: FilterRow[] = []
+        for (let from = 0; ; from += 500) {
+            let query = supabase.from("costing_jobs").select("store_id, stores ( name ), quoted_by_name, xero_quote_number").eq("is_template", false).in("status", statuses)
+            if (clientId) query = query.eq("client_id", clientId)
+            else if (isAdmin && filters.client === "adhoc") query = query.is("client_id", null)
+            else if (isAdmin && filters.client !== "all") query = query.eq("client_id", filters.client)
+            const { data, error } = await query.order("id").range(from, from + 499)
+            if (error) throw error
+            const batch = (data || []) as unknown as FilterRow[]
+            rows.push(...batch)
+            if (batch.length < 500) break
+        }
+        return { data: rows, error: null }
+    }, { keepPreviousData: false })
+
+    const options = useMemo(() => {
+        const sites = new Map<string, string>()
+        const people = new Map<string, string>()
+        const xero = new Map<string, string>()
+        for (const row of filterRows || []) {
+            sites.set(JSON.stringify(row.store_id ?? null), row.stores?.name || "No site")
+            people.set(JSON.stringify(row.quoted_by_name ?? null), row.quoted_by_name ?? "Not recorded")
+            xero.set(JSON.stringify(row.xero_quote_number ?? null), row.xero_quote_number ?? "No Xero number")
+        }
+        const sorted = (values: Map<string, string>) => Array.from(values, ([value, label]) => ({ value, label: label || "Blank" })).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+        return { sites: sorted(sites), people: sorted(people), xero: sorted(xero) }
+    }, [filterRows])
+
+    function changeView(next: QuoteView) {
+        setView(next)
+        setFilters(current => ({ ...EMPTY_FILTERS, client: current.client }))
+        setPage(1)
+    }
+
     const { data: result, error, isLoading, mutate } = useSupabaseQuery<{ items: QuoteRow[]; count: number }>(key, async () => {
-        const site = filters.site.trim()
-        let query = supabase.from("costing_jobs").select(`*, clients ( name ), stores${site ? "!inner" : ""} ( name )`, { count: "exact" }).eq("is_template", false).in("status", statuses)
+        let query = supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`, { count: "exact" }).eq("is_template", false).in("status", statuses)
         if (clientId) query = query.eq("client_id", clientId)
         else if (isAdmin && filters.client === "adhoc") query = query.is("client_id", null)
         else if (isAdmin && filters.client !== "all") query = query.eq("client_id", filters.client)
-        const contains = (value: string) => `%${value.trim().replace(/[\\%_*]/g, "\\$&")}%`
-        if (site) query = query.ilike("stores.name", contains(site))
-        if (filters.quotedBy.trim()) query = query.ilike("quoted_by_name", contains(filters.quotedBy))
-        if (filters.xero.trim()) query = query.ilike("xero_quote_number", contains(filters.xero))
+        for (const [column, selected] of [["store_id", filters.site], ["quoted_by_name", filters.quotedBy], ["xero_quote_number", filters.xero]]) {
+            if (selected === "all") continue
+            const value: string | null = JSON.parse(selected)
+            query = value === null ? query.is(column, null) : query.eq(column, value)
+        }
         if (filters.status !== "all") query = query.eq("status", filters.status)
         if (search.trim()) {
             const term = search.trim().replace(/[,()*%]/g, "")
@@ -155,15 +202,15 @@ export default function QuotesPage() {
         <PageHeader icon={Calculator} kicker="Job & Project Management" title="Quotes" description="Build active quotes and keep completed quotes as reusable history." actions={<div className="flex items-center gap-2"><XeroConnect /><Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}><DialogTrigger asChild><Button size="sm" className="gap-1.5 h-9"><Plus className="size-3.5" /> New quote</Button></DialogTrigger><DialogContent className="sm:max-w-[600px]"><DialogHeader><DialogTitle>New quote</DialogTitle><DialogDescription>Start a quote. Client and site are optional for ad-hoc / wholesale work.</DialogDescription></DialogHeader><CostingJobForm onSuccess={(id) => { setIsDialogOpen(false); mutate(); if (id) router.push(`/quoting/${id}`) }} onCancel={() => setIsDialogOpen(false)} /></DialogContent></Dialog></div>} />
 
         <div className="inline-flex w-fit rounded-md border border-border/60 bg-muted/30 p-0.5">
-            <button onClick={() => { setView("active"); updateFilter("status", "all") }} className={`rounded px-3 py-1 text-sm ${view === "active" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Active Quotes</button>
-            <button onClick={() => { setView("completed"); updateFilter("status", "all") }} className={`rounded px-3 py-1 text-sm ${view === "completed" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Completed Quotes</button>
+            <button onClick={() => changeView("active")} className={`rounded px-3 py-1 text-sm ${view === "active" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Active Quotes</button>
+            <button onClick={() => changeView("completed")} className={`rounded px-3 py-1 text-sm ${view === "completed" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Completed Quotes</button>
         </div>
 
         <div className="flex items-center gap-2"><div className="relative flex-1 max-w-md"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input placeholder="Search quote, reference or Xero quote #…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-8" /></div>{hasFilters && <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>Clear filters</Button>}<span aria-live="polite" className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "quote" : "quotes"}</span></div>
 
         <div className="border border-border/60 rounded-lg overflow-x-auto"><table aria-label="Quotes" className="w-full text-sm"><thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-3 py-1.5">Quote</th><th className="font-medium px-3 py-1.5">Client / Site</th><th className="font-medium px-3 py-1.5">People</th><th className="font-medium px-3 py-1.5 w-28">Xero #</th><th className="font-medium px-3 py-1.5 w-36">Status</th><th className="w-36"><span className="sr-only">Actions</span></th></tr>
             <tr>
-                <th className="px-3 pb-2 font-normal"><span className="text-xs">Use search above</span></th>
+                <th />
                 <th className="px-3 pb-2 font-normal">
                     <div className="flex flex-col gap-1 min-w-40">
                         {isAdmin && !clientId ? <Select value={filters.client} onValueChange={value => updateFilter("client", value)}>
@@ -174,11 +221,11 @@ export default function QuotesPage() {
                                 {customers.map(client => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
                             </SelectContent>
                         </Select> : <span className="text-xs text-left">{customers.find(client => client.id === clientId)?.name || "Current customer"}</span>}
-                        <Input aria-label="Filter by site" placeholder="Site…" className="h-8" value={filters.site} onChange={e => updateFilter("site", e.target.value)} />
+                        <QuoteFilter label="Filter by site" allLabel="All sites" value={filters.site} options={options.sites} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("site", value)} />
                     </div>
                 </th>
-                <th className="px-3 pb-2 font-normal"><Input aria-label="Filter by quoted by" placeholder="Quoted by…" className="h-8 min-w-28" value={filters.quotedBy} onChange={e => updateFilter("quotedBy", e.target.value)} /></th>
-                <th className="px-3 pb-2 font-normal"><Input aria-label="Filter by Xero quote number" placeholder="Xero #…" className="h-8 min-w-24" value={filters.xero} onChange={e => updateFilter("xero", e.target.value)} /></th>
+                <th className="px-3 pb-2 font-normal"><QuoteFilter label="Filter by quoted by" allLabel="All people" value={filters.quotedBy} options={options.people} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("quotedBy", value)} /></th>
+                <th className="px-3 pb-2 font-normal"><QuoteFilter label="Filter by Xero quote number" allLabel="All Xero numbers" value={filters.xero} options={options.xero} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("xero", value)} /></th>
                 <th className="px-3 pb-2 font-normal">
                     <Select value={filters.status} onValueChange={value => updateFilter("status", value)}>
                         <SelectTrigger size="sm" aria-label="Filter by status" className="w-full"><SelectValue /></SelectTrigger>
@@ -188,6 +235,7 @@ export default function QuotesPage() {
                 <th />
             </tr></thead><tbody>{error ? <tr><td colSpan={6} role="alert" className="px-3 py-10 text-center text-sm">Could not load quotes. <Button variant="link" onClick={() => mutate()}>Try again</Button></td></tr> : isLoading ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">Loading quotes…</td></tr> : !quotes.length ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">{hasFilters ? "No quotes match these filters." : view === "active" ? "No active quotes." : "No completed quotes yet."}</td></tr> : quotes.map(q => { const meta = STATUS[q.status] || STATUS.quote; return <tr key={q.id} onClick={() => router.push(q.status === "in_progress" || q.status === "complete" || q.status === "invoiced" || q.status === "cancelled" ? `/quoting/jobs/${q.id}` : `/quoting/${q.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30"><td className="px-3 py-1.5"><div className="font-medium leading-tight">{q.title}</div>{q.reference && <div className="text-[11px] leading-tight text-muted-foreground">{q.reference}</div>}</td><td className="px-3 py-1.5 text-muted-foreground">{q.clients?.name || "Ad-hoc"}{q.stores?.name ? ` · ${q.stores.name}` : ""}</td><td className="px-3 py-1.5 text-xs"><div>Quoted: <span className="font-medium">{q.quoted_by_name || "—"}</span></div></td><td className="px-3 py-1.5 tabular-nums">{q.xero_quote_number || "—"}</td><td className="px-3 py-1.5"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td><td className="px-2 py-1"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" className="h-7 gap-1.5 px-2" disabled={copyingId === q.id} onClick={(e) => { e.stopPropagation(); copyQuote(q) }}><Copy className="size-3.5" /> Copy</Button>{view === "active" && <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete quote" onClick={(e) => { e.stopPropagation(); setDeleteTarget(q) }}><Trash2 className="size-3.5" /></Button>}</div></td></tr> })}</tbody></table></div>{!error && !isLoading && <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />}
 
+        {optionsError && <div role="status" className="text-sm text-muted-foreground">Could not load filter choices. <Button variant="link" onClick={() => refreshOptions()}>Retry filters</Button></div>}
         <Dialog open={deleteTarget != null} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
             <DialogContent className="sm:max-w-[440px]">
                 <DialogHeader>
