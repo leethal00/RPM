@@ -25,12 +25,13 @@ type QuoteRow = CostingJob & { clients?: { name: string } | null; stores?: { nam
 type QuoteView = "active" | "completed"
 type FilterRow = Pick<QuoteRow, "store_id" | "stores" | "quoted_by_name" | "xero_quote_number">
 const EMPTY_FILTERS = { client: "all", site: "all", quotedBy: "all", xero: "all", status: "all" }
+const FILTER_TRIGGER_CLASS = "data-[size=sm]:h-6 w-auto min-w-0 max-w-40 gap-1 px-2 py-0 text-xs shadow-none [&>span]:truncate [&>span]:block"
 
 function QuoteFilter({ label, allLabel, value, options, disabled, onChange }: {
     label: string; allLabel: string; value: string; options: { value: string; label: string }[]; disabled: boolean; onChange: (value: string) => void
 }) {
     return <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger size="sm" aria-label={label} className="w-full"><SelectValue /></SelectTrigger>
+        <SelectTrigger size="sm" aria-label={label} className={FILTER_TRIGGER_CLASS}><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="all">{allLabel}</SelectItem>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
     </Select>
 }
@@ -211,10 +212,10 @@ export default function QuotesPage() {
         <div className="border border-border/60 rounded-lg overflow-x-auto"><table aria-label="Quotes" className="w-full text-sm"><thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-3 py-1.5">Quote</th><th className="font-medium px-3 py-1.5">Client / Site</th><th className="font-medium px-3 py-1.5">People</th><th className="font-medium px-3 py-1.5 w-28">Xero #</th><th className="font-medium px-3 py-1.5 w-36">Status</th><th className="w-36"><span className="sr-only">Actions</span></th></tr>
             <tr>
                 <th />
-                <th className="px-3 pb-2 font-normal">
-                    <div className="flex flex-col gap-1 min-w-40">
+                <th className="px-3 pb-1.5 text-left font-normal">
+                    <div className="flex items-center gap-1.5">
                         {isAdmin && !clientId ? <Select value={filters.client} onValueChange={value => updateFilter("client", value)}>
-                            <SelectTrigger size="sm" aria-label="Filter by client" className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectTrigger size="sm" aria-label="Filter by client" className={FILTER_TRIGGER_CLASS}><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All clients</SelectItem>
                                 <SelectItem value="adhoc">Ad-hoc / No client</SelectItem>
@@ -224,11 +225,11 @@ export default function QuotesPage() {
                         <QuoteFilter label="Filter by site" allLabel="All sites" value={filters.site} options={options.sites} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("site", value)} />
                     </div>
                 </th>
-                <th className="px-3 pb-2 font-normal"><QuoteFilter label="Filter by quoted by" allLabel="All people" value={filters.quotedBy} options={options.people} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("quotedBy", value)} /></th>
-                <th className="px-3 pb-2 font-normal"><QuoteFilter label="Filter by Xero quote number" allLabel="All Xero numbers" value={filters.xero} options={options.xero} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("xero", value)} /></th>
-                <th className="px-3 pb-2 font-normal">
+                <th className="px-3 pb-1.5 text-left font-normal"><QuoteFilter label="Filter by quoted by" allLabel="All people" value={filters.quotedBy} options={options.people} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("quotedBy", value)} /></th>
+                <th className="px-3 pb-1.5 text-left font-normal"><QuoteFilter label="Filter by Xero quote number" allLabel="All Xero #" value={filters.xero} options={options.xero} disabled={optionsLoading || !!optionsError} onChange={value => updateFilter("xero", value)} /></th>
+                <th className="px-3 pb-1.5 text-left font-normal">
                     <Select value={filters.status} onValueChange={value => updateFilter("status", value)}>
-                        <SelectTrigger size="sm" aria-label="Filter by status" className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectTrigger size="sm" aria-label="Filter by status" className={FILTER_TRIGGER_CLASS}><SelectValue /></SelectTrigger>
                         <SelectContent><SelectItem value="all">All statuses</SelectItem>{statuses.map(status => <SelectItem key={status} value={status}>{STATUS[status].label}</SelectItem>)}</SelectContent>
                     </Select>
                 </th>
