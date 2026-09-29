@@ -209,7 +209,16 @@ export default function QuotesPage() {
 
         <div className="flex items-center gap-2"><div className="relative flex-1 max-w-md"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input placeholder="Search quote, reference or Xero quote #…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-8" /></div>{hasFilters && <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>Clear filters</Button>}<span aria-live="polite" className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "quote" : "quotes"}</span></div>
 
-        <div className="border border-border/60 rounded-lg overflow-x-auto"><table aria-label="Quotes" className="w-full text-sm"><thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-3 py-1.5">Quote</th><th className="font-medium px-3 py-1.5">Client / Site</th><th className="font-medium px-3 py-1.5">People</th><th className="font-medium px-3 py-1.5 w-28">Xero #</th><th className="font-medium px-3 py-1.5 w-36">Status</th><th className="w-36"><span className="sr-only">Actions</span></th></tr>
+        <div className="border border-border/60 rounded-lg overflow-x-auto"><table aria-label="Quotes" className="w-full min-w-[1200px] table-fixed text-sm [&_td]:break-words">
+            <colgroup>
+                <col style={{ width: "34%" }} />
+                <col />
+                <col style={{ width: 144 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 128 }} />
+            </colgroup>
+            <thead className="bg-muted/40 text-muted-foreground"><tr className="text-left"><th className="font-medium px-3 py-1.5">Quote</th><th className="font-medium px-3 py-1.5">Client / Site</th><th className="font-medium px-3 py-1.5">People</th><th className="font-medium px-3 py-1.5">Xero #</th><th className="font-medium px-3 py-1.5">Status</th><th><span className="sr-only">Actions</span></th></tr>
             <tr>
                 <th />
                 <th className="px-3 pb-1.5 text-left font-normal">
