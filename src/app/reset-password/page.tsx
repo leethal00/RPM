@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -9,14 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, Lock, Loader2 } from 'lucide-react'
-
-function validatePassword(password: string): string | null {
-    if (password.length < 8) return 'Password must be at least 8 characters'
-    if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter'
-    if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter'
-    if (!/[0-9]/.test(password)) return 'Password must contain a number'
-    return null
-}
+import { validatePassword } from '@/lib/password-policy'
 
 export default function ResetPasswordPage() {
     const [password, setPassword] = useState('')
@@ -27,18 +20,30 @@ export default function ResetPasswordPage() {
 
     const router = useRouter()
     const searchParams = useSearchParams()
+    // Capture the fragment before the browser auth client can consume it.
+    const recoveryHash = useRef(typeof window === 'undefined' ? '' : window.location.hash)
     const supabase = createClient()
 
     useEffect(() => {
         const exchangeRecoveryCode = async () => {
             const code = searchParams.get('code')
-
-            if (!code) {
+            // Admin-triggered emails use the implicit flow so the recipient can
+            // open the link in a different browser from the administrator.
+            const fragment = new URLSearchParams(recoveryHash.current.slice(1))
+            const accessToken = fragment.get('access_token')
+            const refreshToken = fragment.get('refresh_token')
+            let error: { message: string } | null = null
+            if (code) {
+                const result = await supabase.auth.exchangeCodeForSession(code)
+                error = result.error
+            } else if (fragment.get('type') === 'recovery' && accessToken && refreshToken) {
+                window.history.replaceState(null, '', window.location.pathname)
+                const result = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+                error = result.error
+            } else {
                 setSessionError('Reset link is missing its recovery code.')
                 return
             }
-
-            const { error } = await supabase.auth.exchangeCodeForSession(code)
 
             if (error) {
                 setSessionError(error.message)

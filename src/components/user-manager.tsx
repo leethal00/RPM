@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Loader2, Plus, Trash2, Edit2, UserCog } from "lucide-react"
+import { validatePassword } from "@/lib/password-policy"
 
 interface Client {
     id: string;
@@ -36,6 +37,10 @@ export function UserManager() {
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [passwordAction, setPasswordAction] = useState<"set" | "email" | null>(null)
+    const [showPasswordFields, setShowPasswordFields] = useState(false)
+    const [newPassword, setNewPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
     const [currentUserInfo, setCurrentUserInfo] = useState<{ id: string; role: string | null } | null>(null)
 
     // Form state
@@ -55,6 +60,7 @@ export function UserManager() {
     // Only the current super_admin can grant/revoke developer_mode, and the
     // checkbox is hidden from everyone else.
     const canEditDeveloperMode = currentUserInfo?.role === "super_admin"
+    const canManagePasswords = currentUserInfo?.role === "super_admin"
 
     const fetchUsers = useCallback(async () => {
         setLoading(true)
@@ -100,6 +106,9 @@ export function UserManager() {
     }, [fetchUsers, fetchClients, fetchCurrentUser, supabase])
 
     const openCreateDialog = () => {
+        setShowPasswordFields(false)
+        setNewPassword("")
+        setConfirmPassword("")
         setEditingUserId(null)
         setEmail("")
         setPassword("")
@@ -114,6 +123,9 @@ export function UserManager() {
     }
 
     const openEditDialog = (user: UserData) => {
+        setShowPasswordFields(false)
+        setNewPassword("")
+        setConfirmPassword("")
         setEditingUserId(user.id)
         setEmail(user.email)
         setPassword("") // Leave blank on edit
@@ -129,6 +141,38 @@ export function UserManager() {
                 .then(({data,error}: {data: {job_id:string}[] | null; error: {message:string} | null}) => { if (error) toast.error(error.message); else setAssignedJobIds((data || []).map(item=>item.job_id)) })
         }
         setIsDialogOpen(true)
+    }
+
+    const managePassword = async (action: "set" | "email") => {
+        if (!editingUserId || !canManagePasswords) return
+        if (action === "set") {
+            const policyError = validatePassword(newPassword)
+            if (policyError) { toast.error(policyError); return }
+            if (newPassword !== confirmPassword) { toast.error("Passwords do not match"); return }
+        }
+
+        setPasswordAction(action)
+        try {
+            const response = await fetch(`/api/users/${editingUserId}/password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(action === "set"
+                    ? { action, password: newPassword, confirmPassword }
+                    : { action }),
+            })
+            const result = await response.json() as { error?: string; message?: string }
+            if (!response.ok) throw new Error(result.error || "Password action failed")
+            toast.success(action === "set" ? "Password changed successfully" : `Password reset email requested for ${email}`)
+            if (action === "set") {
+                setNewPassword("")
+                setConfirmPassword("")
+                setShowPasswordFields(false)
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Password action failed")
+        } finally {
+            setPasswordAction(null)
+        }
     }
 
     const handleSave = async (e: React.FormEvent) => {
@@ -442,6 +486,45 @@ export function UserManager() {
                                         </span>
                                     </span>
                                 </label>
+                            </div>
+                        )}
+
+                        {editingUserId && canManagePasswords && (
+                            <div className="space-y-3 border-t pt-4">
+                                <div>
+                                    <p className="text-sm font-medium">Password management</p>
+                                    <p className="text-xs text-muted-foreground">Change this user&apos;s password or email them a link to set their own.</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="button" variant="outline" disabled={!!passwordAction} onClick={() => {
+                                        setShowPasswordFields(!showPasswordFields)
+                                        setNewPassword("")
+                                        setConfirmPassword("")
+                                    }}>
+                                        {showPasswordFields ? "Cancel password change" : "Change Password"}
+                                    </Button>
+                                    <Button type="button" variant="outline" disabled={!!passwordAction} onClick={() => void managePassword("email")}>
+                                        {passwordAction === "email" && <Loader2 className="mr-2 size-4 animate-spin" />}
+                                        Send password reset email
+                                    </Button>
+                                </div>
+                                {showPasswordFields && (
+                                    <div className="space-y-3 rounded-md border p-3">
+                                        <p className="text-xs text-muted-foreground">Use at least 8 characters with lowercase, uppercase, and a number.</p>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="new-password">New Password</Label>
+                                            <Input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="confirm-password">Confirm Password</Label>
+                                            <Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+                                        </div>
+                                        <Button type="button" disabled={!!passwordAction} onClick={() => void managePassword("set")}>
+                                            {passwordAction === "set" && <Loader2 className="mr-2 size-4 animate-spin" />}
+                                            Save new password
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
