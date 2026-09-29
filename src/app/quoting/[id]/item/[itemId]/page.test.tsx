@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 const mocks = vi.hoisted(() => ({
-    job: { id: "job-id", title: "Test job", is_template: false, status: "in_progress" },
+    job: { id: "job-id", title: "Test job", is_template: false, status: "in_progress", stores: { address: "12 Queen Street, Auckland" } },
     item: { id: "item-id", name: "Test BOM", mode: "build", qty: 1, build_qty: 1, image_path: null as string | null },
     upload: vi.fn(),
     update: vi.fn(),
@@ -25,12 +25,15 @@ vi.mock("@/lib/supabase/client", () => ({
     }),
 }))
 
-import ItemCostSheetPage from "./page"
+import ItemCostSheetPage, { googleMapsDirectionsUrl } from "./page"
 
 describe("BOM image upload", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        window.localStorage.clear()
         mocks.job.is_template = false
+        mocks.job.stores.address = "12 Queen Street, Auckland"
+        mocks.item.name = "Test BOM"
         mocks.item.mode = "build"
         mocks.item.image_path = null
         mocks.upload.mockResolvedValue({ error: null })
@@ -90,5 +93,33 @@ describe("BOM image upload", () => {
         })
 
         expect(mocks.upload).not.toHaveBeenCalled()
+    })
+})
+
+describe("Travel and Mileage directions", () => {
+    beforeEach(() => {
+        window.localStorage.clear()
+        mocks.job.is_template = false
+        mocks.job.stores.address = "12 Queen Street, Auckland"
+        mocks.item.name = "Travel & Mileage"
+        mocks.item.mode = "build"
+    })
+
+    it("opens driving directions to the selected site and remembers the entered base address", async () => {
+        render(<ItemCostSheetPage />)
+        const link = await screen.findByRole("link", { name: /Open in Google Maps/ })
+        expect(link).toHaveAttribute("href", googleMapsDirectionsUrl("12 Queen Street, Auckland"))
+        expect(link).toHaveAttribute("target", "_blank")
+
+        fireEvent.change(screen.getByLabelText("Rodier/base address (optional)"), { target: { value: "5 Base Road, Auckland" } })
+        expect(link).toHaveAttribute("href", googleMapsDirectionsUrl("12 Queen Street, Auckland", "5 Base Road, Auckland"))
+        expect(window.localStorage.getItem("rpm-travel-base-address")).toBe("5 Base Road, Auckland")
+    })
+
+    it("does not offer a directions link without a site address", async () => {
+        mocks.job.stores.address = ""
+        render(<ItemCostSheetPage />)
+        expect(await screen.findByText("No site address on this job")).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: /Open in Google Maps/ })).not.toBeInTheDocument()
     })
 })

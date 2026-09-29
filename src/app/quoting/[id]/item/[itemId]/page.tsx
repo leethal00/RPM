@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus, FileText } from "lucide-react"
+import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus, FileText, ExternalLink } from "lucide-react"
 import {
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -16,6 +16,14 @@ import { PageShell } from "@/components/page-shell"
 import { CostSheet } from "@/components/costing/cost-sheet"
 import { NumCell } from "@/components/costing/cells"
 import type { CostingItem, CostingJob } from "@/types/database"
+
+const TRAVEL_BASE_KEY = "rpm-travel-base-address"
+
+export function googleMapsDirectionsUrl(destination: string, origin?: string): string {
+    const params = new URLSearchParams({ api: "1", destination: destination.trim(), travelmode: "driving" })
+    if (origin?.trim()) params.set("origin", origin.trim())
+    return `https://www.google.com/maps/dir/?${params.toString()}`
+}
 
 export default function ItemCostSheetPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -27,6 +35,11 @@ export default function ItemCostSheetPage() {
     const [job, setJob] = useState<CostingJob | null>(null)
     const [item, setItem] = useState<CostingItem | null>(null)
     const [loading, setLoading] = useState(true)
+    const [travelBaseAddress, setTravelBaseAddress] = useState(() =>
+        typeof window === "undefined"
+            ? process.env.NEXT_PUBLIC_TRAVEL_BASE_ADDRESS || ""
+            : window.localStorage.getItem(TRAVEL_BASE_KEY) ?? process.env.NEXT_PUBLIC_TRAVEL_BASE_ADDRESS ?? "",
+    )
 
     const [copyOpen, setCopyOpen] = useState(false)
     const [jobs, setJobs] = useState<{ id: string; title: string }[] | null>(null)
@@ -39,7 +52,7 @@ export default function ItemCostSheetPage() {
         let active = true
         ;(async () => {
             const [{ data: j }, { data: i }] = await Promise.all([
-                supabase.from("costing_jobs").select("id, title, is_template, status, xero_invoice_import_status").eq("id", jobId).single(),
+                supabase.from("costing_jobs").select("id, title, is_template, status, xero_invoice_import_status, stores(address)").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
             ])
             if (!active) return
@@ -51,6 +64,8 @@ export default function ItemCostSheetPage() {
     }, [supabase, jobId, itemId])
 
     const isTemplate = !!job?.is_template
+    const isTravelBom = item?.mode === "build" && /travel|mileage/i.test(item.name)
+    const siteAddress = job?.stores?.address?.trim() || ""
     const approvedImportLine = !!item?.xero_imported_line && (job?.xero_invoice_import_status === "AUTHORISED" || job?.xero_invoice_import_status === "PAID")
     const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
     const backPath = isTemplate ? "/quoting/products" : isJobStage ? `/quoting/jobs/${jobId}` : `/quoting/${jobId}`
@@ -271,6 +286,34 @@ export default function ItemCostSheetPage() {
                             <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
                                 Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
                             </div>
+                        )}
+
+                        {!isTemplate && isTravelBom && (
+                            <section className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 space-y-2" aria-label="Travel and mileage directions">
+                                <div className="text-sm font-medium">Travel &amp; Mileage</div>
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <div className="min-w-[220px] flex-1">
+                                        <div className="text-[11px] font-medium text-muted-foreground">Site address</div>
+                                        <div className="text-sm break-words">{siteAddress || "No site address on this job"}</div>
+                                    </div>
+                                    <Button asChild variant="outline" size="sm" className="gap-1.5" disabled={!siteAddress}>
+                                        {siteAddress ? (
+                                            <a href={googleMapsDirectionsUrl(siteAddress, travelBaseAddress)} target="_blank" rel="noopener noreferrer">
+                                                <ExternalLink className="size-3.5" /> Open in Google Maps
+                                            </a>
+                                        ) : (
+                                            <span><ExternalLink className="size-3.5" /> Open in Google Maps</span>
+                                        )}
+                                    </Button>
+                                </div>
+                                <label className="block max-w-lg text-[11px] font-medium text-muted-foreground" htmlFor="travel-base-address">Rodier/base address (optional)
+                                    <Input id="travel-base-address" value={travelBaseAddress} onChange={(event) => {
+                                        setTravelBaseAddress(event.target.value)
+                                        window.localStorage.setItem(TRAVEL_BASE_KEY, event.target.value)
+                                    }} placeholder="Enter the starting address" className="mt-1 h-8 text-sm" />
+                                </label>
+                                <p className="text-xs text-muted-foreground">Read driving time and road km in Google Maps, then enter them in the Travel Time and Mileage BOM quantities.</p>
+                            </section>
                         )}
 
                         <CostSheet jobId={jobId} item={item} isProduct={isTemplate}
