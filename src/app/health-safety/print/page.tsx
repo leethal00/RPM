@@ -48,15 +48,15 @@ export default function SwmsPrintPage() {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id")
-    if (!id) {
-      setError("No SWMS/TA record was specified.")
-      setLoading(false)
-      return
-    }
     let active = true
     void (async () => {
       const { data: auth } = await db.auth.getUser()
       if (!active) return
+      if (!id) {
+        setError("No SWMS/TA record was specified.")
+        setLoading(false)
+        return
+      }
       if (!auth.user) {
         setError("Please sign in to view this SWMS/TA.")
         setLoading(false)
