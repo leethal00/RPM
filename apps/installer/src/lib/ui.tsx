@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 export const colors = {
   navy: '#12382D',
@@ -25,7 +25,7 @@ export function Page({ children, scroll = true }: { children: React.ReactNode; s
 
 export function Title({ children, detail }: { children: React.ReactNode; detail?: string }) {
   return <View style={styles.titleWrap}>
-    <View style={styles.brandRow}><View style={styles.brandMark}><Text style={styles.brandMarkText}>R</Text></View><Text style={styles.brandLabel}>RPM  /  FIELD TEAM</Text></View>
+    <View style={styles.brandRow}><Image source={require('../../assets/rodier-logo.png')} accessibilityLabel="Rodier logo" style={styles.brandMark} /><Text style={styles.brandLabel}>RPM  /  FIELD TEAM</Text></View>
     <Text style={styles.title}>{children}</Text>
     {detail ? <Text style={styles.subtitle}>{detail}</Text> : null}
   </View>;
@@ -64,8 +64,7 @@ export function ErrorText({ message }: { message: string }) { return <Text style
 export const styles = StyleSheet.create({
   page: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48, backgroundColor: colors.bg },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 18 },
-  brandMark: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: colors.white, fontSize: 18, fontWeight: '900' },
+  brandMark: { width: 30, height: 30, borderRadius: 15 },
   brandLabel: { color: colors.forest, fontSize: 11, fontWeight: '800', letterSpacing: 1.7 },
   titleWrap: { marginBottom: 25 },
   title: { fontSize: 29, lineHeight: 35, fontWeight: '800', color: colors.navy, letterSpacing: -0.7 },
