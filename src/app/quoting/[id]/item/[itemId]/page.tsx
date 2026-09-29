@@ -17,13 +17,9 @@ import { CostSheet } from "@/components/costing/cost-sheet"
 import { NumCell } from "@/components/costing/cells"
 import type { CostingItem, CostingJob } from "@/types/database"
 
-const TRAVEL_BASE_KEY = "rpm-travel-base-address"
+import { googleMapsDirectionsUrl, isTravelMileageBom } from "@/lib/costing/travel-directions"
 
-export function googleMapsDirectionsUrl(destination: string, origin?: string): string {
-    const params = new URLSearchParams({ api: "1", destination: destination.trim(), travelmode: "driving" })
-    if (origin?.trim()) params.set("origin", origin.trim())
-    return `https://www.google.com/maps/dir/?${params.toString()}`
-}
+const TRAVEL_BASE_KEY = "rpm-travel-base-address"
 
 export default function ItemCostSheetPage() {
     const supabase = useMemo(() => createClient(), [])
@@ -64,7 +60,7 @@ export default function ItemCostSheetPage() {
     }, [supabase, jobId, itemId])
 
     const isTemplate = !!job?.is_template
-    const isTravelBom = item?.mode === "build" && /travel|mileage/i.test(item.name)
+    const isTravelBom = isTravelMileageBom(item)
     const siteAddress = job?.stores?.address?.trim() || ""
     const approvedImportLine = !!item?.xero_imported_line && (job?.xero_invoice_import_status === "AUTHORISED" || job?.xero_invoice_import_status === "PAID")
     const isJobStage = !!job && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status)
@@ -215,6 +211,35 @@ export default function ItemCostSheetPage() {
                             )}
                         </div>
 
+                        {!isTemplate && isTravelBom && (
+                            <section className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 space-y-2" aria-label="Travel and mileage directions">
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <div className="min-w-[220px] flex-1">
+                                        <div className="text-[11px] font-medium text-muted-foreground">Site address</div>
+                                        <div className="text-sm break-words">{siteAddress || "No site address on this job"}</div>
+                                    </div>
+                                    {siteAddress ? (
+                                        <Button asChild variant="outline" size="sm" className="gap-1.5">
+                                            <a href={googleMapsDirectionsUrl(siteAddress, travelBaseAddress)} target="_blank" rel="noopener noreferrer">
+                                                <ExternalLink className="size-3.5" /> Open in Google Maps
+                                            </a>
+                                        </Button>
+                                    ) : (
+                                        <Button variant="outline" size="sm" className="gap-1.5" disabled>
+                                            <ExternalLink className="size-3.5" /> Open in Google Maps
+                                        </Button>
+                                    )}
+                                </div>
+                                <label className="block max-w-lg text-[11px] font-medium text-muted-foreground" htmlFor="travel-base-address">Rodier/base address (optional)
+                                    <Input id="travel-base-address" value={travelBaseAddress} onChange={(event) => {
+                                        setTravelBaseAddress(event.target.value)
+                                        window.localStorage.setItem(TRAVEL_BASE_KEY, event.target.value)
+                                    }} placeholder="Enter the starting address" className="mt-1 h-8 text-sm" />
+                                </label>
+                                <p className="text-xs text-muted-foreground">Check both legs of the return trip in Google Maps, then manually enter total travel time and road km in the existing Travel Time and Mileage lines.</p>
+                            </section>
+                        )}
+
                         {approvedImportLine && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs">Imported from an approved Xero invoice. The sales line is locked; material, labour and production BOM costs remain editable. BOM changes stay in RPM.</div>}
 
                         <div className="rounded-lg border border-border/60 p-2">
@@ -286,34 +311,6 @@ export default function ItemCostSheetPage() {
                             <div className="xl:hidden text-[11px] leading-4 text-muted-foreground px-0.5">
                                 Batch build: quote qty <span className="font-medium text-foreground">{Number(item.qty)}</span> · production qty <span className="font-medium text-foreground">{Number(item.build_qty)}</span> · BOM quantities are for the complete batch.
                             </div>
-                        )}
-
-                        {!isTemplate && isTravelBom && (
-                            <section className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 space-y-2" aria-label="Travel and mileage directions">
-                                <div className="text-sm font-medium">Travel &amp; Mileage</div>
-                                <div className="flex flex-wrap items-end gap-2">
-                                    <div className="min-w-[220px] flex-1">
-                                        <div className="text-[11px] font-medium text-muted-foreground">Site address</div>
-                                        <div className="text-sm break-words">{siteAddress || "No site address on this job"}</div>
-                                    </div>
-                                    <Button asChild variant="outline" size="sm" className="gap-1.5" disabled={!siteAddress}>
-                                        {siteAddress ? (
-                                            <a href={googleMapsDirectionsUrl(siteAddress, travelBaseAddress)} target="_blank" rel="noopener noreferrer">
-                                                <ExternalLink className="size-3.5" /> Open in Google Maps
-                                            </a>
-                                        ) : (
-                                            <span><ExternalLink className="size-3.5" /> Open in Google Maps</span>
-                                        )}
-                                    </Button>
-                                </div>
-                                <label className="block max-w-lg text-[11px] font-medium text-muted-foreground" htmlFor="travel-base-address">Rodier/base address (optional)
-                                    <Input id="travel-base-address" value={travelBaseAddress} onChange={(event) => {
-                                        setTravelBaseAddress(event.target.value)
-                                        window.localStorage.setItem(TRAVEL_BASE_KEY, event.target.value)
-                                    }} placeholder="Enter the starting address" className="mt-1 h-8 text-sm" />
-                                </label>
-                                <p className="text-xs text-muted-foreground">Read driving time and road km in Google Maps, then enter them in the Travel Time and Mileage BOM quantities.</p>
-                            </section>
                         )}
 
                         <CostSheet jobId={jobId} item={item} isProduct={isTemplate}

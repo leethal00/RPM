@@ -25,7 +25,8 @@ vi.mock("@/lib/supabase/client", () => ({
     }),
 }))
 
-import ItemCostSheetPage, { googleMapsDirectionsUrl } from "./page"
+import ItemCostSheetPage from "./page"
+import { googleMapsDirectionsUrl } from "@/lib/costing/travel-directions"
 
 describe("BOM image upload", () => {
     beforeEach(() => {
@@ -121,5 +122,50 @@ describe("Travel and Mileage directions", () => {
         render(<ItemCostSheetPage />)
         expect(await screen.findByText("No site address on this job")).toBeInTheDocument()
         expect(screen.queryByRole("link", { name: /Open in Google Maps/ })).not.toBeInTheDocument()
+    })
+})
+
+ describe("Travel panel visibility and placement", () => {
+    beforeEach(() => {
+        window.localStorage.clear()
+        mocks.job.is_template = false
+        mocks.job.stores.address = "12 Queen Street, Auckland"
+        mocks.item.mode = "build"
+        mocks.item.name = "Travel & mileage"
+    })
+
+    it("shows the reusable product panel under the title and before the quote description", async () => {
+        render(<ItemCostSheetPage />)
+        const panel = await screen.findByRole("region", { name: "Travel and mileage directions" })
+        expect(screen.getByPlaceholderText("Item name").compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(panel.compareDocumentPosition(screen.getByText("Quote description — customer facing")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(panel).toHaveTextContent("12 Queen Street, Auckland")
+    })
+
+    it.each(["Sign fabrication", "Travel signage", "Mileage", "Travel", "Travel & mileage sign", "Electrical"])('hides the panel for %s', async (name) => {
+        mocks.item.name = name
+        render(<ItemCostSheetPage />)
+        await screen.findByText("Existing BOM cost sheet")
+        expect(screen.queryByRole("region", { name: "Travel and mileage directions" })).not.toBeInTheDocument()
+    })
+
+    it.each(["template", "simple"])("hides the panel for a %s item", async (kind) => {
+        mocks.job.is_template = kind === "template"
+        mocks.item.mode = kind === "simple" ? "simple" : "build"
+        render(<ItemCostSheetPage />)
+        await screen.findByText("Existing BOM cost sheet")
+        expect(screen.queryByRole("region", { name: "Travel and mileage directions" })).not.toBeInTheDocument()
+    })
+
+    it("uses a remembered base address and safely encodes the current site's address", async () => {
+        mocks.job.stores.address = "  Unit 2/5 Queen & King St, Māngere #1  "
+        window.localStorage.setItem("rpm-travel-base-address", "  5 Base Road, Auckland  ")
+        render(<ItemCostSheetPage />)
+        const link = await screen.findByRole("link", { name: /Open in Google Maps/ })
+        const url = new URL(link.getAttribute("href")!)
+        expect(url.origin + url.pathname).toBe("https://www.google.com/maps/dir/")
+        expect(Object.fromEntries(url.searchParams)).toEqual({ api: "1", destination: "Unit 2/5 Queen & King St, Māngere #1", origin: "5 Base Road, Auckland", travelmode: "driving" })
+        expect(url.hash).toBe("")
+        expect(link).toHaveAttribute("rel", "noopener noreferrer")
     })
 })
