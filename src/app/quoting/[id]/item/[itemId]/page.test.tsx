@@ -131,7 +131,7 @@ describe("Travel and Mileage directions", () => {
         mocks.job.is_template = false
         mocks.job.stores.address = "12 Queen Street, Auckland"
         mocks.item.mode = "build"
-        mocks.item.name = "Travel & mileage"
+        mocks.item.name = "Travel & mileage:"
     })
 
     it("shows the reusable product panel under the title and before the quote description", async () => {

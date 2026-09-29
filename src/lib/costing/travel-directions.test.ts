@@ -3,6 +3,9 @@ import { googleMapsDirectionsUrl, isTravelMileageBom } from "./travel-directions
 
 describe("travel directions", () => {
     it("recognises only the exact product name, ignoring case and extra whitespace", () => {
+        expect(isTravelMileageBom({ mode: "build", name: "Travel & mileage:" })).toBe(true)
+        expect(isTravelMileageBom({ mode: "build", name: "  Travel & mileage :  " })).toBe(true)
+        expect(isTravelMileageBom({ mode: "build", name: "Travel & mileage: signage" })).toBe(false)
         expect(isTravelMileageBom({ mode: "build", name: "  TRAVEL   & mileage  " })).toBe(true)
         expect(isTravelMileageBom({ mode: "build", name: "Travel & mileage signage" })).toBe(false)
         expect(isTravelMileageBom({ mode: "simple", name: "Travel & mileage" })).toBe(false)
