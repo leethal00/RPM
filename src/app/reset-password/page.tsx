@@ -36,12 +36,12 @@ export default function ResetPasswordPage() {
             if (code) {
                 const result = await supabase.auth.exchangeCodeForSession(code)
                 error = result.error
-            } else if (fragment.get('type') === 'recovery' && accessToken && refreshToken) {
+            } else if (['recovery', 'invite'].includes(fragment.get('type') ?? '') && accessToken && refreshToken) {
                 window.history.replaceState(null, '', window.location.pathname)
                 const result = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
                 error = result.error
             } else {
-                setSessionError('Reset link is missing its recovery code.')
+                setSessionError('This link is missing its sign-in code.')
                 return
             }
 

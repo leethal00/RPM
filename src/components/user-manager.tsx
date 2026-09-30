@@ -187,6 +187,20 @@ export function UserManager() {
             const hasAllInstallJobs = role === "installer" && allInstallJobs
             const finalClientId = role === "department_operator" || role === "mobile_admin" || isSubcontractor || clientId === "none" ? null : clientId
 
+            if (!editingUserId && isSubcontractor) {
+                const response = await fetch('/api/users/invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, name, jobIds: assignedJobIds }),
+                })
+                const result = await response.json() as { error?: string; message?: string }
+                if (!response.ok) throw new Error(result.error || 'Invitation failed')
+                toast.success(result.message || 'Invitation sent')
+                setIsDialogOpen(false)
+                await fetchUsers()
+                return
+            }
+
             let savedUserId = editingUserId
             if (editingUserId) {
                 // Edit user in our table. developer_mode is only included in
@@ -392,7 +406,9 @@ export function UserManager() {
                         <DialogDescription>
                             {editingUserId 
                                 ? "Update the user's information and role."
-                                : "Add a new user to the system. They will use these credentials to log in."}
+                                : role === "subcontractor"
+                                    ? "Invite a subcontractor by email. They will set their own password."
+                                    : "Add a new user to the system. They will use these credentials to log in."}
                         </DialogDescription>
                     </DialogHeader>
                     
@@ -409,7 +425,7 @@ export function UserManager() {
                             />
                         </div>
 
-                        {!editingUserId && (
+                        {!editingUserId && role !== "subcontractor" && (
                             <div className="space-y-2">
                                 <Label htmlFor="password">Temporary Password</Label>
                                 <Input
@@ -541,7 +557,7 @@ export function UserManager() {
                             </Button>
                             <Button type="submit" disabled={isSaving}>
                                 {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-                                {isSaving ? "Saving..." : "Save User"}
+                                {isSaving ? "Saving..." : !editingUserId && role === "subcontractor" ? "Send invitation" : "Save User"}
                             </Button>
                         </div>
                     </form>
