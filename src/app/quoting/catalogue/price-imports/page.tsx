@@ -23,6 +23,8 @@ type ImportRow = {
     reason: string
 }
 
+type StatusView = "attention-first" | "all" | ImportRow["status"]
+
 type NewMaterialDraft = {
     rowNo: number
     description: string
@@ -91,6 +93,7 @@ export default function SupplierPriceImportsPage() {
     const [materials, setMaterials] = useState<Material[]>([])
     const [supplier, setSupplier] = useState("")
     const [rows, setRows] = useState<ImportRow[]>([])
+    const [statusView, setStatusView] = useState<StatusView>("attention-first")
     const [filename, setFilename] = useState("")
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
@@ -514,6 +517,7 @@ export default function SupplierPriceImportsPage() {
 
             if (nextRows.length === 0) throw new Error("No usable price rows were found in this file.")
             setRows(nextRows)
+            setStatusView("attention-first")
             setFilename(file.name)
             if (parsed.warning) toast.info(parsed.warning)
         } catch (error) {
@@ -624,6 +628,13 @@ export default function SupplierPriceImportsPage() {
     const readyCount = rows.filter((row) => row.status === "ready").length
     const reviewCount = rows.filter((row) => row.status === "review").length
     const skippedCount = rows.filter((row) => row.status === "skipped").length
+    const visibleRows = useMemo(() => {
+        if (statusView === "all") return rows
+        if (statusView !== "attention-first") return rows.filter((row) => row.status === statusView)
+
+        const priority: Record<ImportRow["status"], number> = { review: 0, ready: 1, skipped: 2 }
+        return [...rows].sort((left, right) => priority[left.status] - priority[right.status] || left.rowNo - right.rowNo)
+    }, [rows, statusView])
 
     return (
         <DashboardLayout>
@@ -642,7 +653,7 @@ export default function SupplierPriceImportsPage() {
                             <label className="text-xs font-medium">Supplier</label>
                             <Input
                                 value={supplier}
-                                onChange={(event) => { setSupplier(event.target.value); setRows([]); setFilename("") }}
+                                onChange={(event) => { setSupplier(event.target.value); setRows([]); setFilename(""); setStatusView("attention-first") }}
                                 onFocus={() => { if (materials.length === 0) void loadMaterials() }}
                                 list="price-import-suppliers"
                                 placeholder="e.g. PSP"
@@ -704,7 +715,32 @@ export default function SupplierPriceImportsPage() {
                                         <div className="text-sm font-semibold">{filename}</div>
                                         <div className="text-xs text-muted-foreground">{readyCount} ready · {reviewCount} review · {skippedCount} skipped</div>
                                     </div>
-                                    <Button onClick={applyImport} disabled={applying || reviewCount > 0}>{applying ? "Applying…" : "Apply approved prices"}</Button>
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <span>Status</span>
+                                        <select
+                                            value={statusView}
+                                            onChange={(event) => setStatusView(event.target.value as StatusView)}
+                                            className="h-9 rounded-md border bg-background px-2 text-xs text-foreground"
+                                        >
+                                            <option value="attention-first">Needs attention first</option>
+                                            <option value="all">Original order</option>
+                                            <option value="review">Review only ({reviewCount})</option>
+                                            <option value="ready">Ready only ({readyCount})</option>
+                                            <option value="skipped">Skipped only ({skippedCount})</option>
+                                        </select>
+                                    </label>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <Button
+                                            onClick={applyImport}
+                                            disabled={applying || reviewCount > 0}
+                                            title={reviewCount > 0 ? `Resolve ${reviewCount} review item${reviewCount === 1 ? "" : "s"} before applying prices` : undefined}
+                                        >
+                                            {applying ? "Applying…" : "Apply approved prices"}
+                                        </Button>
+                                        {reviewCount > 0 && (
+                                            <span className="text-[11px] text-amber-700 dark:text-amber-400">Resolve {reviewCount} review item{reviewCount === 1 ? "" : "s"} to enable</span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="max-h-[62vh] overflow-auto rounded-lg border bg-card">
@@ -719,7 +755,11 @@ export default function SupplierPriceImportsPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {rows.map((row) => {
+                                            {visibleRows.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">No items in this status.</td>
+                                                </tr>
+                                            ) : visibleRows.map((row) => {
                                                 const currentMatch = materials.find((material) => material.id === row.matchId)
                                                 return (
                                                     <tr key={row.rowNo} className="border-t align-top">
