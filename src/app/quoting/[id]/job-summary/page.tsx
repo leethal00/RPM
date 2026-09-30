@@ -5,8 +5,9 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, Printer } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
 
-const GREEN = "#155f4c"
+const GREEN = PRINT_PRIMARY
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
 const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
 const fmt = (v?: string | null) => v
@@ -99,7 +100,6 @@ export default function JobSummaryPage() {
   const supabase = useMemo(() => createClient(), [])
   const [job, setJob] = useState<Job | null>(null)
   const [items, setItems] = useState<Item[]>([])
-  const [bomLines, setBomLines] = useState<BomLine[]>([])
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -115,7 +115,6 @@ export default function JobSummaryPage() {
       const nextLines = (lineData || []) as BomLine[]
       setJob(nextJob)
       setItems(nextItems)
-      setBomLines(nextLines)
       setSelectedDepartments(inferDepartments(nextJob.title || "", nextItems.map((item) => item.details || "").join(" "), nextLines))
       setLoading(false)
     })()
@@ -178,28 +177,18 @@ export default function JobSummaryPage() {
       </div>
 
       <div className="sheet box-border mx-auto my-6 min-h-[297mm] w-[210mm] bg-white px-[10mm] py-[8mm] text-[11.5px] leading-[1.3] shadow-2xl">
-        <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_22mm_29mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
-          <div className="flex items-center justify-center bg-white">
-            <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
-          </div>
-          <div className="grid grid-cols-[1fr_1fr] content-start gap-x-[4mm] gap-y-[1.15mm] pt-[.5mm] text-[11px] leading-[1.1]">
-            <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Client:</span><span className="font-bold">{client}</span></div>
-            <div className="flex gap-[1.8mm]"><span className="font-bold">Contact:</span><span>{contact}</span></div>
-            <div className="flex gap-[1.8mm]"><span className="font-bold">Phone:</span><span>{phone}</span></div>
-            <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Site:</span><span>{job.stores?.address || ""}</span></div>
-            <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Job Title:</span><span className="font-bold">{job.title}</span></div>
-            <div className="flex gap-[1.8mm]"><span className="font-bold">Date Issued:</span><span>{fmt(job.created_at)}</span></div>
-            <div className="flex gap-[1.8mm]"><span className="font-bold">Required By:</span><span>{fmt(requiredBy)}</span></div>
-          </div>
-          <div className="flex flex-col items-center justify-center bg-white">
-            {qrUrl ? <img src={qrUrl} alt="RPM job summary QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
-            <div className="mt-[.8mm] text-center text-[7.4px] leading-none">Scan to view in RPM</div>
-          </div>
-          <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
-            <div className="text-[8.5px] font-bold leading-none">Job No.</div>
-            <div className="mt-[1mm] text-[34px] font-black leading-none tracking-tight whitespace-nowrap" style={{ color: GREEN }}>{number}</div>
-          </div>
-        </div>
+        <JobCardHeader
+          number={number}
+          customer={client}
+          site={job.stores?.address || ""}
+          title={job.title}
+          issued={fmt(job.created_at)}
+          due={fmt(requiredBy)}
+          contact={contact}
+          phone={phone}
+          qrUrl={qrUrl}
+          qrAlt="RPM job summary QR code"
+        />
 
         <div className="mt-[2.1mm] h-[6mm] px-[2.5mm] py-[.7mm] text-[12px] font-black text-white" style={{ background: GREEN }}>
           DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span>
@@ -207,7 +196,7 @@ export default function JobSummaryPage() {
         <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
           {DEPARTMENTS.map((department) => (
             <button type="button" key={department} onClick={() => toggleDepartment(department)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[11.6px]">
-              <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${selectedDepartments.includes(department) ? "border-[#155f4c] bg-[#155f4c] font-black text-white" : "border-neutral-500 bg-white"}`}>
+              <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${selectedDepartments.includes(department) ? "font-black text-white" : "border-neutral-500 bg-white"}`} style={selectedDepartments.includes(department) ? { borderColor: GREEN, background: GREEN } : undefined}>
                 {selectedDepartments.includes(department) ? "✓" : ""}
               </i>
               {department}
@@ -227,14 +216,14 @@ export default function JobSummaryPage() {
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
-              <tr className="bg-[#eef2f1]">
+              <tr style={{ background: PRINT_TINT }}>
                 {["Workshop Ref", "Qty", "Item", "Size", "Description", "Complete"].map((h) => <th key={h} className={`border border-[#b9c5c1] px-[1.5mm] py-[1.5mm] text-[10.5px] ${h === "Complete" ? "text-center" : "text-left"}`}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {items.map((item) => item.sign_code === SECTION_HEADING_CODE ? (
                 <tr key={item.id} className="break-inside-avoid break-after-avoid">
-                  <th colSpan={6} scope="row" className="border border-[#b9c5c1] border-l-[1mm] border-l-[#155f4c] bg-[#e4eeea] px-[2.5mm] py-[2mm] text-left text-[11.5px] font-black uppercase tracking-[.04em]" style={{ color: GREEN }}>
+                  <th colSpan={6} scope="row" className="border border-[#b9c5c1] border-l-[1mm] px-[2.5mm] py-[2mm] text-left text-[11.5px] font-black uppercase tracking-[.04em]" style={{ color: GREEN, borderLeftColor: GREEN, background: PRINT_TINT }}>
                     {sectionNumbers.get(item.id)}. {item.name}
                   </th>
                 </tr>
