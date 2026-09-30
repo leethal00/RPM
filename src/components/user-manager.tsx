@@ -26,6 +26,7 @@ interface UserData {
     client_id?: string;
     developer_mode?: boolean;
     installer_all_jobs?: boolean;
+    is_subcontractor?: boolean;
     department_id?: string | null;
     clients?: { name: string } | null;
 }
@@ -130,7 +131,7 @@ export function UserManager() {
         setEmail(user.email)
         setPassword("") // Leave blank on edit
         setName(user.name || "")
-        setRole(user.role || "client_store")
+        setRole(user.role === "installer" && user.is_subcontractor ? "subcontractor" : user.role || "client_store")
         setClientId(user.client_id || "none")
         setDeveloperMode(Boolean(user.developer_mode))
         setDepartmentId(user.department_id || "none")
@@ -181,7 +182,10 @@ export function UserManager() {
 
         try {
             if (role === "department_operator" && departmentId === "none") throw new Error("Select a department for this operator")
-            const finalClientId = role === "department_operator" || role === "mobile_admin" || clientId === "none" ? null : clientId
+            const isSubcontractor = role === "subcontractor"
+            const databaseRole = isSubcontractor ? "installer" : role
+            const hasAllInstallJobs = role === "installer" && allInstallJobs
+            const finalClientId = role === "department_operator" || role === "mobile_admin" || isSubcontractor || clientId === "none" ? null : clientId
 
             let savedUserId = editingUserId
             if (editingUserId) {
@@ -191,10 +195,11 @@ export function UserManager() {
                 // here so the wire doesn't carry an attempt that'll fail.
                 const updatePayload: Record<string, unknown> = {
                     name,
-                    role,
+                    role: databaseRole,
+                    is_subcontractor: isSubcontractor,
                     client_id: finalClientId,
                     department_id: role === "department_operator" ? departmentId : null,
-                    installer_all_jobs: role === "installer" && allInstallJobs,
+                    installer_all_jobs: hasAllInstallJobs,
                     updated_at: new Date().toISOString(),
                 }
                 if (canEditDeveloperMode) updatePayload.developer_mode = developerMode
@@ -235,10 +240,11 @@ export function UserManager() {
                         id: authData.user.id,
                         email,
                         name,
-                        role,
+                        role: databaseRole,
+                        is_subcontractor: isSubcontractor,
                         client_id: finalClientId,
                     department_id: role === "department_operator" ? departmentId : null,
-                    installer_all_jobs: role === "installer" && allInstallJobs,
+                    installer_all_jobs: hasAllInstallJobs,
                     })
 
                 if (dbError) {
@@ -251,13 +257,13 @@ export function UserManager() {
                 toast.success("User created successfully")
             }
 
-            if (savedUserId && role === "installer") {
+            if (savedUserId && databaseRole === "installer") {
                 const { data: existing, error: assignmentError } = await supabase.from("installer_jobs").select("job_id").eq("user_id",savedUserId)
                 if (assignmentError) throw assignmentError
                 const existingIds = new Set<string>(((existing || []) as {job_id:string}[]).map(item=>item.job_id))
-                const desiredIds = new Set<string>(allInstallJobs ? [] : assignedJobIds)
+                const desiredIds = new Set<string>(hasAllInstallJobs ? [] : assignedJobIds)
                 const visibleIds = new Set(installJobs.map(job=>job.id))
-                const removed = [...existingIds].filter(id=>(allInstallJobs || visibleIds.has(id)) && !desiredIds.has(id))
+                const removed = [...existingIds].filter(id=>(hasAllInstallJobs || visibleIds.has(id)) && !desiredIds.has(id))
                 const added = [...desiredIds].filter(id=>!existingIds.has(id))
                 if (removed.length) { const {error} = await supabase.from("installer_jobs").delete().eq("user_id",savedUserId).in("job_id",removed); if (error) throw error }
                 if (added.length) { const {error} = await supabase.from("installer_jobs").insert(added.map(job_id=>({job_id,user_id:savedUserId}))); if (error) throw error }
@@ -348,7 +354,7 @@ export function UserManager() {
                                     <TableCell>{user.email}</TableCell>
                                     <TableCell>
                                         <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/10 text-primary">
-                                            {user.role === "installer" ? "RPM Mobile worker" : user.role}
+                                            {user.is_subcontractor ? "Subcontractor" : user.role === "installer" ? "RPM Mobile worker" : user.role}
                                         </span>
                                     </TableCell>
                                     <TableCell>{user.clients?.name || "—"}</TableCell>
@@ -437,6 +443,7 @@ export function UserManager() {
                                     <SelectItem value="rodier_admin">Rodier Admin</SelectItem>
                                     <SelectItem value="department_operator">Department Operator (CNC / production)</SelectItem>
                                     <SelectItem value="installer">RPM Mobile worker (factory / installer)</SelectItem>
+                                    <SelectItem value="subcontractor">Subcontractor (assigned jobs only)</SelectItem>
                                     <SelectItem value="mobile_admin">Mobile Admin (all operational jobs)</SelectItem>
                                     <SelectItem value="technician">Technician</SelectItem>
                                     <SelectItem value="client_hq">Client HQ</SelectItem>
@@ -447,9 +454,9 @@ export function UserManager() {
 
                         <div className="space-y-2">
                             {role === "department_operator" && <div className="space-y-2"><Label htmlFor="department_id">Department</Label><select id="department_id" className="w-full rounded border p-2" value={departmentId} onChange={e=>setDepartmentId(e.target.value)} required><option value="none">Select department</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><p className="text-xs text-muted-foreground">Only assigned production jobs, time and material usage. No pricing or administration.</p></div>}
-                            {role === "installer" && <div className="space-y-2">
-                                <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={allInstallJobs} onChange={e=>setAllInstallJobs(e.target.checked)} /><span><strong>All install jobs</strong><span className="block text-xs text-muted-foreground">Automatically show jobs containing Site Time Labour items, including future jobs. Quoted jobs are view only until approved.</span></span></label>
-                                {!allInstallJobs && <><Label>Assigned mobile jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">Only selected jobs appear in RPM Mobile.</p></>}
+                            {(role === "installer" || role === "subcontractor") && <div className="space-y-2">
+                                {role === "installer" && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={allInstallJobs} onChange={e=>setAllInstallJobs(e.target.checked)} /><span><strong>All install jobs</strong><span className="block text-xs text-muted-foreground">Automatically show jobs containing Site Time Labour items, including future jobs. Quoted jobs are view only until approved.</span></span></label>}
+                                {(role === "subcontractor" || !allInstallJobs) && <><Label>Assigned mobile jobs</Label><div className="max-h-40 overflow-y-auto rounded border p-2 space-y-1">{installJobs.map(job=><label key={job.id} className="flex gap-2 text-sm"><input type="checkbox" checked={assignedJobIds.includes(job.id)} onChange={e=>setAssignedJobIds(current=>e.target.checked?[...current,job.id]:current.filter(id=>id!==job.id))} />{job.job_number || "Job"} · {job.title}</label>)}</div><p className="text-xs text-muted-foreground">{role === "subcontractor" ? "Subcontractors see only these jobs and their sites in RPM Mobile." : "Only selected jobs appear in RPM Mobile."}</p></>}
                             </div>}
                             {role === "mobile_admin" && <p className="text-xs text-muted-foreground">Full operational access in RPM Mobile: all jobs, photos, notes, materials and time. No web administration or pricing access.</p>}
                             <Label htmlFor="client_id">Assign to Client (Optional)</Label>
@@ -543,4 +550,5 @@ export function UserManager() {
         </div>
     )
 }
+
 
