@@ -121,4 +121,3 @@ REVOKE ALL ON FUNCTION public.mobile_site_gallery(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mobile_site_gallery(uuid) TO authenticated;
 
 COMMIT;
-
