@@ -10,6 +10,7 @@ type Measurements = {
   continuationHeight: number
   materialsHeadingHeight: number
   materialRowHeights: number[]
+  trimmableMaterialIndexes?: number[]
   timeLogHeight: number
   closeoutHeight: number
 }
@@ -20,6 +21,7 @@ export function paginateJobCard(measurements: Measurements): JobCardPagePlan[] {
   const pages: JobCardPagePlan[] = [{ materialIndexes: [], showTimeLog: false, showCloseout: false }]
   let current = pages[0]
   let usedHeight = measurements.introHeight
+  const trimmableMaterials = new Set(measurements.trimmableMaterialIndexes || [])
 
   const nextPage = () => {
     current = { materialIndexes: [], showTimeLog: false, showCloseout: false }
@@ -35,12 +37,31 @@ export function paginateJobCard(measurements: Measurements): JobCardPagePlan[] {
     usedHeight += rowHeight
   })
 
+  // Blank material rows are useful for handwritten additions, but they should
+  // not create a mostly empty continuation page. Remove only trailing blank
+  // rows, and only when a following section otherwise would not fit.
+  const trimBlankMaterialRow = () => {
+    const index = current.materialIndexes.at(-1)
+    if (index == null || !trimmableMaterials.has(index)) return false
+    current.materialIndexes.pop()
+    usedHeight -= measurements.materialRowHeights[index]
+    if (current.materialIndexes.length === 0) usedHeight -= measurements.materialsHeadingHeight
+    return true
+  }
+
+  while (usedHeight + measurements.timeLogHeight > measurements.availableHeight && trimBlankMaterialRow()) {
+    // Keep as many blank rows as will still allow the time log to fit.
+  }
   if (usedHeight + measurements.timeLogHeight > measurements.availableHeight) nextPage()
   current.showTimeLog = true
   usedHeight += measurements.timeLogHeight
 
+  while (usedHeight + measurements.closeoutHeight > measurements.availableHeight && trimBlankMaterialRow()) {
+    // Keep as many blank rows as will still allow the closeout to fit.
+  }
   if (usedHeight + measurements.closeoutHeight > measurements.availableHeight) nextPage()
   current.showCloseout = true
 
   return pages
 }
+
