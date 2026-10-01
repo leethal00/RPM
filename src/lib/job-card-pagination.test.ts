@@ -17,6 +17,17 @@ describe("paginateJobCard", () => {
     ])
   })
 
+  it("drops only excess blank material rows instead of creating a closeout-only page", () => {
+    expect(paginateJobCard({
+      ...base,
+      introHeight: 128,
+      materialRowHeights: Array(6).fill(6),
+      trimmableMaterialIndexes: [1, 2, 3, 4, 5],
+    })).toEqual([
+      { materialIndexes: [0, 1, 2, 3, 4], showTimeLog: true, showCloseout: true },
+    ])
+  })
+
   it("moves the closeout to a continuation page when material rows fill the first page", () => {
     expect(paginateJobCard({ ...base, materialRowHeights: Array(12).fill(6) })).toEqual([
       { materialIndexes: Array.from({ length: 12 }, (_, index) => index), showTimeLog: true, showCloseout: false },
@@ -33,3 +44,4 @@ describe("paginateJobCard", () => {
     expect(pages.length).toBeGreaterThan(2)
   })
 })
+
