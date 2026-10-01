@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import type { Client, Store, CostingJob } from "@/types/database"
 import { costingJobSchema, getValidationErrors } from "@/lib/validations"
-import { siteDisplayName } from "@/lib/site-name"
+import { siteDisplayName, sortSitesByDisplayName } from "@/lib/site-name"
 import { SiteForm } from "@/components/site-form"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -96,7 +96,10 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     }, [supabase, job])
 
     const hasClient = formData.client_id !== "none"
-    const clientStores = hasClient ? stores.filter((s) => s.client_id === formData.client_id) : []
+    const selectedClientName = clients.find((client) => client.id === formData.client_id)?.name || ""
+    const clientStores = hasClient
+        ? sortSitesByDisplayName(stores.filter((s) => s.client_id === formData.client_id), selectedClientName)
+        : []
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -289,7 +292,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                         <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
                                     ) : (
                                         clientStores.map((s) => (
-                                            <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, clients.find((client) => client.id === formData.client_id)?.name || "")}</SelectItem>
+                                            <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, selectedClientName)}</SelectItem>
                                         ))
                                     )}
                                 </SelectContent>
