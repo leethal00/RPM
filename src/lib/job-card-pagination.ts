@@ -64,4 +64,3 @@ export function paginateJobCard(measurements: Measurements): JobCardPagePlan[] {
 
   return pages
 }
-
