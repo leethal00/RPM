@@ -41,7 +41,7 @@ vi.mock("@/lib/xero", () => ({
   } }),
 }))
 
-import { invoiceMatchesQuote, syncLinkedQuoteToJob, syncOpenQuotesForInvoices, xeroDate, type XeroRow } from "./xero-job-sync"
+import { invoiceMatchesQuote, linkQuoteToInvoice, previewQuoteInvoiceLink, syncLinkedQuoteToJob, syncOpenQuotesForInvoices, xeroDate, type XeroRow } from "./xero-job-sync"
 
 // Observed RPM identity before repair. Xero now calls this stable QuoteID QU-3504.
 const job = {
@@ -69,6 +69,9 @@ function mockXero(quotes: XeroRow[] = [quote], pages: XeroRow[][] = [[invoice]])
     if (url.pathname === "/Invoices") {
       return { ok: true, text: async () => JSON.stringify({ Invoices: pages[Number(url.searchParams.get("page")) - 1] || [] }) }
     }
+    if (url.pathname.startsWith("/Invoices/")) {
+      return { ok: true, text: async () => JSON.stringify({ Invoices: pages.flat().filter((row) => url.pathname.endsWith(String(row.InvoiceNumber))) }) }
+    }
     throw new Error(`Unexpected URL ${url}`)
   }))
 }
@@ -76,6 +79,65 @@ function mockXero(quotes: XeroRow[] = [quote], pages: XeroRow[][] = [[invoice]])
 beforeEach(() => {
   state.jobs = [{ ...job }]; state.writes = []; state.conflict = false; state.raced = false; state.dbError = false
   mockXero()
+})
+
+describe("explicit quote invoice selection for repeat orders", () => {
+  const kfcJob = { ...job, title: "KFC Speakerposts", xero_quote_number: "QU-3509" }
+  const kfcQuote = { ...quote, QuoteNumber: "QU-3509", Reference: "KFC Speakerposts", Total: 10184.69 }
+  const current = { ...invoice, InvoiceID: "new-invoice", InvoiceNumber: "INV-7602", Reference: "KFC Speakerposts PO#RH083221", Total: 10184.69, DueDateString: "2026-12-20T00:00:00" }
+  const older = { ...current, InvoiceID: "old-invoice", InvoiceNumber: "INV-7249", Reference: "KFC Speakerposts PO#RH083202", Status: "PAID" }
+
+  beforeEach(() => {
+    state.jobs = [{ ...kfcJob }]
+    mockXero([kfcQuote], [[current, older]])
+  })
+
+  it("keeps automatic linking ambiguous, but links exactly the reviewed invoice", async () => {
+    expect(await syncLinkedQuoteToJob(kfcJob)).toMatchObject({ ok: false, error: expect.stringContaining("Multiple Xero invoices") })
+    expect(state.writes).toEqual([])
+    expect((await previewQuoteInvoiceLink(kfcJob, "INV-7602")).invoice.InvoiceID).toBe("new-invoice")
+    expect(state.writes).toEqual([])
+    expect(await linkQuoteToInvoice(kfcJob, "INV-7602", "new-invoice")).toMatchObject({ ok: true, changedToJob: true, invoiceNumber: "INV-7602" })
+    expect(state.writes).toEqual([expect.objectContaining({
+      xero_invoice_id: "new-invoice", xero_invoice_number: "INV-7602", job_number: "INV-7602",
+      status: "in_progress", completion_date: "2026-12-20", xero_quote_number: "QU-3509",
+    })])
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true)
+  })
+
+  it("requires the same invoice ID as the reviewed preview", async () => {
+    await expect(linkQuoteToInvoice(kfcJob, "INV-7602", "old-invoice")).rejects.toThrow("changed since the preview")
+    await expect(linkQuoteToInvoice(kfcJob, "INV-7602", "")).rejects.toThrow("review")
+    expect(state.writes).toEqual([])
+  })
+
+  it.each([
+    { Contact: { ContactID: "wrong-customer" } }, { CurrencyCode: "USD" },
+    { Status: "VOIDED" }, { Type: "ACCPAY" }, { Reference: "Unrelated order" },
+  ])("rejects an incompatible selected invoice %j", async (change) => {
+    mockXero([kfcQuote], [[{ ...current, ...change }]])
+    await expect(linkQuoteToInvoice(kfcJob, "INV-7602", "new-invoice")).rejects.toThrow("does not match")
+    expect(state.writes).toEqual([])
+  })
+
+  it("rejects missing numbers, already linked jobs and completed jobs", async () => {
+    await expect(previewQuoteInvoiceLink(kfcJob, "INV-9999")).rejects.toThrow("number did not match")
+    await expect(previewQuoteInvoiceLink({ ...kfcJob, xero_invoice_id: "existing" }, "INV-7602")).rejects.toThrow("already linked")
+    await expect(previewQuoteInvoiceLink({ ...kfcJob, status: "complete" }, "INV-7602")).rejects.toThrow("Only an open")
+    expect(state.writes).toEqual([])
+  })
+
+  it("does not steal an invoice claimed by another RPM job", async () => {
+    state.conflict = true
+    await expect(linkQuoteToInvoice(kfcJob, "INV-7602", "new-invoice")).rejects.toThrow("another RPM job")
+    expect(state.writes).toEqual([])
+  })
+
+  it("does not overwrite a concurrent change", async () => {
+    state.raced = true
+    await expect(linkQuoteToInvoice(kfcJob, "INV-7602", "new-invoice")).rejects.toThrow("changed during sync")
+    expect(state.writes).toEqual([])
+  })
 })
 
 describe("conservative Xero quote matching", () => {

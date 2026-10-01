@@ -190,6 +190,30 @@ async function uniqueInvoice(quote: XeroRow, xero: Connection) {
   return matches[0] || null
 }
 
+// Explicit selection resolves repeat-order ambiguity, but still validates the
+// customer and quote match. Only RPM's link is written; Xero is read-only here.
+export async function previewQuoteInvoiceLink(job: CostingJobRow, number: string) {
+  if (!job.xero_quote_id || !OPEN_STATUSES.includes(job.status)) throw new Error("Only an open Xero quote can be linked here.")
+  if (job.xero_invoice_id || job.xero_invoice_number) throw new Error("This RPM record is already linked to an invoice. Refresh it before continuing.")
+  if (!number.trim()) throw new Error("Enter a Xero invoice number.")
+  const xero = await getValidXero()
+  if (!xero) throw new Error("Xero is not connected")
+  const quote = await quoteForJob(job, xero)
+  const result = await xeroJson(`/Invoices/${encodeURIComponent(number.trim())}`, xero)
+  const invoice = result?.Invoices?.[0] as XeroRow | undefined
+  if (!invoice || invoice.InvoiceNumber !== number.trim()) throw new Error("The Xero invoice number did not match.")
+  if (!invoiceMatchesQuote(invoice, quote)) throw new Error("This invoice does not match the linked Xero quote's customer and quote details.")
+  return { quote, invoice }
+}
+
+export async function linkQuoteToInvoice(job: CostingJobRow, number: string, expectedInvoiceId: string) {
+  if (!expectedInvoiceId) throw new Error("Find and review the invoice before linking it.")
+  const { quote, invoice } = await previewQuoteInvoiceLink(job, number)
+  if (invoice.InvoiceID !== expectedInvoiceId) throw new Error("The invoice changed since the preview. Find and review it again.")
+  const result = await activateJobFromInvoice(job, quote, invoice)
+  return { ...result, invoice }
+}
+
 export async function syncLinkedQuoteToJob(job: CostingJobRow): Promise<SyncResult> {
   if (!job.xero_quote_id) return { ok: false, jobId: job.id, error: "No Xero quote ID" }
   if (job.xero_invoice_id || job.xero_invoice_number || !OPEN_STATUSES.includes(job.status)) {

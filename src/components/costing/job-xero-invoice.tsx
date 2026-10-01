@@ -14,6 +14,10 @@ type Preview = {
     status: string
     contactName: string
     total: number
+    reference?: string
+    currencyCode?: string
+    date?: string | null
+    dueDate?: string | null
     updatedAt: string
     lines: Array<{ description: string; quantity: number | null; unitAmount: number | null }>
   }
@@ -32,6 +36,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const linked = !!job.xero_invoice_id
+  const quoteStage = !!job.xero_quote_id && ["quoted", "approved"].includes(job.status)
   const approvedImport = job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID"
   const baseUrl = "/api/xero/invoices/" + encodeURIComponent(job.id)
 
@@ -100,7 +105,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(action === "link"
-          ? { action, invoiceNumber: preview.invoice.invoiceNumber }
+          ? { action, invoiceNumber: preview.invoice.invoiceNumber, expectedInvoiceId: preview.invoice.invoiceId }
           : { action, expectedUpdatedAt: preview.invoice.updatedAt }),
       })
       const body = await response.json()
@@ -164,12 +169,14 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
               ? `${job.xero_invoice_number} was imported from an approved Xero invoice. Its sales values are locked in RPM; BOM changes stay in RPM and do not update Xero.`
               : linked
               ? "Review both sets of lines. Pushing replaces every line on this draft invoice with the RPM selling lines."
+              : quoteStage
+              ? "Find the invoice by its number and check the PO reference and dates. Linking moves this quote into Active Jobs without changing the invoice in Xero."
               : "Find the draft sales invoice by its existing number. Linking does not change it in Xero."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {!linked && <div className="flex gap-2">
-            <Input aria-label="Xero invoice number" value={number} onChange={(event) => { setNumber(event.target.value); setPreview(null) }} placeholder="Existing invoice number" />
+            <Input aria-label="Xero invoice number" disabled={busy} value={number} onChange={(event) => { setNumber(event.target.value); setPreview(null) }} placeholder="Existing invoice number" />
             <Button variant="secondary" onClick={showPreview} disabled={busy || !number.trim()}>Find</Button>
           </div>}
           {linked && !approvedImport && !preview && <Button variant="secondary" onClick={showPreview} disabled={busy}>{busy ? "Loading…" : "Preview changes"}</Button>}
@@ -177,7 +184,9 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
           {preview && <div className="space-y-3 text-sm">
             <div className="rounded-md border p-3">
               <div className="font-medium">{preview.invoice.invoiceNumber} · {preview.invoice.status}</div>
-              <div className="text-muted-foreground">{preview.invoice.contactName || "No Xero contact"} · Current total: {preview.invoice.total.toFixed(2)}</div>
+              <div className="text-muted-foreground">{preview.invoice.contactName || "No Xero contact"} · Current total: {preview.invoice.currencyCode} {preview.invoice.total.toFixed(2)}</div>
+              <div>Reference: {preview.invoice.reference || "Not set"}</div>
+              <div>Date: {preview.invoice.date || "Not set"} · Due: {preview.invoice.dueDate || "Not set"}</div>
             </div>
             {linked && <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border p-3">

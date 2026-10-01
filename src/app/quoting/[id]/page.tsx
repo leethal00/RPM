@@ -20,6 +20,8 @@ import { JobPhotos } from "@/components/costing/job-photos"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { CostingJobForm } from "@/components/costing-job-form"
+import { JobXeroInvoice } from "@/components/costing/job-xero-invoice"
+import { isStaffAdmin } from "@/lib/permissions"
 import type { CostingJob, CostingStatus } from "@/types/database"
 
 const STATUS_LABEL: Record<CostingStatus, string> = {
@@ -48,6 +50,19 @@ export default function CostingJobDetailPage() {
     const [syncingXero, setSyncingXero] = useState(false)
     const [updatingXero, setUpdatingXero] = useState(false)
     const [xeroError, setXeroError] = useState("")
+    const [canManageXero, setCanManageXero] = useState(false)
+
+    useEffect(() => {
+        let active = true
+        async function loadRole() {
+            const { data: auth } = await supabase.auth.getUser()
+            if (!auth.user) return
+            const { data: profile } = await supabase.from("users").select("role").eq("id", auth.user.id).single()
+            if (active) setCanManageXero(isStaffAdmin(profile?.role))
+        }
+        void loadRole()
+        return () => { active = false }
+    }, [supabase])
 
     const { data, isLoading, mutate } = useSupabaseQuery<CostingJob | null>(
         id ? `costing-job-${id}` : null,
@@ -183,6 +198,9 @@ export default function CostingJobDetailPage() {
                                             {syncingXero ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                                             {syncingXero ? "Checking..." : "Check Xero"}
                                         </Button>
+                                        {canManageXero && !job.xero_invoice_id && !job.xero_invoice_number && ["quoted", "approved"].includes(job.status) && (
+                                            <JobXeroInvoice job={job} onChanged={() => { setXeroError(""); void mutate() }} />
+                                        )}
                                     </>
                                 ) : null}
                                 {["approved", "in_progress", "complete", "invoiced"].includes(job.status) && (

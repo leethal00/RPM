@@ -4,6 +4,7 @@ import { isStaffAdmin } from "@/lib/permissions"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { buildXeroInvoiceLines, type InvoiceCostLine, type InvoiceItem } from "@/lib/xero-invoice-lines"
 import { siteDisplayName } from "@/lib/site-name"
+import { linkQuoteToInvoice, previewQuoteInvoiceLink, xeroDate } from "@/lib/xero-job-sync"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +15,12 @@ type XeroInvoice = {
   Status?: string
   UpdatedDateUTC?: string
   Total?: number
+  Reference?: string
+  CurrencyCode?: string
+  DateString?: string
+  Date?: string
+  DueDateString?: string
+  DueDate?: string
   Contact?: { Name?: string; ContactID?: string }
   LineItems?: Array<{ Description?: string; Quantity?: number; UnitAmount?: number; LineAmount?: number }>
   ValidationErrors?: Array<{ Message?: string }>
@@ -53,6 +60,10 @@ function summary(invoice: XeroInvoice) {
     status: invoice.Status,
     contactName: invoice.Contact?.Name || "",
     total: Number(invoice.Total || 0),
+    reference: invoice.Reference || "",
+    currencyCode: invoice.CurrencyCode || "",
+    date: xeroDate(invoice.DateString || invoice.Date),
+    dueDate: xeroDate(invoice.DueDateString || invoice.DueDate),
     updatedAt: invoice.UpdatedDateUTC || "",
     lines: (invoice.LineItems || []).map((line) => ({
       description: line.Description || "",
@@ -79,7 +90,7 @@ async function access() {
 
 async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
-    admin.from("costing_jobs").select("id,title,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_invoice_id,xero_invoice_number,xero_invoice_import_status,clients(name),stores(name)").eq("id", id).single(),
+    admin.from("costing_jobs").select("id,title,reference,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,xero_invoice_import_status,clients(name),stores(name)").eq("id", id).single(),
     admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
     admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
   ])
@@ -118,6 +129,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
     const number = req.nextUrl.searchParams.get("number")?.trim()
     const { job, proposedLines } = await jobAndLines(admin, id, !number)
+    if (number && job.xero_quote_id && ["quoted", "approved"].includes(job.status)) {
+      const { invoice } = await previewQuoteInvoiceLink(job, number)
+      return NextResponse.json({ invoice: summary(invoice), proposedLines: [] })
+    }
     const identifier = number || job.xero_invoice_id
     if (!identifier) return NextResponse.json({ error: "Enter an invoice number." }, { status: 400 })
     const invoice = await getInvoice(identifier, xero.accessToken, xero.tenantId)
@@ -137,7 +152,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const { admin, xero } = granted
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
-    const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedUpdatedAt?: string; contactId?: string }
+    const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedInvoiceId?: string; expectedUpdatedAt?: string; contactId?: string }
     const { job, proposedLines } = await jobAndLines(admin, id, body.action !== "link")
 
     if (body.action === "create") {
@@ -170,6 +185,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (body.action === "link") {
       const number = String(body.invoiceNumber || "").trim()
       if (!number) return NextResponse.json({ error: "Enter an invoice number." }, { status: 400 })
+      if (job.xero_quote_id && ["quoted", "approved"].includes(job.status)) {
+        const result = await linkQuoteToInvoice(job, number, String(body.expectedInvoiceId || ""))
+        return NextResponse.json({ ok: true, changedToJob: true, invoice: summary(result.invoice) })
+      }
       if (job.xero_invoice_id || (job.xero_invoice_number && job.xero_invoice_number !== number)) {
         return NextResponse.json({ error: "This job is already linked to a Xero invoice." }, { status: 409 })
       }
