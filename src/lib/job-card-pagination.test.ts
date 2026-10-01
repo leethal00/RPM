@@ -44,4 +44,3 @@ describe("paginateJobCard", () => {
     expect(pages.length).toBeGreaterThan(2)
   })
 })
-
