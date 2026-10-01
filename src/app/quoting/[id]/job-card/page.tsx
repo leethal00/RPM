@@ -508,6 +508,7 @@ function PaginatedJobCard({
         continuationHeight: continuationSection.getBoundingClientRect().height,
         materialsHeadingHeight: firstRow.getBoundingClientRect().top - materialsSection.getBoundingClientRect().top,
         materialRowHeights: Array.from(materialsSection.querySelectorAll<HTMLElement>("[data-material-row]"), (row) => row.getBoundingClientRect().height),
+        trimmableMaterialIndexes: materialEntries.flatMap((entry, index) => entry.line ? [] : [index]),
         timeLogHeight: timeSection.getBoundingClientRect().height,
         closeoutHeight: closeoutSection.getBoundingClientRect().height,
       }))
