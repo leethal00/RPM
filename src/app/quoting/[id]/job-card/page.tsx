@@ -21,10 +21,9 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { paginateJobCard, type JobCardPagePlan } from "@/lib/job-card-pagination"
-import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
 import type { CostingJob } from "@/types/database"
 
-const GREEN = PRINT_PRIMARY
+const GREEN = "#155f4c"
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
 const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
 const rows = (n: number) => Array.from({ length: n })
@@ -208,6 +207,7 @@ export default function JobCardPage() {
   useEffect(() => {
     if (!job) return
     const oldTitle = document.title
+    const clientName = [job.clients?.name, job.stores?.name].filter(Boolean).join(" ") || "Ad-hoc"
     const baseJobNumber = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
     const buildItems = items.filter((item) => item.sign_code !== SECTION_HEADING_CODE && item.mode === "build")
     const activeBuildIndex = itemId ? buildItems.findIndex((item) => item.id === itemId) : -1
@@ -276,7 +276,7 @@ export default function JobCardPage() {
     : ""
 
   const header = (
-    <JobCardHeader
+    <JobHeader
       number={number}
       customer={customer}
       site={j.stores?.address || ""}
@@ -508,6 +508,7 @@ function PaginatedJobCard({
         continuationHeight: continuationSection.getBoundingClientRect().height,
         materialsHeadingHeight: firstRow.getBoundingClientRect().top - materialsSection.getBoundingClientRect().top,
         materialRowHeights: Array.from(materialsSection.querySelectorAll<HTMLElement>("[data-material-row]"), (row) => row.getBoundingClientRect().height),
+        trimmableMaterialIndexes: materialEntries.flatMap((entry, index) => entry.line ? [] : [index]),
         timeLogHeight: timeSection.getBoundingClientRect().height,
         closeoutHeight: closeoutSection.getBoundingClientRect().height,
       }))
@@ -547,7 +548,7 @@ function PaginatedJobCard({
 }
 
 function ContinuationHeader({ number }: { number: string }) {
-  return <div className="flex h-[12mm] items-center justify-between border-b-2 text-[14px] font-black" style={{ color: GREEN, borderColor: GREEN }}>
+  return <div className="flex h-[12mm] items-center justify-between border-b-2 border-[#155f4c] text-[14px] font-black" style={{ color: GREEN }}>
     <span>JOB CARD — CONTINUED</span><span className="text-[12px]">Job No. {number}</span>
   </div>
 }
@@ -556,6 +557,61 @@ function Sheet({ children, className = "" }: { children: React.ReactNode; classN
   return (
     <div className={`sheet relative box-border mx-auto my-6 h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
       {children}
+    </div>
+  )
+}
+
+function JobHeader({
+  number,
+  customer,
+  site,
+  title,
+  issued,
+  due,
+  contact,
+  phone,
+  qrUrl,
+}: {
+  number: string
+  customer: string
+  site: string
+  title: string
+  issued: string
+  due: string
+  contact: string
+  phone: string
+  qrUrl: string
+}) {
+  return (
+    <div className="grid min-h-[31mm] grid-cols-[23mm_1fr_22mm_29mm] items-stretch gap-[2.5mm] border border-[#c2cbc8] bg-[#f3f5f4] px-[2.5mm] py-[2mm]">
+      <div className="flex items-center justify-center bg-white">
+        <img src="/R-2025.svg" alt="Rodier" className="h-[20mm] w-[20mm] object-contain" />
+      </div>
+
+      <div className="grid grid-cols-[1fr_1fr] content-start gap-x-[4mm] gap-y-[1.15mm] pt-[.5mm] text-[11px] leading-[1.1]">
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Client:</span><span className="font-bold">{customer}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Contact:</span><span>{contact}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Phone:</span><span>{phone}</span></div>
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Site:</span><span>{site}</span></div>
+        <div className="col-span-2 flex gap-[1.8mm]"><span className="font-bold">Job Title:</span><span className="font-bold">{title}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Date Issued:</span><span>{issued}</span></div>
+        <div className="flex gap-[1.8mm]"><span className="font-bold">Required By:</span><span>{due}</span></div>
+      </div>
+
+      <div className="flex flex-col items-center justify-center bg-white">
+        {qrUrl ? <img src={qrUrl} alt="RPM job QR code" className="h-[18mm] w-[18mm]" /> : <div className="h-[18mm] w-[18mm] border border-black" />}
+        <div className="mt-[.8mm] text-center text-[7.4px] leading-none">Scan to view in RPM</div>
+      </div>
+
+      <div className="flex flex-col items-center justify-center border-l border-[#c2cbc8] bg-white px-[1mm]">
+        <div className="text-[8.5px] font-bold leading-none">Job No.</div>
+        <div
+          className="mt-[1mm] font-black leading-none tracking-tight whitespace-nowrap"
+          style={{ color: GREEN, fontSize: number.length <= 4 ? "36px" : number.length <= 6 ? "30px" : "25px" }}
+        >
+          {number}
+        </div>
+      </div>
     </div>
   )
 }
@@ -595,7 +651,7 @@ function SignLine({ label }: { label: string }) {
 
 function CheckBox({ checked = false }: { checked?: boolean }) {
   return (
-    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${checked ? "font-black text-white" : "border-neutral-500 bg-white"}`} style={checked ? { borderColor: GREEN, background: GREEN } : undefined}>
+    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${checked ? "border-[#155f4c] bg-[#155f4c] font-black text-white" : "border-neutral-500 bg-white"}`}>
       {checked ? "✓" : ""}
     </i>
   )
@@ -620,7 +676,7 @@ function JobGrid() {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr style={{ background: PRINT_TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
       <tbody>{rows(8).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
     </table>
   )
@@ -632,7 +688,7 @@ function MaterialsGrid({ entries }: { entries: MaterialEntry[] }) {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr style={{ background: PRINT_TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr className="bg-[#eef2f1]">{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
       <tbody>
         {entries.map(({ key, line }) => (
           <tr key={key} data-material-row>
@@ -663,4 +719,5 @@ function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" 
     </div>
   )
 }
+
 
