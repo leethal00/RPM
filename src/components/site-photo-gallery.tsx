@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import {
     Select,
@@ -19,6 +20,7 @@ import {
 
 import {
     Camera,
+    Download,
     ExternalLink,
     Folder,
     FolderPlus,
@@ -49,8 +51,8 @@ type AssetPhotoEnriched = AssetPhoto & {
 }
 
 const GENERAL_ALBUM = "__general__"
-function publicPhotoPath(url: string): string | null {
-    const marker = "/storage/v1/object/public/site-photos/"
+function storagePhotoPath(url: string, bucket: string): string | null {
+    const marker = `/storage/v1/object/public/${bucket}/`
     const index = url.indexOf(marker)
     if (index < 0) return null
     try {
@@ -59,7 +61,23 @@ function publicPhotoPath(url: string): string | null {
         return null
     }
 }
+const publicPhotoPath = (url: string) => storagePhotoPath(url, "site-photos")
 type GalleryAudience = "client" | "internal"
+type DownloadablePhoto = {
+    key: string
+    caption: string
+    url: string
+    bucket?: string
+    path?: string
+}
+
+function photoFileName(photo: DownloadablePhoto, index: number, type: string): string {
+    const extension = (photo.path || photo.url).split("?")[0].match(/\.(jpe?g|png|webp|gif|heic|heif)$/i)?.[1]
+        || ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[type]
+        || "jpg"
+    const label = photo.caption.replace(/[^a-z0-9 -]/gi, "").trim().replace(/\s+/g, "-").slice(0, 65) || "site-photo"
+    return `${String(index + 1).padStart(3, "0")}-${label}.${extension}`
+}
 type InstallerPhoto = {
     id: string
     store_id: string
@@ -101,6 +119,9 @@ export function SitePhotoGallery({
 
     const [newAlbumName, setNewAlbumName] = useState("")
     const [creatingAlbum, setCreatingAlbum] = useState(false)
+    const [selectedPhotoKeys, setSelectedPhotoKeys] = useState<string[]>([])
+    const [openPhotoKey, setOpenPhotoKey] = useState<string | null>(null)
+    const [downloading, setDownloading] = useState(false)
 
     // Albums will remain unavailable until the Supabase migration
     // creating site_photo_albums has actually been applied.
@@ -260,6 +281,8 @@ export function SitePhotoGallery({
         // Reset the selected album when the site changes.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedAlbumId(GENERAL_ALBUM)
+        setSelectedPhotoKeys([])
+        setOpenPhotoKey(null)
         setLoading(true)
 
         fetchPhotos()
@@ -1018,6 +1041,88 @@ export function SitePhotoGallery({
     const selectedAlbumLabel =
         selectedAlbum?.name ?? "General"
 
+    const downloadablePhotos: DownloadablePhoto[] = [
+        ...filteredInstallerPhotos.filter((photo) => photo.previewUrl && !brokenInstallerIds.includes(photo.id)).map((photo) => ({
+            key: `installer:${photo.id}`, caption: photo.caption || "Job photo", url: photo.previewUrl!,
+            bucket: "installer-photos", path: photo.storage_path,
+        })),
+        ...filteredPhotos.filter((photo) => photo.private_storage_path ? !!photo.previewUrl : !!photo.url).map((photo) => ({
+            key: `site:${photo.id}`, caption: photo.caption || "Site photo",
+            url: photo.internal_only ? photo.previewUrl || photo.url : photo.url,
+            bucket: photo.private_storage_path ? "site-internal-photos" : publicPhotoPath(photo.url) ? "site-photos" : undefined,
+            path: photo.private_storage_path || publicPhotoPath(photo.url) || undefined,
+        })),
+        ...visibleAssetPhotos.filter((photo) => !!photo.url).map((photo) => ({
+            key: `asset:${photo.id}`, caption: photo.caption || "Asset photo", url: photo.url,
+            bucket: storagePhotoPath(photo.url, "asset-photos") ? "asset-photos" : undefined,
+            path: storagePhotoPath(photo.url, "asset-photos") || undefined,
+        })),
+    ]
+    const selectedPhotos = downloadablePhotos.filter((photo) => selectedPhotoKeys.includes(photo.key))
+    const openPhoto = downloadablePhotos.find((photo) => photo.key === openPhotoKey) || null
+
+    const changeAlbum = (id: string) => {
+        setSelectedAlbumId(id)
+        setSelectedPhotoKeys([])
+        setOpenPhotoKey(null)
+    }
+    const changeAudience = (next: GalleryAudience) => {
+        setAudience(next)
+        changeAlbum(GENERAL_ALBUM)
+    }
+    const togglePhoto = (key: string) => setSelectedPhotoKeys((current) =>
+        current.includes(key) ? current.filter((item) => item !== key) : [...current, key])
+
+    const downloadPhotos = async (chosen: DownloadablePhoto[]) => {
+        if (!chosen.length || downloading) return
+        setDownloading(true)
+        try {
+            const files: { name: string; blob: Blob }[] = []
+            for (let index = 0; index < chosen.length; index += 4) {
+                const batch = await Promise.all(chosen.slice(index, index + 4).map(async (photo, offset) => {
+                    let blob: Blob
+                    if (photo.bucket && photo.path) {
+                        const { data, error } = await supabase.storage.from(photo.bucket).download(photo.path)
+                        if (error || !data) throw error || new Error("Photo unavailable")
+                        blob = data
+                    } else {
+                        const response = await fetch(photo.url)
+                        if (!response.ok) throw new Error(`Photo unavailable (${response.status})`)
+                        blob = await response.blob()
+                    }
+                    return { name: photoFileName(photo, index + offset, blob.type), blob }
+                }))
+                files.push(...batch)
+            }
+
+            let file: Blob
+            let name: string
+            if (files.length === 1) {
+                file = files[0].blob
+                name = files[0].name
+            } else {
+                const { default: JSZip } = await import("jszip")
+                const zip = new JSZip()
+                files.forEach((item) => zip.file(item.name, item.blob))
+                file = await zip.generateAsync({ type: "blob" })
+                name = `site-photos-${storeId}.zip`
+            }
+            const url = URL.createObjectURL(file)
+            const link = document.createElement("a")
+            link.href = url
+            link.download = name
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+            toast.success(files.length === 1 ? "Photo downloaded" : `${files.length} photos downloaded`)
+        } catch (error) {
+            toast.error(`Download failed: ${error instanceof Error ? error.message : "Please try again"}`)
+        } finally {
+            setDownloading(false)
+        }
+    }
+
     return (
         <div className="space-y-5 mt-10 pb-12 border-t border-border/60 pt-8">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1039,9 +1144,7 @@ export function SitePhotoGallery({
                                 checked={
                                     includeAssetPhotos
                                 }
-                                onCheckedChange={
-                                    setIncludeAssetPhotos
-                                }
+                                onCheckedChange={(checked) => { setIncludeAssetPhotos(checked); setSelectedPhotoKeys([]); setOpenPhotoKey(null) }}
                             />
 
                             <span className="text-muted-foreground">
@@ -1100,11 +1203,11 @@ export function SitePhotoGallery({
 
             <div className="flex flex-wrap gap-2" role="group" aria-label="Photo gallery visibility">
                 {isStaff && <Button type="button" size="sm" variant={audience === "internal" ? "default" : "outline"}
-                    onClick={() => { setAudience("internal"); setSelectedAlbumId(GENERAL_ALBUM) }}>
+                    onClick={() => changeAudience("internal")}>
                     <Lock className="mr-1.5 size-3.5" /> Internal ({photos.filter((p) => p.internal_only).length + installerPhotos.length})
                 </Button>}
                 <Button type="button" size="sm" variant={audience === "client" ? "default" : "outline"}
-                    onClick={() => { setAudience("client"); setSelectedAlbumId(GENERAL_ALBUM) }}>
+                    onClick={() => changeAudience("client")}>
                     <LockOpen className="mr-1.5 size-3.5" /> Client viewable ({photos.filter((p) => !p.internal_only).length})
                 </Button>
             </div>
@@ -1127,11 +1230,7 @@ export function SitePhotoGallery({
                                 ? "default"
                                 : "outline"
                         }
-                        onClick={() =>
-                            setSelectedAlbumId(
-                                GENERAL_ALBUM
-                            )
-                        }
+                        onClick={() => changeAlbum(GENERAL_ALBUM)}
                         className="gap-2"
                     >
                         <ImageIcon className="size-3.5" />
@@ -1162,11 +1261,7 @@ export function SitePhotoGallery({
                                             ? "default"
                                             : "outline"
                                     }
-                                    onClick={() =>
-                                        setSelectedAlbumId(
-                                            album.id
-                                        )
-                                    }
+                                    onClick={() => changeAlbum(album.id)}
                                     className="gap-2 rounded-r-none"
                                 >
                                     <Folder className="size-3.5" />
@@ -1247,6 +1342,23 @@ export function SitePhotoGallery({
                 ) : null}
             </div>
 
+            {downloadablePhotos.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2">
+                    <span className="mr-auto text-sm text-muted-foreground">Click a photo to open it. Select photos to download.</span>
+                    <Button type="button" size="sm" variant="outline"
+                        onClick={() => setSelectedPhotoKeys(downloadablePhotos.map((photo) => photo.key))}>
+                        Select all ({downloadablePhotos.length})
+                    </Button>
+                    {selectedPhotos.length > 0 && <Button type="button" size="sm" variant="ghost"
+                        onClick={() => setSelectedPhotoKeys([])}>Clear</Button>}
+                    <Button type="button" size="sm" disabled={!selectedPhotos.length || downloading}
+                        onClick={() => void downloadPhotos(selectedPhotos)}>
+                        {downloading ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Download className="mr-1.5 size-4" />}
+                        Download selected ({selectedPhotos.length})
+                    </Button>
+                </div>
+            )}
+
             <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -1293,19 +1405,28 @@ export function SitePhotoGallery({
                             <div key={`installation-${photo.id}`} className="space-y-1.5 rounded-md border p-2">
                                 <div className="relative aspect-square overflow-hidden rounded bg-muted">
                                     {photo.previewUrl && !brokenInstallerIds.includes(photo.id) ? (
-                                        <Image src={photo.previewUrl} alt={photo.caption || "Job photo"}
-                                            fill unoptimized className="object-cover"
-                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                            onError={() => setBrokenInstallerIds((current) => [...current, photo.id])} />
+                                        <button type="button" className="absolute inset-0 size-full cursor-zoom-in" aria-label={`Open ${photo.caption || "job photo"}`}
+                                            onClick={() => setOpenPhotoKey(`installer:${photo.id}`)}>
+                                            <Image src={photo.previewUrl} alt={photo.caption || "Job photo"}
+                                                fill unoptimized className="object-cover"
+                                                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                                onError={() => setBrokenInstallerIds((current) => [...current, photo.id])} />
+                                        </button>
                                     ) : (
                                         <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">Photo unavailable</div>
                                     )}
                                     <span className="absolute left-1.5 top-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
                                         {photo.category || "Job photo"} · Internal
                                     </span>
+                                    {photo.previewUrl && !brokenInstallerIds.includes(photo.id) && <label className="absolute right-1.5 top-1.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded bg-background/95 shadow-sm">
+                                        <input type="checkbox" className="size-4 accent-primary" aria-label={`Select ${photo.caption || "job photo"}`}
+                                            checked={selectedPhotoKeys.includes(`installer:${photo.id}`)} onChange={() => togglePhoto(`installer:${photo.id}`)} />
+                                    </label>}
                                 </div>
                                 <p className="truncate text-sm" title={photo.caption || "Job photo"}>{photo.caption || "Job photo"}</p>
                                 <p className="text-xs text-muted-foreground">{photo.users?.name || "Installer"} · {new Date(photo.captured_at).toLocaleString("en-NZ")}</p>
+                                {photo.previewUrl && !brokenInstallerIds.includes(photo.id) && <Button type="button" size="sm" variant="outline" className="w-full"
+                                    onClick={() => setOpenPhotoKey(`installer:${photo.id}`)}>Open photo</Button>}
                                 {albumsAvailable && (
                                     <Select value={photo.album_id ?? GENERAL_ALBUM}
                                         onValueChange={(value) => void moveInstallerPhoto(photo, value)}>
@@ -1348,10 +1469,13 @@ export function SitePhotoGallery({
                                         {photo.internal_only && photo.private_storage_path && !photo.previewUrl ? (
                                             <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">Photo unavailable</div>
                                         ) : (
-                                            <Image src={photo.internal_only ? photo.previewUrl || photo.url : photo.url}
-                                                alt={photo.caption ?? "Site photo"} fill className="object-cover"
-                                                unoptimized={Boolean(photo.internal_only && photo.private_storage_path)}
-                                                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" loading="lazy" />
+                                            <button type="button" className="absolute inset-0 size-full cursor-zoom-in" aria-label={`Open ${photo.caption || "site photo"}`}
+                                                onClick={() => setOpenPhotoKey(`site:${photo.id}`)}>
+                                                <Image src={photo.internal_only ? photo.previewUrl || photo.url : photo.url}
+                                                    alt={photo.caption ?? "Site photo"} fill className="object-cover"
+                                                    unoptimized={Boolean(photo.internal_only && photo.private_storage_path)}
+                                                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" loading="lazy" />
+                                            </button>
                                         )}
 
                                         <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
@@ -1370,8 +1494,13 @@ export function SitePhotoGallery({
                                             )}
                                         </div>
 
-                                        <div className="absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
-                                            <div className="w-full p-2 flex items-center justify-between gap-1">
+                                        {(!photo.private_storage_path || photo.previewUrl) && (photo.url || photo.previewUrl) && <label className="absolute right-1.5 top-1.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded bg-background/95 shadow-sm">
+                                            <input type="checkbox" className="size-4 accent-primary" aria-label={`Select ${photo.caption || "site photo"}`}
+                                                checked={selectedPhotoKeys.includes(`site:${photo.id}`)} onChange={() => togglePhoto(`site:${photo.id}`)} />
+                                        </label>}
+
+                                        <div className="pointer-events-none absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
+                                            <div className="pointer-events-auto w-full p-2 flex items-center justify-between gap-1">
                                                 <div className="flex items-center gap-1">
                                                     {isStaff && !photo.internal_only && <Button
                                                         type="button"
@@ -1465,6 +1594,12 @@ export function SitePhotoGallery({
                                         </div>
                                     </div>
 
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="truncate text-sm" title={photo.caption || "Site photo"}>{photo.caption || "Site photo"}</p>
+                                        {(!photo.private_storage_path || photo.previewUrl) && (photo.url || photo.previewUrl) && <Button type="button" size="sm" variant="outline" className="shrink-0"
+                                            onClick={() => setOpenPhotoKey(`site:${photo.id}`)}>Open photo</Button>}
+                                    </div>
+
                                     {albumsAvailable && isStaff && (
                                         <Select
                                             value={
@@ -1520,25 +1655,25 @@ export function SitePhotoGallery({
 
                         {visibleAssetPhotos.map(
                             (photo) => (
+                                <div key={`asset-${photo.id}`} className="space-y-1.5">
                                 <div
-                                    key={`asset-${photo.id}`}
                                     className={`group relative aspect-square rounded-md overflow-hidden border bg-muted/40 ${
                                         photo.internal_only
                                             ? "border-amber-400/60 ring-1 ring-amber-400/30"
                                             : "border-border/60"
                                     }`}
                                 >
-                                    <Image
-                                        src={photo.url}
-                                        alt={
-                                            photo.caption ??
-                                            "Asset photo"
-                                        }
-                                        fill
-                                        className="object-cover"
-                                        sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                        loading="lazy"
-                                    />
+                                    <button type="button" className="absolute inset-0 size-full cursor-zoom-in" aria-label={`Open ${photo.caption || "asset photo"}`}
+                                        onClick={() => setOpenPhotoKey(`asset:${photo.id}`)}>
+                                        <Image
+                                            src={photo.url}
+                                            alt={photo.caption ?? "Asset photo"}
+                                            fill
+                                            className="object-cover"
+                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                            loading="lazy"
+                                        />
+                                    </button>
 
                                     <div className="absolute top-1.5 left-1.5 flex flex-col items-start gap-1">
                                         <div className="bg-background/90 text-foreground text-[10px] font-medium px-1.5 py-0.5 rounded">
@@ -1556,8 +1691,13 @@ export function SitePhotoGallery({
                                         )}
                                     </div>
 
-                                    <div className="absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
-                                        <div className="w-full p-2 flex items-center justify-between">
+                                    <label className="absolute right-1.5 top-1.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded bg-background/95 shadow-sm">
+                                        <input type="checkbox" className="size-4 accent-primary" aria-label={`Select ${photo.caption || "asset photo"}`}
+                                            checked={selectedPhotoKeys.includes(`asset:${photo.id}`)} onChange={() => togglePhoto(`asset:${photo.id}`)} />
+                                    </label>
+
+                                    <div className="pointer-events-none absolute inset-0 bg-black/45 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity flex items-end">
+                                        <div className="pointer-events-auto w-full p-2 flex items-center justify-between">
                                             <div className="flex gap-1">
                                                 {isStaff && <Button
                                                     type="button"
@@ -1617,11 +1757,35 @@ export function SitePhotoGallery({
                                         </div>
                                     </div>
                                 </div>
+                                <Button type="button" size="sm" variant="outline" className="w-full"
+                                    onClick={() => setOpenPhotoKey(`asset:${photo.id}`)}>Open photo</Button>
+                                </div>
                             )
                         )}
                     </div>
                 )}
             </div>
+            <Dialog open={Boolean(openPhoto)} onOpenChange={(open) => { if (!open) setOpenPhotoKey(null) }}>
+                {openPhoto && <DialogContent className="max-h-[95vh] max-w-[min(96vw,1100px)] p-4">
+                    <DialogHeader>
+                        <DialogTitle>{openPhoto.caption}</DialogTitle>
+                        <DialogDescription>View the photo, select it, or download the original file.</DialogDescription>
+                    </DialogHeader>
+                    <div className="relative h-[min(70vh,780px)] overflow-hidden rounded bg-muted">
+                        <Image src={openPhoto.url} alt={openPhoto.caption} fill unoptimized className="object-contain" sizes="96vw" />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="size-4 accent-primary" checked={selectedPhotoKeys.includes(openPhoto.key)}
+                                onChange={() => togglePhoto(openPhoto.key)} /> Select this photo
+                        </label>
+                        <Button type="button" disabled={downloading} onClick={() => void downloadPhotos([openPhoto])}>
+                            {downloading ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Download className="mr-1.5 size-4" />}
+                            Download photo
+                        </Button>
+                    </div>
+                </DialogContent>}
+            </Dialog>
         </div>
     )
 }

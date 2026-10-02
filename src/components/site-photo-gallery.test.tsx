@@ -3,9 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 const mocks = vi.hoisted(() => ({
     role: "rodier_admin", photos: [] as object[], albums: [] as object[], installers: [] as object[],
-    upload: vi.fn(), insert: vi.fn(), update: vi.fn(), remove: vi.fn(),
+    upload: vi.fn(), insert: vi.fn(), update: vi.fn(), remove: vi.fn(), download: vi.fn(),
+    zipFile: vi.fn(), zipGenerate: vi.fn(),
 }))
 
+vi.mock("jszip", () => ({ default: class {
+    file(name: string, blob: Blob) { mocks.zipFile(name, blob) }
+    generateAsync() { return mocks.zipGenerate() }
+} }))
 vi.mock("next/image", () => ({ default: ({ alt, src, unoptimized }: { alt: string; src: string; unoptimized?: boolean }) =>
     <span role="img" aria-label={alt} data-src={src} data-unoptimized={String(Boolean(unoptimized))} /> }))
 vi.mock("@/lib/image-prep", () => ({ ensureRenderable: async (file: File) => file, isHeic: () => false }))
@@ -16,7 +21,7 @@ vi.mock("@/lib/supabase/client", () => ({
             createSignedUrl: async () => ({ data: { signedUrl: "https://example.com/private.jpg" } }),
             upload: (path: string, file: File) => mocks.upload(bucket, path, file),
             getPublicUrl: () => ({ data: { publicUrl: "https://example.com/public.jpg" } }),
-            download: async () => ({ data: new Blob(["photo"], { type: "image/jpeg" }), error: null }),
+            download: (path: string) => mocks.download(bucket, path),
             remove: (paths: string[]) => mocks.remove(bucket, paths),
         }) },
         from: (table: string) => {
@@ -43,6 +48,8 @@ describe("site photo galleries", () => {
         mocks.insert.mockResolvedValue({ error: null })
         mocks.update.mockResolvedValue({ error: null })
         mocks.remove.mockResolvedValue({ error: null })
+        mocks.download.mockResolvedValue({ data: new Blob(["photo"], { type: "image/jpeg" }), error: null })
+        mocks.zipGenerate.mockResolvedValue(new Blob(["archive"], { type: "application/zip" }))
         mocks.role = "rodier_admin"
         mocks.photos = [
             { id: "internal-1", store_id: "site-1", album_id: null, url: "/internal.jpg", caption: "Workshop photo", internal_only: true, is_primary: false },
@@ -66,8 +73,49 @@ describe("site photo galleries", () => {
         fireEvent.click(screen.getByRole("button", { name: /Client viewable \(/ }))
         expect(screen.getByRole("img", { name: "Finished photo" })).toBeInTheDocument()
         expect(screen.queryByText("Site visit")).not.toBeInTheDocument()
+        expect(screen.queryByRole("checkbox", { name: "Select Workshop photo" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("checkbox", { name: "Select Site visit" })).not.toBeInTheDocument()
         expect(screen.getByText("Completion")).toBeInTheDocument()
         expect(screen.queryByText("Workshop")).not.toBeInTheDocument()
+    })
+
+    it("opens an installer photo and downloads its original file", async () => {
+        const createObjectURL = vi.fn((blob: Blob) => { void blob; return "blob:site-photo" })
+        Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL })
+        Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() })
+        const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
+        render(<SitePhotoGallery storeId="site-1" />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Open Site visit" }))
+        expect(screen.getByRole("dialog")).toHaveTextContent("Site visit")
+        fireEvent.click(screen.getByRole("button", { name: "Download photo" }))
+
+        await waitFor(() => expect(mocks.download).toHaveBeenCalledWith("installer-photos", "job/user/one.jpg"))
+        await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1))
+        expect(click).toHaveBeenCalledTimes(1)
+        click.mockRestore()
+    })
+
+    it("downloads selected private site and installer photos in one ZIP", async () => {
+        mocks.photos = [{ id: "internal-1", store_id: "site-1", album_id: null, url: "",
+            private_storage_path: "site-1/private.jpg", caption: "Workshop photo", internal_only: true, is_primary: false }]
+        const createObjectURL = vi.fn((blob: Blob) => { void blob; return "blob:site-photos" })
+        Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL })
+        Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() })
+        const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
+        render(<SitePhotoGallery storeId="site-1" />)
+
+        fireEvent.click(await screen.findByRole("checkbox", { name: "Select Site visit" }))
+        fireEvent.click(screen.getByRole("checkbox", { name: "Select Workshop photo" }))
+        fireEvent.click(screen.getByRole("button", { name: "Download selected (2)" }))
+
+        await waitFor(() => expect(mocks.download).toHaveBeenCalledWith("installer-photos", "job/user/one.jpg"))
+        await waitFor(() => expect(mocks.download).toHaveBeenCalledWith("site-internal-photos", "site-1/private.jpg"))
+        await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1))
+        expect(createObjectURL.mock.calls[0][0]).toHaveProperty("type", "application/zip")
+        expect(mocks.zipFile).toHaveBeenCalledTimes(2)
+        expect(click).toHaveBeenCalledTimes(1)
+        click.mockRestore()
     })
 
     it("shows clients only the viewable gallery and hides upload controls", async () => {
