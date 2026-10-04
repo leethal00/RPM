@@ -23,6 +23,7 @@ import { toast } from "sonner"
 import { SiteForm } from "@/components/site-form"
 import { CostingJobForm } from "@/components/costing-job-form"
 import { siteDisplayName } from "@/lib/site-name"
+import { jobSiteNames, jobSites, type LinkedJobSite } from "@/lib/costing/job-sites"
 import type { Client, CostingJob, Store } from "@/types/database"
 
 const PAGE_SIZE = 20
@@ -31,6 +32,7 @@ type JobRow = CostingJob & {
     clients?: { name: string } | null
     stores?: { name: string } | null
     production_title?: string | null
+    costing_job_sites?: LinkedJobSite[]
 }
 
 type SortKey = "job" | "client" | "job_number" | "job_lead" | "completion_date" | "status"
@@ -190,7 +192,7 @@ function JobsPrintReport({ jobs, view, printedAt, filters, sortLabel }: {
                         <tr key={job.id}>
                             <td>{job.job_number || job.xero_invoice_number || "—"}</td>
                             <td><strong>{job.production_title || job.title}</strong>{job.reference && <div className="muted">{job.reference}</div>}</td>
-                            <td>{job.clients?.name || "Ad-hoc"}<div className="muted">{job.stores?.name || "Manufacture only / No site"}</div></td>
+                            <td>{job.clients?.name || "Ad-hoc"}<div className="muted">{jobSiteNames(job)}</div></td>
                             <td>{job.job_lead_name || "Unassigned"}<div className="muted">Quoted: {job.quoted_by_name || "—"}</div></td>
                             <td>{formatDate(job.completion_date)}</td>
                             <td>{STATUS[job.status as keyof typeof STATUS]?.label || job.status}</td>
@@ -230,6 +232,9 @@ export default function ActiveJobsPage() {
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id" | "address">[]>([])
     const [selectedClient, setSelectedClient] = useState("auto")
     const [selectedStore, setSelectedStore] = useState("none")
+    const [multipleSites, setMultipleSites] = useState(false)
+    const [selectedStores, setSelectedStores] = useState<string[]>([])
+    const [visibleToClient, setVisibleToClient] = useState(false)
     const [showAllSites, setShowAllSites] = useState(false)
     const [siteSearch, setSiteSearch] = useState("")
     const [importTitle, setImportTitle] = useState("")
@@ -242,7 +247,7 @@ export default function ActiveJobsPage() {
     const { data: allJobs = [], isLoading, mutate } = useSupabaseQuery<JobRow[]>(key, async () => {
         let query = supabase
             .from("costing_jobs")
-            .select(`*, clients ( name ), stores ( name )`)
+            .select(`*, clients ( name ), stores ( name ), costing_job_sites ( store_id, sort, stores ( id, name, address ) )`)
             .eq("is_template", false)
             .in("status", statuses)
             .order("created_at", { ascending: false })
@@ -263,8 +268,8 @@ export default function ActiveJobsPage() {
     const filterStores = useMemo(() => {
         const map = new Map<string, { id: string; name: string; client_id: string | null }>()
         for (const job of allJobs) {
-            if (job.store_id && job.stores?.name && (clientFilter === "all" || job.client_id === clientFilter)) {
-                map.set(job.store_id, { id: job.store_id, name: job.stores.name, client_id: job.client_id })
+            if (clientFilter === "all" || job.client_id === clientFilter) {
+                for (const site of jobSites(job)) map.set(site.id, { id: site.id, name: site.name, client_id: job.client_id })
             }
         }
         return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
@@ -283,7 +288,7 @@ export default function ActiveJobsPage() {
 
         return allJobs.filter((job) => {
             if (clientFilter !== "all" && job.client_id !== clientFilter) return false
-            if (siteFilter !== "all" && job.store_id !== siteFilter) return false
+            if (siteFilter !== "all" && !jobSites(job).some((site) => site.id === siteFilter)) return false
             if (leadFilter !== "all" && job.job_lead_name !== leadFilter) return false
             if (statusFilter !== "all" && job.status !== statusFilter) return false
             if (dateFilter === "overdue" && (!job.completion_date || job.completion_date >= today)) return false
@@ -300,7 +305,7 @@ export default function ActiveJobsPage() {
                     job.job_lead_name,
                     job.quoted_by_name,
                     job.clients?.name,
-                    job.stores?.name,
+                    jobSiteNames(job),
                 ].filter(Boolean).join(" ").toLowerCase()
                 if (!haystack.includes(term)) return false
             }
@@ -321,8 +326,8 @@ export default function ActiveJobsPage() {
                 av = a.production_title || a.title || ""
                 bv = b.production_title || b.title || ""
             } else if (sortKey === "client") {
-                av = `${a.clients?.name || ""} ${a.stores?.name || ""}`
-                bv = `${b.clients?.name || ""} ${b.stores?.name || ""}`
+                av = `${a.clients?.name || ""} ${jobSiteNames(a)}`
+                bv = `${b.clients?.name || ""} ${jobSiteNames(b)}`
             } else if (sortKey === "job_lead") {
                 av = a.job_lead_name || ""
                 bv = b.job_lead_name || ""
@@ -352,6 +357,7 @@ export default function ActiveJobsPage() {
     for (const { label } of siteLabels) siteLabelCounts.set(label, (siteLabelCounts.get(label) || 0) + 1)
     const searchWords = siteSearchWords(siteSearch)
     const visibleSiteLabels = siteLabels.filter(({ store, label, owner }) => {
+        if (multipleSites && selectedStores.includes(store.id)) return false
         if (store.id === selectedStore) return true
         const words = siteSearchWords([label, store.name, store.address, owner].join(" "))
         return searchWords.every((term) => words.some((word) => word.includes(term)))
@@ -405,7 +411,7 @@ export default function ActiveJobsPage() {
 
     function renderCell(key: SortKey, job: JobRow) {
         if (key === "job") return <><div className="font-medium truncate">{job.production_title || job.title}</div>{job.reference && <div className="text-xs text-muted-foreground truncate">{job.reference}</div>}</>
-        if (key === "client") return <span className="block truncate text-muted-foreground">{job.clients?.name || "Ad-hoc"} · {job.stores?.name || "Manufacture only / No site"}</span>
+        if (key === "client") return <span title={jobSiteNames(job)} className="block truncate text-muted-foreground">{job.clients?.name || "Ad-hoc"} · {jobSiteNames(job)}</span>
         if (key === "job_number") return <span className="tabular-nums truncate block">{job.job_number || job.xero_invoice_number || "—"}</span>
         if (key === "job_lead") return <div className="text-xs"><div className="font-medium truncate">{job.job_lead_name || "Unassigned"}</div><div className="text-muted-foreground truncate">Quoted: {job.quoted_by_name || "—"}</div></div>
         if (key === "completion_date") return <span className="tabular-nums whitespace-nowrap">{formatDate(job.completion_date)}</span>
@@ -421,6 +427,9 @@ export default function ActiveJobsPage() {
         setCompletionDate("")
         setSelectedClient("auto")
         setSelectedStore("none")
+        setMultipleSites(false)
+        setSelectedStores([])
+        setVisibleToClient(false)
         setShowAllSites(false)
         setSiteSearch("")
         if (!clients.length || !stores.length) {
@@ -441,7 +450,10 @@ export default function ActiveJobsPage() {
             return
         }
         setStores((current) => [...current.filter((store) => store.client_id !== selectedClient), ...((data || []) as Pick<Store, "id" | "name" | "client_id" | "address">[])])
-        if (siteId) setSelectedStore(siteId)
+        if (siteId) {
+            if (multipleSites) setSelectedStores((current) => Array.from(new Set([...current, siteId])))
+            else setSelectedStore(siteId)
+        }
         setSiteSearch("")
         setCreatingSite(false)
     }
@@ -467,6 +479,9 @@ export default function ActiveJobsPage() {
             const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
             setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
             setSelectedStore("none")
+            setMultipleSites(false)
+            setSelectedStores([])
+            setVisibleToClient(false)
             setShowAllSites(false)
             setSiteSearch("")
         } catch (error) {
@@ -489,7 +504,9 @@ export default function ActiveJobsPage() {
                     invoiceId: preview.invoiceId,
                     clientId: selectedClient === "auto" ? null : selectedClient,
                     storeId: selectedStore === "none" ? null : selectedStore,
+                    storeIds: multipleSites ? selectedStores : selectedStore === "none" ? [] : [selectedStore],
                     showAllSites,
+                    visibleToClient,
                     title: importTitle.trim() || preview.reference || preview.invoiceNumber,
                     completionDate: completionDate || null,
                 }),
@@ -665,7 +682,7 @@ export default function ActiveJobsPage() {
                                     </div>
                                     <div className="grid min-w-0 gap-2">
                                         <Label>Customer</Label>
-                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none"); setSiteSearch("") }} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm">
+                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none"); setSelectedStores([]); setSiteSearch("") }} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm">
                                             <option value="auto">{preview.contactName ? `Use Xero customer: ${preview.contactName}` : "Use Xero customer"}</option>
                                             {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                                         </select>
@@ -681,20 +698,57 @@ export default function ActiveJobsPage() {
                                                 setShowAllSites(checked)
                                                 setSiteSearch("")
                                                 if (!checked && !clientStores.some((store) => store.id === selectedStore)) setSelectedStore("none")
+                                                if (!checked) setSelectedStores((current) => current.filter((id) => clientStores.some((store) => store.id === id)))
                                             }} />
                                             Show all sites
                                         </label>
                                         {showAllSites && <p className="text-xs text-muted-foreground">Choose a site owned by any client. The job customer stays the same.</p>}
+                                        <label className="flex items-center gap-2 text-sm">
+                                            <input type="checkbox" checked={multipleSites} onChange={(event) => {
+                                                const checked = event.target.checked
+                                                setMultipleSites(checked)
+                                                if (checked) {
+                                                    setSelectedStores(selectedStore === "none" ? [] : [selectedStore])
+                                                    setSelectedStore("none")
+                                                } else {
+                                                    setSelectedStore(selectedStores[0] || "none")
+                                                    setSelectedStores([])
+                                                }
+                                            }} />
+                                            Multiple sites
+                                        </label>
+                                        {multipleSites && <p className="text-xs text-muted-foreground">Add each site covered by this job. The first site is the primary location.</p>}
+                                        {multipleSites && selectedStores.length > 0 && <ul aria-label="Selected sites" className="space-y-1">
+                                            {selectedStores.map((id, index) => {
+                                                const store = stores.find((site) => site.id === id)
+                                                const owner = clients.find((client) => client.id === store?.client_id)?.name || "Unassigned client"
+                                                const label = store ? `${owner} — ${siteDisplayName(store.name, owner)}${store.address ? ` · ${store.address}` : ""}` : id
+                                                return <li key={id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+                                                    <span>{label}{index === 0 && <span className="block text-muted-foreground">Primary site</span>}</span>
+                                                    <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${label}`} onClick={() => setSelectedStores((current) => current.filter((siteId) => siteId !== id))}>Remove</Button>
+                                                </li>
+                                            })}
+                                        </ul>}
                                         <Input aria-label="Search sites" placeholder="Search sites…" value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} disabled={selectedClient === "auto" && !showAllSites} />
-                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto" && !showAllSites} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
-                                            <option value="none">Manufacture only / No site</option>
+                                        <select id="import-site" value={selectedStore} onChange={(event) => {
+                                            const id = event.target.value
+                                            if (multipleSites) {
+                                                if (id !== "none") setSelectedStores((current) => Array.from(new Set([...current, id])))
+                                            } else setSelectedStore(id)
+                                        }} disabled={selectedClient === "auto" && !showAllSites} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                                            <option value="none">{multipleSites ? "Add a site…" : "Manufacture only / No site"}</option>
                                             {visibleSiteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
+                                        {multipleSites && selectedStores.length === 0 && <p className="text-xs text-muted-foreground">No sites selected — manufacture only.</p>}
                                         {visibleSiteLabels.length === 0 && siteSearch.trim() && <p className="text-xs text-muted-foreground">No sites match your search.</p>}
                                     </div>
                                     <div className="grid min-w-0 gap-2">
                                         <Label>Complete by</Label>
                                         <Input type="date" value={completionDate} onChange={(event) => setCompletionDate(event.target.value)} />
+                                    </div>
+                                    <div className="grid min-w-0 gap-2 sm:col-span-2">
+                                        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={visibleToClient} onChange={(event) => setVisibleToClient(event.target.checked)} /> Show to client</label>
+                                        <p className="text-xs text-muted-foreground">Staff always see the job at its sites. Enable this to show a job summary to client users at those sites.</p>
                                     </div>
                                 </div>
                             </>}

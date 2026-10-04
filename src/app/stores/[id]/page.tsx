@@ -8,6 +8,7 @@ import dynamic from "next/dynamic"
 import { StoreHeader } from "@/components/store-header"
 import { AssetTable } from "@/components/asset-table"
 import { JobTimeline } from "@/components/job-timeline"
+import { SiteCostingJobs } from "@/components/site-costing-jobs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectCard } from "@/components/project-card"
 import { SitePhotoGallery } from "@/components/site-photo-gallery"
@@ -215,6 +216,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                     </TabsContent>
 
                     <TabsContent value="jobs" className="pt-6">
+                        <SiteCostingJobs storeId={id} />
                         <JobTimeline jobs={jobs || []} />
                     </TabsContent>
 

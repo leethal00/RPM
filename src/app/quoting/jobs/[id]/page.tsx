@@ -28,11 +28,14 @@ import { InstallerActivity } from "@/components/costing/installer-activity"
 import { JobHealthSafety } from "@/components/costing/job-health-safety"
 import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
+import { jobSiteNames, jobSites, type LinkedJobSite } from "@/lib/costing/job-sites"
 
 type ActiveJob = CostingJob & {
   production_title?: string | null
   production_details?: string | null
   production_contact_name?: string | null
+  costing_job_sites?: LinkedJobSite[]
+  visible_to_client?: boolean
 }
 
 function formatDate(value?: string | null) {
@@ -55,6 +58,7 @@ export default function ActiveJobDetailPage() {
   const [editContact, setEditContact] = useState("")
   const [editQuotedBy, setEditQuotedBy] = useState("")
   const [editJobLead, setEditJobLead] = useState("")
+  const [editVisibleToClient, setEditVisibleToClient] = useState(false)
   const [teamMembers, setTeamMembers] = useState<string[]>([])
   const [canManageXero, setCanManageXero] = useState(false)
   const [canDeleteJobPhotos, setCanDeleteJobPhotos] = useState(false)
@@ -62,7 +66,7 @@ export default function ActiveJobDetailPage() {
   const [deletingJob, setDeletingJob] = useState(false)
 
   const { data, isLoading, mutate } = useSupabaseQuery<ActiveJob | null>(id ? `active-job-${id}` : null, async () => {
-    const { data: job, error } = await supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`).eq("id", id).single()
+    const { data: job, error } = await supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name ), costing_job_sites ( store_id, sort, stores ( id, name, address ) )`).eq("id", id).single()
     if (error) throw error
     return { data: job as ActiveJob, error: null }
   })
@@ -71,7 +75,7 @@ export default function ActiveJobDetailPage() {
   const jobTitle = job?.production_title || job?.title || ""
   const jobDetails = job?.production_details ?? job?.details ?? ""
   const jobContact = job?.production_contact_name ?? job?.contact_name ?? ""
-  const clientSite = job ? `${job.clients?.name || "Ad-hoc"} · ${job.stores?.name || "Manufacture only / No site"}` : ""
+  const clientSite = job ? `${job.clients?.name || "Ad-hoc"} · ${jobSiteNames(job)}` : ""
 
   useEffect(() => {
     async function fetchTeamMembers() {
@@ -95,6 +99,7 @@ export default function ActiveJobDetailPage() {
     setEditContact(jobContact)
     setEditQuotedBy(job.quoted_by_name || "")
     setEditJobLead(job.job_lead_name || "")
+    setEditVisibleToClient(job.visible_to_client === true)
     setEditOpen(true)
   }
 
@@ -107,6 +112,7 @@ export default function ActiveJobDetailPage() {
       production_contact_name: editContact.trim() || null,
       quoted_by_name: editQuotedBy.trim() || null,
       job_lead_name: editJobLead.trim() || null,
+      visible_to_client: editVisibleToClient,
       updated_at: new Date().toISOString(),
     }).eq("id", job.id)
     setSavingJob(false)
@@ -159,7 +165,7 @@ export default function ActiveJobDetailPage() {
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => router.push("/quoting/jobs")}>
             <ArrowLeft className="size-3.5"/> Active Jobs
           </Button>
-          {job.store_id && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5"><Link href={`/stores/${job.store_id}`}><MapPin className="size-3.5"/> View site</Link></Button>}
+          {jobSites(job).map((site) => <Button key={site.id} asChild variant="outline" size="sm" className="h-8 gap-1.5"><Link href={`/stores/${site.id}`}><MapPin className="size-3.5"/> {jobSites(job).length > 1 ? site.name : "View site"}</Link></Button>)}
           <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openEdit}>
             <Pencil className="size-3.5"/> Edit
           </Button>
@@ -195,6 +201,7 @@ export default function ActiveJobDetailPage() {
               <datalist id="active-job-team-members">{teamMembers.map((name) => <option key={name} value={name}/>)}</datalist>
             </div>
             <div className="grid gap-2"><Label>Job description / scope</Label><Textarea value={editDetails} onChange={(e) => setEditDetails(e.target.value)} className="min-h-[140px]"/></div>
+            {canManageXero && <div className="space-y-1"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editVisibleToClient} onChange={(event) => setEditVisibleToClient(event.target.checked)} /> Show to client</label><p className="text-xs text-muted-foreground">Show a job summary to client users at every linked site. Staff always see the job.</p></div>}
             <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button onClick={saveJobEdits} disabled={savingJob}>{savingJob ? "Saving…" : "Save job"}</Button></div>
           </div>
         </DialogContent>

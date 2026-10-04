@@ -6,6 +6,7 @@ import { useParams } from "next/navigation"
 import { ArrowLeft, Printer } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
+import { jobSites, type LinkedJobSite } from "@/lib/costing/job-sites"
 
 const GREEN = PRINT_PRIMARY
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
@@ -28,6 +29,8 @@ type Item = {
 }
 
 type Job = {
+  store_id?: string | null
+  costing_job_sites?: LinkedJobSite[]
   id: string
   title: string
   job_number: string | null
@@ -106,7 +109,7 @@ export default function JobSummaryPage() {
   useEffect(() => {
     ;(async () => {
       const [{ data: jobData }, { data: itemData }, { data: lineData }] = await Promise.all([
-        supabase.from("costing_jobs").select("*,clients(name),stores(name,address,manager_name,manager_phone)").eq("id", id).single(),
+        supabase.from("costing_jobs").select("*,clients(name),stores(name,address,manager_name,manager_phone),costing_job_sites(store_id,sort,stores(id,name,address))").eq("id", id).single(),
         supabase.from("costing_items").select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort").eq("job_id", id).order("sort"),
         supabase.from("costing_lines").select("id,item_id,section,subsection,description").eq("job_id", id).order("sort"),
       ])
@@ -132,7 +135,8 @@ export default function JobSummaryPage() {
   if (!job) return <div className="p-8 text-sm text-muted-foreground">Job not found.</div>
 
   const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
-  const client = [job.clients?.name, job.stores?.name].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
+  const sites = jobSites(job)
+  const client = [job.clients?.name, sites.map((site) => site.name).join("; ")].filter(Boolean).join(" ") || "Ad-hoc / wholesale"
   const contact = job.production_contact_name || job.quote_contact || job.contact_name || job.stores?.manager_name || ""
   const phone = job.stores?.manager_phone || ""
   const requiredBy = job.completion_date || job.due_date || null
@@ -180,7 +184,7 @@ export default function JobSummaryPage() {
         <JobCardHeader
           number={number}
           customer={client}
-          site={job.stores?.address || ""}
+          site={sites.map((site) => site.address || site.name).join("; ")}
           title={job.title}
           issued={fmt(job.created_at)}
           due={fmt(requiredBy)}

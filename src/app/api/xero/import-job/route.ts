@@ -156,7 +156,9 @@ export async function POST(req: NextRequest) {
         invoiceNumber?: string
         clientId?: string | null
         storeId?: string | null
+        storeIds?: string[]
         showAllSites?: boolean
+        visibleToClient?: boolean
         title?: string | null
         completionDate?: string | null
         invoiceId?: string | null
@@ -164,6 +166,10 @@ export async function POST(req: NextRequest) {
 
     const invoiceNumber = String(body.invoiceNumber || "").trim()
     if (!invoiceNumber) return NextResponse.json({ error: "Invoice number is required." }, { status: 400 })
+    if (body.storeIds !== undefined && (!Array.isArray(body.storeIds) || body.storeIds.some((id) => typeof id !== "string" || !id.trim()))) {
+        return NextResponse.json({ error: "Select valid sites." }, { status: 400 })
+    }
+    const storeIds = Array.from(new Set(body.storeIds ?? (body.storeId ? [body.storeId] : [])))
 
     const admin = xeroAdmin()
     const { data: profile } = await admin.from("users").select("role").eq("id", auth.user.id).single()
@@ -190,9 +196,9 @@ export async function POST(req: NextRequest) {
         const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
         if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
-        if (body.storeId) {
+        for (const storeId of storeIds) {
             if (!body.clientId && body.showAllSites !== true) return NextResponse.json({ error: "Select a customer for this site." }, { status: 400 })
-            const { data: site, error: siteError } = await admin.from("stores").select("id,client_id").eq("id", body.storeId).maybeSingle()
+            const { data: site, error: siteError } = await admin.from("stores").select("id,client_id").eq("id", storeId).maybeSingle()
             if (siteError) throw siteError
             if (!site) return NextResponse.json({ error: "The selected site no longer exists. Select another site." }, { status: 400 })
             if (body.showAllSites !== true && site.client_id !== body.clientId) return NextResponse.json({ error: "The selected site does not belong to this customer." }, { status: 400 })
@@ -225,7 +231,8 @@ export async function POST(req: NextRequest) {
                 title,
                 reference: invoice.Reference || null,
                 client_id: resolvedClientId,
-                store_id: body.storeId || null,
+                store_id: storeIds[0] || null,
+                visible_to_client: body.visibleToClient === true,
                 qty: 1,
                 status: "in_progress",
                 xero_invoice_id: invoice.InvoiceID,
@@ -240,6 +247,13 @@ export async function POST(req: NextRequest) {
 
         if (jobError || !job) throw jobError || new Error("Could not create the RPM job.")
         createdJobId = job.id as string
+
+        if (storeIds.length > 1) {
+            const { error: sitesError } = await admin.from("costing_job_sites").insert(
+                storeIds.map((storeId, sort) => ({ job_id: createdJobId, store_id: storeId, sort }))
+            )
+            if (sitesError) throw sitesError
+        }
 
         const rows = (invoice.LineItems || []).map((line, index) => ({ job_id: createdJobId, ...itemFromLine(line, index) }))
         if (rows.length) {
