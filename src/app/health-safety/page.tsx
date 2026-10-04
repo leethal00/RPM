@@ -14,14 +14,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
+import { hasWorkDate, isWorkDateTbc } from "@/lib/hs-work-date"
 import { IncidentRegister } from "@/components/health-safety/incident-register"
 
 type Kind = "toolbox" | "swms"
 type WorkStep = { task: string; hazard: string; risk: string; control: string; responsible: string }
 type Body = { scope: string; hazards: string; controls: string; emergency: string; actions: string; notes: string;
   run_by: string; previous_actions: string; safety_topics: string; operations: string;
-  principal: string; client: string; responsible: string; duration: string; notification: string; permits: string; ppe: string; plant: string; signage: string; approvals: string; checks: string; qualifications: string; steps: WorkStep[] }
-type TextField = Exclude<keyof Body, "steps">
+  principal: string; client: string; responsible: string; duration: string; notification: string; permits: string; ppe: string; plant: string; signage: string; approvals: string; checks: string; qualifications: string; steps: WorkStep[]; date_tbc?: boolean }
+type TextField = Exclude<keyof Body, "steps" | "date_tbc">
 type Template = { id: string; kind: Kind; title: string; body: Body; version: number; active: boolean; updated_at: string }
 type RecordRow = { id: string; kind: Kind; title: string; status: "draft" | "completed"; job_id: string | null; job_reference: string | null; site: string | null; work_date: string; body: Body; template_id: string | null; template_version: number | null; revision_of: string | null; revision: number; completed_at: string | null; created_at: string }
 type Attendee = { id: string; record_id: string; name: string; user_id: string | null; signed_at: string | null }
@@ -33,7 +34,7 @@ type Job = { id: string; title: string; job_number: string | null; store_id: str
 type UserRow = { id: string; name: string | null; email: string | null; role: string }
 const blank: Body = { scope: "", hazards: "", controls: "", emergency: "", actions: "", notes: "", run_by: "", previous_actions: "", safety_topics: "", operations: "", principal: "", client: "", responsible: "", duration: "", notification: "", permits: "", ppe: "", plant: "", signage: "", approvals: "", checks: "", qualifications: "", steps: [] }
 function reusableBody(kind: Kind, source: Body): Body {
-  const body = { ...blank, ...source, steps: source.steps || [] }
+  const body = { ...blank, ...source, steps: source.steps || [], date_tbc: false }
   if (kind === "swms") return { ...body, principal: "", client: "", responsible: "", duration: "", notification: "", permits: "", approvals: "", emergency: "", actions: "", notes: "" }
   return { ...body, run_by: "", previous_actions: "", actions: "", notes: "" }
 }
@@ -160,7 +161,7 @@ export default function HealthSafetyPage() {
     newRecord(template.kind); setTitle(template.title); setBody(reusableBody(template.kind, template.body)); setTemplateId(template.id)
   }
   function editTemplate(template: Template) {
-    newRecord(template.kind); setTitle(template.title); setBody({ ...blank, ...template.body }); setTemplateEditId(template.id)
+    newRecord(template.kind); setTitle(template.title); setBody({ ...blank, ...template.body, date_tbc: false }); setTemplateEditId(template.id)
   }
   function field(key: TextField, label: string, hint?: string) {
     return <div className="space-y-1.5"><Label htmlFor={`hs-${key}`}>{label}</Label><Textarea id={`hs-${key}`} value={body[key]} onChange={e => setBody({ ...body, [key]: e.target.value })} placeholder={hint} disabled={!canManage || current?.status === "completed"} className="min-h-24" /></div>
@@ -171,13 +172,16 @@ export default function HealthSafetyPage() {
   async function saveRecord(complete = false) {
     if (!canManage || !title.trim()) return toast.error("Add a title")
     if (complete && kind === "swms" && !site.trim()) return toast.error("Enter the work site before completing the SWMS/TA")
+    const dateTbc = kind === "swms" && body.date_tbc === true
+    if (!hasWorkDate(date, dateTbc)) return toast.error("Enter a valid date or select TBC for the SWMS/TA")
     setBusy(true)
     try {
       const template = templates.find(t => t.id === templateId)
       const job = jobs.find(j => j.id === jobId)
-      const values = { kind, title: title.trim(), site: site.trim() || null, work_date: date, job_id: jobId || null,
+      const values = { kind, title: title.trim(), site: site.trim() || null, work_date: dateTbc ? (hasWorkDate(date, false) ? date : today()) : date, job_id: jobId || null,
         job_reference: job ? `${job.job_number || ""} ${job.title}`.trim() : null,
-        body, template_id: templateId || null, template_version: template?.version || null }
+        // work_date remains an internal sorting date when the job date is TBC.
+        body: { ...body, date_tbc: dateTbc }, template_id: templateId || null, template_version: template?.version || null }
       let id = selected
       if (current?.status === "completed") throw new Error("Create a revision to correct a completed record")
       if (id) {
@@ -288,17 +292,17 @@ export default function HealthSafetyPage() {
       <TabsContent value="overview" className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-3">{[["Completed records", visibleRecords.filter(r => r.status === "completed").length], ["Open drafts", visibleRecords.filter(r => r.status === "draft").length], ["Training due in 30 days", due.length]].map(([label, count]) => <div key={label} className="rounded-lg border p-4"><div className="text-sm text-muted-foreground">{label}</div><div className="mt-1 text-3xl font-semibold">{count}</div></div>)}</div>
         <div className="flex flex-wrap gap-2">{canManage && <><Button onClick={() => newRecord("toolbox")}>New toolbox meeting</Button><Button onClick={() => newRecord("swms")} variant="outline">New SWMS/TA</Button></>}<Button onClick={() => setTab("incidents")} variant="outline">Report an incident or hazard</Button></div>
-        <div><h2 className="mb-2 font-semibold">Recent activity</h2>{visibleRecords.slice(0, 8).map(r => <button key={r.id} onClick={() => openRecord(r)} className="flex w-full justify-between gap-3 border-b py-2 text-left text-sm hover:bg-muted/40"><span>{r.title} <span className="text-muted-foreground">· {r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}</span></span><span>{niceDate(r.work_date)} · {r.status}</span></button>)}{visibleRecords.length === 0 && <p className="text-sm text-muted-foreground">No H&S records yet.</p>}</div>
+        <div><h2 className="mb-2 font-semibold">Recent activity</h2>{visibleRecords.slice(0, 8).map(r => <button key={r.id} onClick={() => openRecord(r)} className="flex w-full justify-between gap-3 border-b py-2 text-left text-sm hover:bg-muted/40"><span>{r.title} <span className="text-muted-foreground">· {r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}</span></span><span>{isWorkDateTbc(r) ? "TBC" : niceDate(r.work_date)} · {r.status}</span></button>)}{visibleRecords.length === 0 && <p className="text-sm text-muted-foreground">No H&S records yet.</p>}</div>
       </TabsContent>
       <TabsContent value="incidents"><IncidentRegister jobFromUrl={jobFromUrl} jobs={jobs} userId={userId} canManage={canManage} /></TabsContent>
       <TabsContent value="records" className="space-y-3">
         <div className="flex flex-wrap gap-2"><Input aria-label="Search H&S records" placeholder="Search title, site, job or scope" value={search} onChange={e => setSearch(e.target.value)} className="max-w-xs"/><select aria-label="Record type" className="rounded-md border bg-background px-2 text-sm" value={filterKind} onChange={e => setFilterKind(e.target.value)}><option value="all">All types</option><option value="toolbox">Toolbox</option><option value="swms">SWMS/TA</option></select><select aria-label="Record status" className="rounded-md border bg-background px-2 text-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="completed">Completed</option></select>{canManage && <Button onClick={() => newRecord("swms")}>New record</Button>}</div>
-        <div className="rounded-lg border">{filtered.map(r => <button key={r.id} className="flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-3 text-left text-sm last:border-0 hover:bg-muted/40" onClick={() => openRecord(r)}><span><strong>{r.title}</strong><span className="ml-2 text-muted-foreground">{r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}{r.job_reference ? ` · ${r.job_reference}` : ""}</span></span><span>{niceDate(r.work_date)} · {r.status} · rev {r.revision}</span></button>)}{filtered.length === 0 && <p className="p-5 text-sm text-muted-foreground">No matching records.</p>}</div>
+        <div className="rounded-lg border">{filtered.map(r => <button key={r.id} className="flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-3 text-left text-sm last:border-0 hover:bg-muted/40" onClick={() => openRecord(r)}><span><strong>{r.title}</strong><span className="ml-2 text-muted-foreground">{r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}{r.job_reference ? ` · ${r.job_reference}` : ""}</span></span><span>{isWorkDateTbc(r) ? "TBC" : niceDate(r.work_date)} · {r.status} · rev {r.revision}</span></button>)}{filtered.length === 0 && <p className="p-5 text-sm text-muted-foreground">No matching records.</p>}</div>
       </TabsContent>
       <TabsContent value="form" className="max-w-4xl space-y-5">
         <div className="flex flex-wrap items-center gap-2"><h2 className="mr-auto text-xl font-semibold">{current?.status === "completed" ? "Completed record" : selected ? "Edit draft" : "New record"}</h2>{current?.kind === "swms" && <Button variant="outline" asChild><Link href={"/health-safety/print?id=" + current.id} target="_blank" rel="noopener noreferrer">Print SWMS/TA</Link></Button>}{current?.status === "completed" && canManage && <><Button variant="outline" onClick={makeRevision}>Create correction revision</Button>{current.kind === "swms" && <Button variant="outline" onClick={() => void saveTemplate(current)}>Save as template</Button>}</>}</div>
         {current?.status === "completed" && <p className="rounded-md bg-muted p-3 text-sm">Locked on {new Date(current.completed_at!).toLocaleString("en-NZ")}. Corrections create a linked revision; this version stays in history.</p>}
-        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div><div className="space-y-1"><Label htmlFor="hs-date">Date</Label><Input id="hs-date" type="date" value={date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage}/></div></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div><div className="space-y-1"><Label htmlFor="hs-date">Date</Label><div className="flex items-center gap-3"><Input id="hs-date" type="date" value={kind === "swms" && body.date_tbc ? "" : date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage || (kind === "swms" && body.date_tbc === true)}/>{kind === "swms" && <Label htmlFor="hs-date-tbc" className="flex shrink-0 items-center gap-2"><input id="hs-date-tbc" type="checkbox" checked={body.date_tbc === true} onChange={e => setBody({ ...body, date_tbc: e.target.checked })} disabled={current?.status === "completed" || !canManage}/>TBC</Label>}</div></div></div>
         <div className="space-y-1"><Label htmlFor="hs-title">Title</Label><Input id="hs-title" value={title} onChange={e => setTitle(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="e.g. Pylon sign installation" /></div>
         <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label htmlFor="hs-job">RPM job (if applicable)</Label><select id="hs-job" className="h-9 w-full rounded-md border bg-background px-2" value={jobId} onChange={e => setJobId(e.target.value)} disabled={current?.status === "completed" || !canManage}><option value="">No job linked</option>{jobs.map(j => <option key={j.id} value={j.id}>{j.job_number ? `${j.job_number} · ` : ""}{j.title}</option>)}</select></div><div className="space-y-1"><Label htmlFor="hs-site">Work site {kind === "swms" && "(required to complete)"}</Label><Input id="hs-site" value={site} onChange={e => setSite(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="Site address or location" /></div></div>
         {kind === "toolbox" ? <>
@@ -308,15 +312,18 @@ export default function HealthSafetyPage() {
           {field("scope", "Meeting summary")}{field("actions", "Actions, owner and due date")}
         </> : <>
           <p className="rounded-md bg-muted p-3 text-sm">Prepare this for the specific site before work starts. Brief the team; stop and revise the method if the controls no longer fit the work.</p>
+          <h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 1 · Company and job details</h3>
           {field("scope", "Job description and work scope")}
           <div className="grid gap-3 sm:grid-cols-2">{field("principal", "Principal contractor")}{field("client", "Client / site contact")}{field("responsible", "Person responsible for this SWMS")}{field("duration", "Install date and expected duration")}</div>
+          <h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Site requirements and preparation</h3>
           {field("notification", "Notifiable work / WorkSafe notification, if applicable")}
           <div className="grid gap-3 sm:grid-cols-2">{field("permits", "Work permits and approvals")}{field("ppe", "PPE required")}{field("plant", "Plant and equipment")}{field("signage", "Barriers and H&S signage")}{field("approvals", "Engineering certificates / approvals")}{field("checks", "Equipment and maintenance checks")}</div>
-          {field("qualifications", "Qualifications, training and duties required")}
           {field("hazards", "Overall site hazards and risks")}{field("controls", "Overall controls")}
-          <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="font-semibold">Safe work steps</h3>{canManage && current?.status !== "completed" && <Button size="sm" variant="outline" onClick={() => setBody({ ...body, steps: [...(body.steps || []), { task: "", hazard: "", risk: "", control: "", responsible: "" }] })}>Add step</Button>}</div>
+          <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 2 · Safe work steps</h3>{canManage && current?.status !== "completed" && <Button size="sm" variant="outline" onClick={() => setBody({ ...body, steps: [...(body.steps || []), { task: "", hazard: "", risk: "", control: "", responsible: "" }] })}>Add step</Button>}</div>
             {(body.steps || []).map((step, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-2"><div className="sm:col-span-2 font-medium">Step {index + 1}</div>{([['task','Procedure / job step'],['hazard','Potential hazards'],['risk','Risk level 1–5'],['control','Hazard controls'],['responsible','Person responsible']] as [keyof WorkStep, string][]).map(([key, label]) => <div key={key} className="space-y-1"><Label>{label}</Label><Input value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} /></div>)}{canManage && current?.status !== "completed" && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setBody({ ...body, steps: body.steps.filter((_, i) => i !== index) })}>Remove step</Button>}</div>)}
           </div>
+          <h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 3 · Qualifications and team sign-off</h3>
+          {field("qualifications", "Qualifications, training and duties required")}
           {field("emergency", "Emergency arrangements / contacts")}{field("actions", "Site checks and follow-up actions")}
         </>}
         {field("notes", "Other notes")}
