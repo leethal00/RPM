@@ -11,8 +11,8 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
         { id: "coates", name: "Coates Signco" }, { id: "mcd", name: "McDonald's" },
     ] : [
         { id: "coates-site", name: "Warehouse", client_id: "coates", address: "Auckland" },
-        { id: "mcd-site", name: "McDonalds Invercargill", client_id: "mcd", address: "Dee Street" },
-        { id: "mcd-site-2", name: "McDonalds Invercargill", client_id: "mcd", address: "South City" },
+        { id: "mcd-site", name: "Invercargill", client_id: "mcd", address: "Dee Street" },
+        { id: "mcd-site-2", name: "Invercargill", client_id: "mcd", address: "South City" },
     ] }) }) }),
 }) }))
 vi.mock("@/lib/customer-filter", () => ({ useCustomerFilter: () => ({ clientId: null }) }))
@@ -90,6 +90,24 @@ describe("Xero import site selection", () => {
         fireEvent.click(screen.getByRole("button", { name: "Find invoice" }))
         expect(await screen.findByRole("checkbox", { name: "Show all sites" })).not.toBeChecked()
         expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("none")
+    })
+
+    it.each(["mcdonalds inver", "McDonald's Inver", "McDonald’s Inver", "inver mcdonalds", "mcdonalds — inver", "mcdonalds dee"])("finds sites by owner and partial site/address words: %s", async (search) => {
+        await openInvoice()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.change(screen.getByRole("textbox", { name: "Search sites" }), { target: { value: search } })
+        const site = screen.getByRole("combobox", { name: "Site" })
+        expect(within(site).getByRole("option", { name: "McDonald's — Invercargill · Dee Street" })).toBeInTheDocument()
+        expect(within(site).queryByRole("option", { name: /Warehouse/ })).not.toBeInTheDocument()
+        expect(screen.queryByText("No sites match your search.")).not.toBeInTheDocument()
+    })
+
+    it("requires all search words to match the same site", async () => {
+        await openInvoice()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.change(screen.getByRole("textbox", { name: "Search sites" }), { target: { value: "mcdonalds auckland" } })
+        expect(within(screen.getByRole("combobox", { name: "Site" })).getAllByRole("option")).toHaveLength(1)
+        expect(screen.getByText("No sites match your search.")).toBeInTheDocument()
     })
 
     it("allows a site override while keeping automatic Xero customer resolution", async () => {

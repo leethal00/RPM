@@ -89,6 +89,10 @@ function formatDate(value?: string | null) {
 const nz = (value: number) => value.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const isoDate = (date: Date) => date.toISOString().slice(0, 10)
 
+function siteSearchWords(value: string) {
+    return value.toLocaleLowerCase().replace(/['’]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+}
+
 function JobColumnHeader({
     column,
     width,
@@ -346,9 +350,12 @@ export default function ActiveJobsPage() {
     })
     const siteLabelCounts = new Map<string, number>()
     for (const { label } of siteLabels) siteLabelCounts.set(label, (siteLabelCounts.get(label) || 0) + 1)
-    const visibleSiteLabels = siteLabels.filter(({ store, label, owner }) =>
-        store.id === selectedStore || [label, store.name, store.address, owner].join(" ").toLocaleLowerCase().includes(siteSearch.trim().toLocaleLowerCase())
-    )
+    const searchWords = siteSearchWords(siteSearch)
+    const visibleSiteLabels = siteLabels.filter(({ store, label, owner }) => {
+        if (store.id === selectedStore) return true
+        const words = siteSearchWords([label, store.name, store.address, owner].join(" "))
+        return searchWords.every((term) => words.some((word) => word.includes(term)))
+    })
     const totalColumnWeight = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0) || 1
     const reportFilters = [
         clientId ? `Customer: ${filterClients.find((client) => client.id === clientId)?.name || "Selected customer"}` : null,
