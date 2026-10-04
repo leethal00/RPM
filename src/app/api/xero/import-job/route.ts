@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { isStaffAdmin } from "@/lib/permissions"
+import { XeroRateLimitError, xeroRetryAfter } from "@/lib/xero-rate-limit"
 
 export const dynamic = "force-dynamic"
 
@@ -30,6 +31,7 @@ type XeroInvoice = {
 
 async function xeroJson(url: string, accessToken: string, tenantId: string) {
     const response = await fetch(url, { headers: xeroHeaders(accessToken, tenantId), cache: "no-store" })
+    if (response.status === 429) throw new XeroRateLimitError(xeroRetryAfter(response.headers.get("Retry-After")))
     const text = await response.text()
     const body = text ? JSON.parse(text) : {}
     if (!response.ok) throw new Error(body?.Message || body?.Detail || `Xero API error ${response.status}`)
@@ -119,9 +121,16 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ ok: true, invoice: preview(invoice) })
     } catch (error) {
+        if (error instanceof XeroRateLimitError) return rateLimitResponse(error)
         console.error("preview Xero invoice import", error)
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the Xero invoice." }, { status: 500 })
     }
+}
+
+function rateLimitResponse(error: XeroRateLimitError) {
+    return NextResponse.json({ error: error.message, retryAfter: error.retryAfter }, {
+        status: 429, headers: { "Retry-After": String(error.retryAfter) },
+    })
 }
 
 function itemFromLine(line: XeroLineItem, index: number) {
@@ -269,6 +278,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, jobId: createdJobId, invoiceNumber, invoiceStatus: invoice.Status })
     } catch (error) {
         if (createdJobId) await admin.from("costing_jobs").delete().eq("id", createdJobId)
+        if (error instanceof XeroRateLimitError) return rateLimitResponse(error)
         console.error("import Xero invoice as RPM job", error)
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not import the Xero invoice." }, { status: 500 })
     }

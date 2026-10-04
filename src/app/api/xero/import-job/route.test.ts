@@ -109,6 +109,28 @@ describe("Xero invoice import", () => {
         expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("/Invoices/xero-invoice-1?unitdp=4")
     })
 
+    it.each(["GET", "POST"])("returns Xero's wait time for a throttled %s without creating a job", async (method) => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Too many requests", { status: 429, headers: { "Retry-After": "120" } })))
+        const response = method === "GET" ? await GET(new NextRequest(url)) : await POST(new NextRequest(url, {
+            method: "POST", body: JSON.stringify({ invoiceNumber, clientId: "client-1", storeIds: ["site-1"] }),
+        }))
+        expect(response.status).toBe(429)
+        expect(response.headers.get("Retry-After")).toBe("120")
+        expect(await response.json()).toMatchObject({ retryAfter: 120, error: expect.stringContaining("Xero is temporarily limiting requests") })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(state.job).toBeNull()
+        expect(state.createdCustomer).toBeNull()
+        expect(state.lines).toEqual([])
+    })
+
+    it("handles an empty throttled invoice detail response with a fallback wait", async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ Invoices: [{ InvoiceID: "xero-invoice-1", InvoiceNumber: invoiceNumber }] })))
+            .mockResolvedValueOnce(new Response(null, { status: 429 }))
+        const response = await GET(new NextRequest(url))
+        expect(response.status).toBe(429)
+        expect(response.headers.get("Retry-After")).toBe("60")
+    })
+
     it("imports approved lines for BOMs and never writes to Xero", async () => {
         const request = new NextRequest(url, {
             method: "POST",

@@ -31,7 +31,7 @@ vi.mock("@/lib/hooks/use-supabase-query", () => ({
 
 import ActiveJobsPage from "./page"
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe("Xero import site selection", () => {
     async function openInvoice(contactName = "Coates Signco") {
@@ -107,6 +107,43 @@ describe("Xero import site selection", () => {
         fireEvent.click(screen.getByRole("button", { name: "Import as Job" }))
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
         expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ clientId: "coates", storeIds: ["mcd-site", "mcd-site-2"], visibleToClient: true })
+    })
+
+    it("keeps selected sites and client visibility on throttling and permits retry after the countdown", async () => {
+        const fetchMock = await openInvoice()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.change(screen.getByRole("combobox", { name: "Site" }), { target: { value: "mcd-site" } })
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show to client" }))
+        fetchMock.mockReset().mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ "Retry-After": "2" }), json: async () => ({ error: "Xero is temporarily limiting requests." }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ jobId: "created-job" }) })
+        vi.useFakeTimers()
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import as Job" })))
+        expect(screen.getByText(/Retry available in 0m 2s/)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Import as Job" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Find invoice" })).toBeDisabled()
+        fireEvent.keyDown(screen.getByPlaceholderText("Invoice number, e.g. INV-7569"), { key: "Enter" })
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("mcd-site")
+        expect(screen.getByRole("checkbox", { name: "Show to client" })).toBeChecked()
+        await act(async () => { vi.advanceTimersByTime(2000) })
+        expect(screen.getByRole("button", { name: "Import as Job" })).toBeEnabled()
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import as Job" })))
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ storeIds: ["mcd-site"], visibleToClient: true })
+    })
+
+    it("blocks lookup retries including Enter and reopening during Xero's wait", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "90" }), json: async () => ({ error: "Xero is temporarily limiting requests." }) }))
+        render(<ActiveJobsPage />)
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import from Xero" })))
+        fireEvent.change(screen.getByPlaceholderText("Invoice number, e.g. INV-7569"), { target: { value: "INV-7611" } })
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Find invoice" })))
+        expect(screen.getByText(/Retry available in 1m 30s/)).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import from Xero" })))
+        fireEvent.keyDown(screen.getByPlaceholderText("Invoice number, e.g. INV-7569"), { key: "Enter" })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole("button", { name: "Find invoice" })).toBeDisabled()
     })
 
     it("removes a selected site and clears foreign sites when the override is switched off", async () => {

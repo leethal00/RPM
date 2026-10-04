@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { xeroRetryAfter } from "@/lib/xero-rate-limit"
 import { createPortal, flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -228,6 +229,21 @@ export default function ActiveJobsPage() {
     const [importError, setImportError] = useState<string | null>(null)
     const [lookingUp, setLookingUp] = useState(false)
     const [importing, setImporting] = useState(false)
+    const xeroRequestBusy = useRef(false)
+    const retryUntil = useRef(0)
+    const [retrySeconds, setRetrySeconds] = useState(0)
+    useEffect(() => {
+        if (!retrySeconds) return
+        const timer = setInterval(() => setRetrySeconds(Math.max(0, Math.ceil((retryUntil.current - Date.now()) / 1000))), 1000)
+        return () => clearInterval(timer)
+    }, [retrySeconds])
+
+    function pauseXeroRequests(response: Response) {
+        if (response.status !== 429) return
+        const seconds = xeroRetryAfter(response.headers.get("Retry-After"))
+        retryUntil.current = Date.now() + seconds * 1000
+        setRetrySeconds(seconds)
+    }
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id" | "address">[]>([])
     const [selectedClient, setSelectedClient] = useState("auto")
@@ -460,7 +476,8 @@ export default function ActiveJobsPage() {
 
     async function lookupInvoice() {
         const invoiceNumber = invoiceSearch.trim()
-        if (!invoiceNumber) return
+        if (!invoiceNumber || xeroRequestBusy.current || Date.now() < retryUntil.current) return
+        xeroRequestBusy.current = true
         setLookingUp(true)
         setImportError(null)
         setPreview(null)
@@ -468,6 +485,7 @@ export default function ActiveJobsPage() {
             const response = await fetch(`/api/xero/import-job?invoice=${encodeURIComponent(invoiceNumber)}`, { cache: "no-store" })
             const body = await response.json()
             if (!response.ok) {
+                pauseXeroRequests(response)
                 if (body?.existingJobId) setImportError(`${body.error} Open the existing RPM job instead.`)
                 else setImportError(body?.error || "Could not find that Xero invoice.")
                 return
@@ -488,11 +506,13 @@ export default function ActiveJobsPage() {
             setImportError(error instanceof Error ? error.message : "Could not find that Xero invoice.")
         } finally {
             setLookingUp(false)
+            xeroRequestBusy.current = false
         }
     }
 
     async function importInvoice() {
-        if (!preview) return
+        if (!preview || xeroRequestBusy.current || Date.now() < retryUntil.current) return
+        xeroRequestBusy.current = true
         setImporting(true)
         setImportError(null)
         try {
@@ -512,7 +532,10 @@ export default function ActiveJobsPage() {
                 }),
             })
             const body = await response.json()
-            if (!response.ok) throw new Error(body?.error || "Could not import the Xero invoice.")
+            if (!response.ok) {
+                pauseXeroRequests(response)
+                throw new Error(body?.error || "Could not import the Xero invoice.")
+            }
             toast.success(`${preview.invoiceNumber} imported as an RPM job`)
             setImportOpen(false)
             mutate()
@@ -521,6 +544,7 @@ export default function ActiveJobsPage() {
             setImportError(error instanceof Error ? error.message : "Could not import the Xero invoice.")
         } finally {
             setImporting(false)
+            xeroRequestBusy.current = false
         }
     }
 
@@ -650,10 +674,11 @@ export default function ActiveJobsPage() {
                         <div className="min-w-0 space-y-4">
                             <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                                 <Input value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void lookupInvoice() }} placeholder="Invoice number, e.g. INV-7569" />
-                                <Button onClick={lookupInvoice} disabled={lookingUp || !invoiceSearch.trim()}>{lookingUp ? "Looking…" : "Find invoice"}</Button>
+                                <Button onClick={lookupInvoice} disabled={lookingUp || importing || retrySeconds > 0 || !invoiceSearch.trim()}>{lookingUp ? "Looking…" : "Find invoice"}</Button>
                             </div>
 
                             {importError && <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{importError}</div>}
+                            {retrySeconds > 0 && <p role="status" className="text-sm text-muted-foreground">Retry available in {Math.floor(retrySeconds / 60)}m {retrySeconds % 60}s. Your job details are kept here.</p>}
 
                             {preview && <>
                                 <div className="min-w-0 rounded-lg border border-border/60 p-4 space-y-2">
@@ -756,7 +781,7 @@ export default function ActiveJobsPage() {
 
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
-                            <Button onClick={importInvoice} disabled={!preview || importing}>{importing ? "Importing…" : "Import as Job"}</Button>
+                            <Button onClick={importInvoice} disabled={!preview || importing || lookingUp || retrySeconds > 0}>{importing ? "Importing…" : "Import as Job"}</Button>
                         </DialogFooter>
                         </>}
                     </DialogContent>
