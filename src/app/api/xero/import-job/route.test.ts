@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
     customers: [] as Array<{ id: string; name: string }>,
     createdCustomer: null as Record<string, unknown> | null,
     detailLines: true,
+    site: { id: "site-1", client_id: "client-1" } as { id: string; client_id: string } | null,
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -42,7 +43,7 @@ vi.mock("@/lib/xero", () => ({
                 },
             }
             if (table === "stores") return {
-                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "site-1", client_id: "client-1" }, error: null }) }) }),
+                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.site, error: null }) }) }),
             }
             if (table === "users") return {
                 select: () => ({ eq: () => ({ single: async () => ({ data: { role: "rodier_admin" } }) }) }),
@@ -66,6 +67,7 @@ describe("Xero invoice import", () => {
         state.customers = []
         state.createdCustomer = null
         state.detailLines = true
+        state.site = { id: "site-1", client_id: "client-1" }
         vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
             ok: true,
             text: async () => JSON.stringify({ Invoices: [{
@@ -125,6 +127,45 @@ describe("Xero invoice import", () => {
         }))
         expect(response.status).toBe(200)
         expect(state.job?.completion_date).toBe("2026-10-02")
+    })
+
+    it.each(["DRAFT", "AUTHORISED", "PAID"])("preserves a cross-client site and job customer for %s invoices", async (status) => {
+        state.status = status
+        state.site = { id: "mcd-site", client_id: "mcd-client" }
+        const response = await POST(new NextRequest(url, {
+            method: "POST",
+            body: JSON.stringify({ invoiceNumber, clientId: "coates-client", storeId: "mcd-site", showAllSites: true }),
+        }))
+        expect(response.status).toBe(200)
+        expect(state.job).toMatchObject({ client_id: "coates-client", store_id: "mcd-site" })
+    })
+
+    it("keeps the client restriction unless the override is explicitly enabled", async () => {
+        const response = await POST(new NextRequest(url, {
+            method: "POST",
+            body: JSON.stringify({ invoiceNumber, clientId: "other-client", storeId: "site-1" }),
+        }))
+        expect(response.status).toBe(400)
+        expect(state.job).toBeNull()
+    })
+
+    it("resolves the Xero customer independently of an overridden site", async () => {
+        state.customers = [{ id: "existing-client-1", name: "Brave Design" }]
+        const response = await POST(new NextRequest(url, {
+            method: "POST", body: JSON.stringify({ invoiceNumber, storeId: "site-1", showAllSites: true }),
+        }))
+        expect(response.status).toBe(200)
+        expect(state.job).toMatchObject({ client_id: "existing-client-1", store_id: "site-1" })
+    })
+
+    it("rejects a missing site even with the override", async () => {
+        state.site = null
+        const response = await POST(new NextRequest(url, {
+            method: "POST", body: JSON.stringify({ invoiceNumber, clientId: "client-1", storeId: "deleted-site", showAllSites: true }),
+        }))
+        expect(response.status).toBe(400)
+        expect(state.job).toBeNull()
+        expect(state.createdCustomer).toBeNull()
     })
 
     it("retains the existing draft import path", async () => {
