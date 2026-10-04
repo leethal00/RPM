@@ -226,6 +226,8 @@ export default function ActiveJobsPage() {
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id" | "address">[]>([])
     const [selectedClient, setSelectedClient] = useState("auto")
     const [selectedStore, setSelectedStore] = useState("none")
+    const [showAllSites, setShowAllSites] = useState(false)
+    const [siteSearch, setSiteSearch] = useState("")
     const [importTitle, setImportTitle] = useState("")
     const [completionDate, setCompletionDate] = useState("")
     const [reportDate, setReportDate] = useState<Date | null>(null)
@@ -337,9 +339,16 @@ export default function ActiveJobsPage() {
     const jobs = sortedJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const clientStores = selectedClient === "none" ? [] : stores.filter((store) => store.client_id === selectedClient)
     const selectedClientName = clients.find((client) => client.id === selectedClient)?.name || ""
-    const siteLabels = clientStores.map((store) => ({ store, label: siteDisplayName(store.name, selectedClientName) }))
+    const siteLabels = (showAllSites ? stores : clientStores).map((store) => {
+        const owner = clients.find((client) => client.id === store.client_id)?.name || "Unassigned client"
+        const name = siteDisplayName(store.name, owner)
+        return { store, label: showAllSites ? `${owner} — ${name}` : name, owner }
+    })
     const siteLabelCounts = new Map<string, number>()
     for (const { label } of siteLabels) siteLabelCounts.set(label, (siteLabelCounts.get(label) || 0) + 1)
+    const visibleSiteLabels = siteLabels.filter(({ store, label, owner }) =>
+        store.id === selectedStore || [label, store.name, store.address, owner].join(" ").toLocaleLowerCase().includes(siteSearch.trim().toLocaleLowerCase())
+    )
     const totalColumnWeight = order.reduce((sum, key) => sum + (widths[key] || JOB_COLUMN_BY_KEY[key as SortKey].width), 0) || 1
     const reportFilters = [
         clientId ? `Customer: ${filterClients.find((client) => client.id === clientId)?.name || "Selected customer"}` : null,
@@ -405,6 +414,8 @@ export default function ActiveJobsPage() {
         setCompletionDate("")
         setSelectedClient("auto")
         setSelectedStore("none")
+        setShowAllSites(false)
+        setSiteSearch("")
         if (!clients.length || !stores.length) {
             const [{ data: clientRows }, { data: storeRows }] = await Promise.all([
                 supabase.from("clients").select("id,name").order("name"),
@@ -424,6 +435,7 @@ export default function ActiveJobsPage() {
         }
         setStores((current) => [...current.filter((store) => store.client_id !== selectedClient), ...((data || []) as Pick<Store, "id" | "name" | "client_id" | "address">[])])
         if (siteId) setSelectedStore(siteId)
+        setSiteSearch("")
         setCreatingSite(false)
     }
 
@@ -448,6 +460,8 @@ export default function ActiveJobsPage() {
             const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
             setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
             setSelectedStore("none")
+            setShowAllSites(false)
+            setSiteSearch("")
         } catch (error) {
             setImportError(error instanceof Error ? error.message : "Could not find that Xero invoice.")
         } finally {
@@ -468,6 +482,7 @@ export default function ActiveJobsPage() {
                     invoiceId: preview.invoiceId,
                     clientId: selectedClient === "auto" ? null : selectedClient,
                     storeId: selectedStore === "none" ? null : selectedStore,
+                    showAllSites,
                     title: importTitle.trim() || preview.reference || preview.invoiceNumber,
                     completionDate: completionDate || null,
                 }),
@@ -643,7 +658,7 @@ export default function ActiveJobsPage() {
                                     </div>
                                     <div className="grid min-w-0 gap-2">
                                         <Label>Customer</Label>
-                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none") }} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm">
+                                        <select value={selectedClient} onChange={(event) => { setSelectedClient(event.target.value); setSelectedStore("none"); setSiteSearch("") }} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm">
                                             <option value="auto">{preview.contactName ? `Use Xero customer: ${preview.contactName}` : "Use Xero customer"}</option>
                                             {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                                         </select>
@@ -653,10 +668,22 @@ export default function ActiveJobsPage() {
                                             <Label htmlFor="import-site">Site</Label>
                                             <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={selectedClient === "auto"} onClick={() => setCreatingSite(true)}>+ Create new site</Button>
                                         </div>
-                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto"} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
+                                        <label className="flex items-center gap-2 text-sm">
+                                            <input type="checkbox" checked={showAllSites} onChange={(event) => {
+                                                const checked = event.target.checked
+                                                setShowAllSites(checked)
+                                                setSiteSearch("")
+                                                if (!checked && !clientStores.some((store) => store.id === selectedStore)) setSelectedStore("none")
+                                            }} />
+                                            Show all sites
+                                        </label>
+                                        {showAllSites && <p className="text-xs text-muted-foreground">Choose a site owned by any client. The job customer stays the same.</p>}
+                                        <Input aria-label="Search sites" placeholder="Search sites…" value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} disabled={selectedClient === "auto" && !showAllSites} />
+                                        <select id="import-site" value={selectedStore} onChange={(event) => setSelectedStore(event.target.value)} disabled={selectedClient === "auto" && !showAllSites} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
                                             <option value="none">Manufacture only / No site</option>
-                                            {siteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
+                                            {visibleSiteLabels.map(({ store, label }) => <option key={store.id} value={store.id}>{(siteLabelCounts.get(label) || 0) > 1 ? `${label} · ${store.address || store.name}` : label}</option>)}
                                         </select>
+                                        {visibleSiteLabels.length === 0 && siteSearch.trim() && <p className="text-xs text-muted-foreground">No sites match your search.</p>}
                                     </div>
                                     <div className="grid min-w-0 gap-2">
                                         <Label>Complete by</Label>

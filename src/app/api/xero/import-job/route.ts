@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
         invoiceNumber?: string
         clientId?: string | null
         storeId?: string | null
+        showAllSites?: boolean
         title?: string | null
         completionDate?: string | null
         invoiceId?: string | null
@@ -190,10 +191,11 @@ export async function POST(req: NextRequest) {
         if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
         if (body.storeId) {
-            if (!body.clientId) return NextResponse.json({ error: "Select a customer for this site." }, { status: 400 })
+            if (!body.clientId && body.showAllSites !== true) return NextResponse.json({ error: "Select a customer for this site." }, { status: 400 })
             const { data: site, error: siteError } = await admin.from("stores").select("id,client_id").eq("id", body.storeId).maybeSingle()
             if (siteError) throw siteError
-            if (!site || site.client_id !== body.clientId) return NextResponse.json({ error: "The selected site does not belong to this customer." }, { status: 400 })
+            if (!site) return NextResponse.json({ error: "The selected site no longer exists. Select another site." }, { status: 400 })
+            if (body.showAllSites !== true && site.client_id !== body.clientId) return NextResponse.json({ error: "The selected site does not belong to this customer." }, { status: 400 })
         }
 
         let resolvedClientId = body.clientId || null
