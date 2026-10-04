@@ -92,6 +92,36 @@ describe("Xero import site selection", () => {
         expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("none")
     })
 
+    it("adds multiple sites across searches and sends them with the chosen client visibility", async () => {
+        const fetchMock = await openInvoice()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.click(screen.getByRole("checkbox", { name: "Multiple sites" }))
+        const site = screen.getByRole("combobox", { name: "Site" })
+        fireEvent.change(site, { target: { value: "mcd-site" } })
+        fireEvent.change(screen.getByRole("textbox", { name: "Search sites" }), { target: { value: "south city" } })
+        fireEvent.change(site, { target: { value: "mcd-site-2" } })
+        expect(within(screen.getByRole("list", { name: "Selected sites" })).getAllByRole("listitem")).toHaveLength(2)
+        expect(screen.getByText("Primary site")).toBeInTheDocument()
+        expect(screen.getByRole("checkbox", { name: "Show to client" })).not.toBeChecked()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show to client" }))
+        fireEvent.click(screen.getByRole("button", { name: "Import as Job" }))
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ clientId: "coates", storeIds: ["mcd-site", "mcd-site-2"], visibleToClient: true })
+    })
+
+    it("removes a selected site and clears foreign sites when the override is switched off", async () => {
+        await openInvoice()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.click(screen.getByRole("checkbox", { name: "Multiple sites" }))
+        const site = screen.getByRole("combobox", { name: "Site" })
+        fireEvent.change(site, { target: { value: "mcd-site" } })
+        fireEvent.change(site, { target: { value: "mcd-site-2" } })
+        fireEvent.click(screen.getByRole("button", { name: /Remove .*Dee Street/ }))
+        expect(within(screen.getByRole("list", { name: "Selected sites" })).getAllByRole("listitem")).toHaveLength(1)
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        expect(screen.queryByRole("list", { name: "Selected sites" })).not.toBeInTheDocument()
+    })
+
     it.each(["mcdonalds inver", "McDonald's Inver", "McDonald’s Inver", "inver mcdonalds", "mcdonalds — inver", "mcdonalds dee"])("finds sites by owner and partial site/address words: %s", async (search) => {
         await openInvoice()
         fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))

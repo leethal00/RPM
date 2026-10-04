@@ -10,6 +10,10 @@ const state = vi.hoisted(() => ({
     createdCustomer: null as Record<string, unknown> | null,
     detailLines: true,
     site: { id: "site-1", client_id: "client-1" } as { id: string; client_id: string } | null,
+    sites: null as Array<{ id: string; client_id: string }> | null,
+    linkedSites: [] as Array<{ job_id: string; store_id: string; sort: number }>,
+    linksError: false,
+    deletedJob: false,
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -31,6 +35,13 @@ vi.mock("@/lib/xero", () => ({
                 update: (payload: { xero_invoice_import_status: string }) => ({
                     eq: async () => { state.importStatus = payload.xero_invoice_import_status; return { error: null } },
                 }),
+                delete: () => ({ eq: async () => { state.deletedJob = true; return { error: null } } }),
+            }
+            if (table === "costing_job_sites") return {
+                insert: async (rows: typeof state.linkedSites) => {
+                    state.linkedSites = rows
+                    return { error: state.linksError ? new Error("Could not save sites") : null }
+                },
             }
             if (table === "costing_items") return {
                 insert: async (payload: Record<string, unknown>[]) => { state.lines = payload; return { error: null } },
@@ -43,7 +54,7 @@ vi.mock("@/lib/xero", () => ({
                 },
             }
             if (table === "stores") return {
-                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.site, error: null }) }) }),
+                select: () => ({ eq: (_column: string, id: string) => ({ maybeSingle: async () => ({ data: state.sites ? state.sites.find((site) => site.id === id) || null : state.site, error: null }) }) }),
             }
             if (table === "users") return {
                 select: () => ({ eq: () => ({ single: async () => ({ data: { role: "rodier_admin" } }) }) }),
@@ -68,6 +79,10 @@ describe("Xero invoice import", () => {
         state.createdCustomer = null
         state.detailLines = true
         state.site = { id: "site-1", client_id: "client-1" }
+        state.sites = null
+        state.linkedSites = []
+        state.linksError = false
+        state.deletedJob = false
         vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
             ok: true,
             text: async () => JSON.stringify({ Invoices: [{
@@ -127,6 +142,43 @@ describe("Xero invoice import", () => {
         }))
         expect(response.status).toBe(200)
         expect(state.job?.completion_date).toBe("2026-10-02")
+    })
+
+    it.each(["DRAFT", "AUTHORISED", "PAID"])("saves every site once, preserves selection order and one invoice job for %s", async (status) => {
+        state.status = status
+        state.sites = [{ id: "timaru", client_id: "mcd" }, { id: "dunedin", client_id: "mcd" }]
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({
+            invoiceNumber, clientId: "coates", storeIds: ["timaru", "dunedin", "timaru"], showAllSites: true, visibleToClient: true,
+        }) }))
+        expect(response.status).toBe(200)
+        expect(state.job).toMatchObject({ client_id: "coates", store_id: "timaru", visible_to_client: true })
+        expect(state.linkedSites).toEqual([
+            { job_id: "job-1", store_id: "timaru", sort: 0 }, { job_id: "job-1", store_id: "dunedin", sort: 1 },
+        ])
+        expect(state.lines.every((line) => line.job_id === "job-1")).toBe(true)
+    })
+
+    it("rejects the entire import if any additional site is missing", async () => {
+        state.sites = [{ id: "site-1", client_id: "client-1" }]
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber, clientId: "client-1", storeIds: ["site-1", "missing"] }) }))
+        expect(response.status).toBe(400)
+        expect(state.job).toBeNull()
+        expect(state.linkedSites).toEqual([])
+    })
+
+    it("removes the new job if saving its site associations fails", async () => {
+        state.linksError = true
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber, clientId: "client-1", storeIds: ["site-1", "site-2"] }) }))
+        expect(response.status).toBe(500)
+        expect(state.deletedJob).toBe(true)
+        expect(state.lines).toEqual([])
+    })
+
+    it("keeps an unlinked job internal by default", async () => {
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber, storeIds: [] }) }))
+        expect(response.status).toBe(200)
+        expect(state.job).toMatchObject({ store_id: null, visible_to_client: false })
+        expect(state.linkedSites).toEqual([])
     })
 
     it.each(["DRAFT", "AUTHORISED", "PAID"])("preserves a cross-client site and job customer for %s invoices", async (status) => {

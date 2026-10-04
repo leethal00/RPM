@@ -52,6 +52,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     const [newClientName, setNewClientName] = useState("")
     const [addingStore, setAddingStore] = useState(false)
     const [jobLocation, setJobLocation] = useState<"manufacture" | "site">(job?.store_id ? "site" : "manufacture")
+    const [visibleToClient, setVisibleToClient] = useState(job?.visible_to_client === true)
 
     async function createClientInline() {
         const name = newClientName.trim()
@@ -126,6 +127,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
             contact_name: formData.contact_name.trim() || null,
             quoted_by_name: formData.quoted_by_name.trim() || null,
             job_lead_name: formData.job_lead_name.trim() || null,
+            visible_to_client: visibleToClient,
         }
 
         if (job) {
@@ -174,6 +176,8 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                 </div>
 
                 <div className="grid gap-2">
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={visibleToClient} onChange={(event) => setVisibleToClient(event.target.checked)} /> Show to client</label>
+                    <p className="text-xs text-muted-foreground">Show a job summary to client users at its sites. Staff always see the job.</p>
                     <Label htmlFor="job_location" className="text-xs font-medium text-muted-foreground">Job location</Label>
                     <Select value={jobLocation} onValueChange={(value: "manufacture" | "site") => {
                         setJobLocation(value)
