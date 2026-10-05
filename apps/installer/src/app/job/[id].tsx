@@ -70,14 +70,13 @@ export default function JobDetail() {
       }
       if (!fromCamera) setPhotoStatus('Opening photos…');
       const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6, exif: false })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.6, exif: false });
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 1, exif: false });
       if (result.canceled) { setPhotoStatus(''); return; }
       setPhotoStatus('Preparing photo…');
       for (const asset of result.assets) {
         const manipulator = ImageManipulator.manipulate(asset.uri);
-        if (Math.max(asset.width, asset.height) > 1600) manipulator.resize(asset.width >= asset.height ? { width: 1600 } : { height: 1600 });
-        const image = await (await manipulator.renderAsync()).saveAsync({ compress: 0.72, format: SaveFormat.JPEG });
+        const image = await (await manipulator.renderAsync()).saveAsync({ compress: 1, format: SaveFormat.JPEG });
         await enqueuePhoto(session.user.id, id, image.uri, caption.trim() || null, category);
       }
       setCaption('');

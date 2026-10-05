@@ -52,7 +52,7 @@ describe("site photo galleries", () => {
         mocks.zipGenerate.mockResolvedValue(new Blob(["archive"], { type: "application/zip" }))
         mocks.role = "rodier_admin"
         mocks.photos = [
-            { id: "internal-1", store_id: "site-1", album_id: null, url: "/internal.jpg", caption: "Workshop photo", internal_only: true, is_primary: false },
+            { id: "internal-1", store_id: "site-1", album_id: null, url: "/internal.jpg", caption: "Workshop photo", internal_only: true, is_primary: false, created_at: "2026-09-24T00:00:00Z" },
             { id: "client-1", store_id: "site-1", album_id: null, url: "/client.jpg", caption: "Finished photo", internal_only: false, is_primary: false },
         ]
         mocks.albums = [
@@ -93,12 +93,13 @@ describe("site photo galleries", () => {
         await waitFor(() => expect(mocks.download).toHaveBeenCalledWith("installer-photos", "job/user/one.jpg"))
         await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1))
         expect(click).toHaveBeenCalledTimes(1)
+        expect(click.mock.instances[0]).toHaveProperty("download", "2026-09-24_12-00-00.jpg")
         click.mockRestore()
     })
 
     it("downloads selected private site and installer photos in one ZIP", async () => {
         mocks.photos = [{ id: "internal-1", store_id: "site-1", album_id: null, url: "",
-            private_storage_path: "site-1/private.jpg", caption: "Workshop photo", internal_only: true, is_primary: false }]
+            private_storage_path: "site-1/private.jpg", caption: "Workshop photo", internal_only: true, is_primary: false, created_at: "2026-09-24T00:00:00Z" }]
         const createObjectURL = vi.fn((blob: Blob) => { void blob; return "blob:site-photos" })
         Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL })
         Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() })
@@ -114,6 +115,8 @@ describe("site photo galleries", () => {
         await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1))
         expect(createObjectURL.mock.calls[0][0]).toHaveProperty("type", "application/zip")
         expect(mocks.zipFile).toHaveBeenCalledTimes(2)
+        expect(mocks.zipFile).toHaveBeenCalledWith("2026-09-24_12-00-00.jpg", expect.any(Blob))
+        expect(mocks.zipFile).toHaveBeenCalledWith("2026-09-24_12-00-00-2.jpg", expect.any(Blob))
         expect(click).toHaveBeenCalledTimes(1)
         click.mockRestore()
     })

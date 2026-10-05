@@ -66,17 +66,32 @@ type GalleryAudience = "client" | "internal"
 type DownloadablePhoto = {
     key: string
     caption: string
+    takenAt: string | null
     url: string
     bucket?: string
     path?: string
 }
 
-function photoFileName(photo: DownloadablePhoto, index: number, type: string): string {
+function photoFileName(photo: DownloadablePhoto, type: string, usedNames: Set<string>): string {
     const extension = (photo.path || photo.url).split("?")[0].match(/\.(jpe?g|png|webp|gif|heic|heif)$/i)?.[1]
         || ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[type]
         || "jpg"
-    const label = photo.caption.replace(/[^a-z0-9 -]/gi, "").trim().replace(/\s+/g, "-").slice(0, 65) || "site-photo"
-    return `${String(index + 1).padStart(3, "0")}-${label}.${extension}`
+    const date = photo.takenAt ? new Date(photo.takenAt) : null
+    const parts = date && !Number.isNaN(date.getTime())
+        ? new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Pacific/Auckland", year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+        }).formatToParts(date)
+        : []
+    const part = (name: string) => parts.find((item) => item.type === name)?.value
+    const stamp = parts.length
+        ? `${part("year")}-${part("month")}-${part("day")}_${part("hour")}-${part("minute")}-${part("second")}`
+        : `photo-${photo.key.replace(/[^a-z0-9-]/gi, "-")}`
+    let name = `${stamp}.${extension}`
+    let duplicate = 2
+    while (usedNames.has(name.toLowerCase())) name = `${stamp}-${duplicate++}.${extension}`
+    usedNames.add(name.toLowerCase())
+    return name
 }
 type InstallerPhoto = {
     id: string
@@ -1044,16 +1059,19 @@ export function SitePhotoGallery({
     const downloadablePhotos: DownloadablePhoto[] = [
         ...filteredInstallerPhotos.filter((photo) => photo.previewUrl && !brokenInstallerIds.includes(photo.id)).map((photo) => ({
             key: `installer:${photo.id}`, caption: photo.caption || "Job photo", url: photo.previewUrl!,
+            takenAt: photo.captured_at,
             bucket: "installer-photos", path: photo.storage_path,
         })),
         ...filteredPhotos.filter((photo) => photo.private_storage_path ? !!photo.previewUrl : !!photo.url).map((photo) => ({
             key: `site:${photo.id}`, caption: photo.caption || "Site photo",
+            takenAt: photo.created_at,
             url: photo.internal_only ? photo.previewUrl || photo.url : photo.url,
             bucket: photo.private_storage_path ? "site-internal-photos" : publicPhotoPath(photo.url) ? "site-photos" : undefined,
             path: photo.private_storage_path || publicPhotoPath(photo.url) || undefined,
         })),
         ...visibleAssetPhotos.filter((photo) => !!photo.url).map((photo) => ({
             key: `asset:${photo.id}`, caption: photo.caption || "Asset photo", url: photo.url,
+            takenAt: photo.created_at,
             bucket: storagePhotoPath(photo.url, "asset-photos") ? "asset-photos" : undefined,
             path: storagePhotoPath(photo.url, "asset-photos") || undefined,
         })),
@@ -1078,8 +1096,9 @@ export function SitePhotoGallery({
         setDownloading(true)
         try {
             const files: { name: string; blob: Blob }[] = []
+            const usedNames = new Set<string>()
             for (let index = 0; index < chosen.length; index += 4) {
-                const batch = await Promise.all(chosen.slice(index, index + 4).map(async (photo, offset) => {
+                const batch = await Promise.all(chosen.slice(index, index + 4).map(async (photo) => {
                     let blob: Blob
                     if (photo.bucket && photo.path) {
                         const { data, error } = await supabase.storage.from(photo.bucket).download(photo.path)
@@ -1090,9 +1109,9 @@ export function SitePhotoGallery({
                         if (!response.ok) throw new Error(`Photo unavailable (${response.status})`)
                         blob = await response.blob()
                     }
-                    return { name: photoFileName(photo, index + offset, blob.type), blob }
+                    return { photo, blob }
                 }))
-                files.push(...batch)
+                files.push(...batch.map(({ photo, blob }) => ({ name: photoFileName(photo, blob.type, usedNames), blob })))
             }
 
             let file: Blob
