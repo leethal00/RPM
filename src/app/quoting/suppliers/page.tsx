@@ -1,14 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { PageHeader } from "@/components/page-header"
 import { PageShell } from "@/components/page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createClient } from "@/lib/supabase/client"
-import { Building2, Edit2, Package2, Plus, Search } from "lucide-react"
+import { Building2, Edit2, Package2, Plus, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import type { Material } from "@/types/database"
 
@@ -53,14 +54,17 @@ export default function SuppliersPage() {
     const [editing, setEditing] = useState<Supplier | null>(null)
     const [form, setForm] = useState(emptyForm)
     const [saving, setSaving] = useState(false)
+    const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null)
+    const [deleting, setDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState("")
 
-    async function loadSuppliers() {
+    const loadSuppliers = useCallback(async () => {
         const { data, error } = await supabase.from("supplier_directory").select("*").order("name")
         if (error) return toast.error(error.message)
         setSuppliers((data ?? []) as Supplier[])
-    }
+    }, [supabase])
 
-    async function loadMaterials() {
+    const loadMaterials = useCallback(async () => {
         const pageSize = 1000
         const list: Material[] = []
         let from = 0
@@ -79,11 +83,13 @@ export default function SuppliersPage() {
             from += pageSize
         }
         setMaterials(list)
-    }
+    }, [supabase])
 
     useEffect(() => {
-        void Promise.all([loadSuppliers(), loadMaterials()])
-    }, [])
+        let cancelled = false
+        queueMicrotask(() => { if (!cancelled) void Promise.all([loadSuppliers(), loadMaterials()]) })
+        return () => { cancelled = true }
+    }, [loadSuppliers, loadMaterials])
 
     const filtered = suppliers.filter((supplier) => {
         const haystack = [supplier.name, ...(supplier.aliases || []), supplier.contact_name || "", supplier.account_number || ""].join(" ").toLowerCase()
@@ -141,14 +147,53 @@ export default function SuppliersPage() {
             active: form.active,
             updated_at: new Date().toISOString(),
         }
-        const result = editing
-            ? await supabase.from("supplier_directory").update(payload).eq("id", editing.id)
-            : await supabase.from("supplier_directory").insert(payload)
-        setSaving(false)
-        if (result.error) return toast.error(result.error.message)
-        toast.success(editing ? "Supplier updated" : "Supplier added")
-        editSupplier()
-        await loadSuppliers()
+        try {
+            const { data, error } = editing
+                ? await supabase.from("supplier_directory").update(payload).eq("id", editing.id).select("id").maybeSingle()
+                : await supabase.from("supplier_directory").insert(payload).select("id").maybeSingle()
+            if (error) throw error
+            if (!data) throw new Error("No supplier was saved. Check your access and try again.")
+            toast.success(editing ? "Supplier updated" : "Supplier added")
+            editSupplier()
+            await loadSuppliers()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not save supplier")
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function deleteSupplier() {
+        if (!supplierToDelete || deleting) return
+        setDeleting(true)
+        setDeleteError("")
+        try {
+            const names = new Set([supplierToDelete.name, ...(supplierToDelete.aliases || [])].map((name) => name.trim().toLowerCase()))
+            let linked = 0
+            const pageSize = 1000
+            for (let from = 0; ; from += pageSize) {
+                const { data, error } = await supabase.from("materials").select("supplier").order("id").range(from, from + pageSize - 1)
+                if (error) throw error
+                const batch = (data ?? []) as { supplier: string | null }[]
+                linked += batch.filter((item) => names.has((item.supplier || "").trim().toLowerCase())).length
+                if (batch.length < pageSize) break
+            }
+            if (linked) {
+                setDeleteError(`${linked} catalogue item${linked === 1 ? " is" : "s are"} linked to this supplier. Reassign those items or mark the supplier inactive instead.`)
+                return
+            }
+            const { data, error } = await supabase.from("supplier_directory").delete().eq("id", supplierToDelete.id).select("id").maybeSingle()
+            if (error) throw error
+            if (!data) throw new Error("No supplier was deleted. Check your access and try again.")
+            toast.success(`${supplierToDelete.name} deleted`)
+            setSupplierToDelete(null)
+            editSupplier()
+            await loadSuppliers()
+        } catch (error) {
+            setDeleteError(error instanceof Error ? error.message : "Could not delete supplier")
+        } finally {
+            setDeleting(false)
+        }
     }
 
     return (
@@ -171,13 +216,13 @@ export default function SuppliersPage() {
                                 </thead>
                                 <tbody>
                                     {filtered.map((supplier) => (
-                                        <tr key={supplier.id} className="border-t">
+                                        <tr key={supplier.id} className={`border-t ${editing?.id === supplier.id ? "bg-primary/5" : ""}`}>
                                             <td className="px-3 py-2"><div className="font-medium">{supplier.name}</div>{supplier.aliases?.length > 0 && <div className="text-xs text-muted-foreground">Also: {supplier.aliases.join(", ")}</div>}</td>
                                             <td className="px-3 py-2"><div>{supplier.contact_name || "—"}</div><div className="text-xs text-muted-foreground">{supplier.email || supplier.phone || ""}</div></td>
                                             <td className="px-3 py-2">{supplier.account_number || "—"}</td>
                                             <td className="px-3 py-2 tabular-nums">{itemsForSupplier(supplier).length}</td>
                                             <td className="px-3 py-2">{supplier.active ? "Active" : "Inactive"}</td>
-                                            <td className="px-2 py-2"><Button variant="ghost" size="icon" onClick={() => editSupplier(supplier)}><Edit2 className="size-4" /></Button></td>
+                                            <td className="px-2 py-2"><Button type="button" variant="outline" size="sm" className="gap-1" aria-label={`Edit ${supplier.name}`} onClick={() => editSupplier(supplier)}><Edit2 className="size-3.5" /> Edit</Button></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -199,7 +244,10 @@ export default function SuppliersPage() {
                             <div><Label>Postal address</Label><Input value={form.postal_address} onChange={(e) => setForm({ ...form, postal_address: e.target.value })} /></div>
                             <div><Label>Notes</Label><textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
                             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active supplier</label>
-                            <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => editSupplier()}>Clear</Button><Button type="submit" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Add supplier"}</Button></div>
+                            <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t bg-card px-4 py-3 shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.5)]">
+                                <div>{editing && <Button type="button" variant="destructive" size="sm" className="gap-1.5" onClick={() => { setDeleteError(""); setSupplierToDelete(editing) }}><Trash2 className="size-3.5" /> Delete supplier</Button>}</div>
+                                <div className="flex gap-2"><Button type="button" variant="outline" onClick={() => editSupplier()}>Clear</Button><Button type="submit" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Add supplier"}</Button></div>
+                            </div>
                         </form>
 
                         {editing && (
@@ -239,6 +287,19 @@ export default function SuppliersPage() {
                         )}
                     </section>
                 </div>
+                <Dialog open={Boolean(supplierToDelete)} onOpenChange={(open) => { if (!open && !deleting) { setSupplierToDelete(null); setDeleteError("") } }}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete {supplierToDelete?.name}?</DialogTitle>
+                            <DialogDescription>This permanently removes the supplier record. Catalogue items linked to it must be reassigned first.</DialogDescription>
+                        </DialogHeader>
+                        {deleteError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{deleteError}</p>}
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" disabled={deleting} onClick={() => { setSupplierToDelete(null); setDeleteError("") }}>Cancel</Button>
+                            <Button type="button" variant="destructive" disabled={deleting} onClick={() => void deleteSupplier()}>{deleting ? "Checking..." : "Delete supplier"}</Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </PageShell>
         </DashboardLayout>
     )
