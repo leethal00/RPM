@@ -60,10 +60,11 @@ function StepHead() {
 
 export function SwmsPrintDocument({ record, attendees, attachments }: { record: RecordRow; attendees: Attendee[]; attachments: Attachment[] }) {
   const body: Body = record.body || {}
+  const projectReference = record.job_reference?.trim().replace(/^INV-\s*/i, "") || ""
   const steps = (body.steps || []).filter(step => Object.values(step).some(value => value?.trim()))
   return <main className="print-root">
     <style>{`
-      @page { size: A4 landscape; margin: 12mm; }
+      @page { size: A4 landscape; margin: 44mm 12mm 12mm; }
       .print-root { min-height: 100vh; background: #f1f4f7; color: #172b46; font-family: var(--font-geist-sans), Arial, sans-serif; line-height: 1.4; -webkit-font-smoothing: antialiased; }
       .print-actions { max-width: 1120px; margin: 0 auto; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
       .print-actions a { color: #225a91; text-decoration: underline; }
@@ -128,7 +129,10 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
         .print-actions { display: none !important; }
         .print-sheet { max-width: none; margin: 0; padding: 0; box-shadow: none; }
         .print-head { padding-bottom: 12px; margin-bottom: 14px; }
-        .print-head h1 { font-size: 26px; }
+        .print-head h1 { font-size: 22px; margin: 4px 0 6px; }
+        /* Fixed print elements repeat on every page. Reserve the top page margin
+           for the header so continuation tables never overlap it. */
+        .print-document-head { position: fixed; top: -32mm; left: 0; right: 0; margin: 0; background: white; }
         .print-grid { gap: 6px 16px; margin: 8px 0 10px; }
         .print-field { padding: 4px 8px; }
         .print-section .print-copy { padding: 5px 8px; }
@@ -142,25 +146,26 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
         .print-part-page { break-before: page; }
         .print-risk-section { break-inside: avoid; }
         .print-on-site { break-before: page; break-inside: avoid; margin-top: 0; border-top: 0; padding-top: 0; }
-        .print-on-site .print-head { margin-bottom: 10px; padding-bottom: 10px; }
+        .print-on-site .print-head { display: none; }
         .print-on-site .print-part { margin-top: 12px; }
         .print-on-site .print-steps tbody tr td { background: white; }
       }
     `}</style>
     <article className="print-sheet">
       <>
-        <header className="print-head">
+        <header className="print-head print-document-head">
           <Image src="/rodier-logo.png" alt="Rodier logo" width={96} height={96} loading="eager" unoptimized className="print-logo" />
           <div className="print-heading">
           <div className="print-kicker">Health &amp; Safety · SWMS / Task Analysis</div>
           <h1>{record.title}</h1>
           <div className="print-meta"><span className={"print-status " + record.status}>{record.status}</span> &nbsp; Revision {record.revision} {record.template_version ? "· Template version " + record.template_version : ""} · Created {nzDate(record.created_at, true)} {record.completed_at ? "· Completed " + nzDate(record.completed_at, true) : ""}</div>
+          <div className="print-meta">Project number: {projectReference || "\u2014"} &middot; Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div>
           </div>
         </header>
         <h2 className="print-part">Part 1 · Company and job details</h2>
         <div className="print-grid">
           <Field label="Work date" value={isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)} />
-          <Field label="RPM job" value={record.job_reference} />
+          <Field label="Project number" value={projectReference} />
           <Field label="Site / location" value={record.site} />
           <Field label="Principal contractor" value={body.principal} />
           <Field label="Client" value={body.client} />
@@ -215,7 +220,7 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
           </div>
         </section>
         <section className="print-on-site" aria-label="Additional on-site work steps">
-          <header className="print-head"><Image src="/rodier-logo.png" alt="Rodier logo" width={96} height={96} loading="eager" unoptimized className="print-logo" /><div className="print-heading"><div className="print-kicker">SWMS / Task Analysis · Additional on-site steps</div><h1>{record.title}</h1><div className="print-meta">{record.job_reference || ""} · Revision {record.revision} · Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div></div></header>
+          <header className="print-head"><Image src="/rodier-logo.png" alt="Rodier logo" width={96} height={96} loading="eager" unoptimized className="print-logo" /><div className="print-heading"><div className="print-kicker">SWMS / Task Analysis · Additional on-site steps</div><h1>{record.title}</h1><div className="print-meta">Project number: {projectReference || "\u2014"} · Revision {record.revision} · Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div></div></header>
           <h2 className="print-part">Part 2 · Additional steps — fill out on site as required</h2>
           <p className="print-copy">Site: {record.site || "________________"} · Date of additions: ________________ · Reviewed / briefed by: ________________________</p>
           <table className="print-table print-steps"><StepColumns /><StepHead /><tbody>{Array.from({ length: 7 }, (_, index) => <tr className="print-blank-row" key={index}>{Array.from({ length: 5 }, (_, column) => <td key={column}>&nbsp;</td>)}</tr>)}</tbody></table>

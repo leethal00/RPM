@@ -14,9 +14,22 @@ describe("SWMS print document", () => {
   it("shows TBC on both pages and preserves the recorded steps", () => {
     const { container } = render(<SwmsPrintDocument record={record} attendees={[]} attachments={[]} />)
     expect(container.querySelector('.print-field .print-value')).toHaveTextContent("TBC")
-    expect(screen.getByText(/Work date: TBC/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Work date: TBC/)).toHaveLength(2)
     expect(screen.getByText("Boom truck operator")).toBeInTheDocument()
     expect(screen.getAllByAltText("Rodier logo")).toHaveLength(2)
+  })
+  it.each([
+    ["INV-7606 EVENT Cinemas Albany", "7606 EVENT Cinemas Albany"],
+    ["7606 EVENT Cinemas Albany", "7606 EVENT Cinemas Albany"],
+    ["Survey INV-signage", "Survey INV-signage"],
+    [null, "\u2014"],
+  ])("formats the project reference without changing the description: %s", (reference, expected) => {
+    const { container } = render(<SwmsPrintDocument record={{ ...record, job_reference: reference }} attendees={[]} attachments={[]} />)
+    const field = screen.getByText("Project number").closest(".print-field")!
+    expect(within(field as HTMLElement).getByText(expected)).toBeInTheDocument()
+    expect(container.querySelector(".print-document-head")).toHaveTextContent(`Project number: ${expected}`)
+    expect(screen.getByRole("region", { name: "Additional on-site work steps" })).toHaveTextContent(`Project number: ${expected}`)
+    expect(screen.queryByText("RPM job")).not.toBeInTheDocument()
   })
   it("keeps existing dated records displaying their work date", () => {
     const { container } = render(<SwmsPrintDocument record={{ ...record, body: { ...record.body, date_tbc: false } }} attendees={[]} attachments={[]} />)
