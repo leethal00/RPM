@@ -1,3 +1,14 @@
+vi.mock("@/lib/xero-requests", async () => {
+  const { XeroRateLimitError, xeroRetryAfter } = await import("@/lib/xero-rate-limit")
+  return {
+    xeroFetch: async (url: string, init: RequestInit) => {
+      const response = await fetch(url, init)
+      if (response.status === 429) throw new XeroRateLimitError(xeroRetryAfter(response.headers?.get("Retry-After") ?? null))
+      return response
+    },
+    cachedXeroJson: async (_tenant: string, _key: string, load: () => Promise<unknown>, _ttl: number, refresh: boolean) => refresh ? load() : state.cachedQuotes ?? load(),
+  }
+})
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const state = vi.hoisted(() => ({
@@ -6,6 +17,7 @@ const state = vi.hoisted(() => ({
   conflict: false,
   raced: false,
   dbError: false,
+  cachedQuotes: null as Record<string, unknown>[] | null,
 }))
 
 vi.mock("@/lib/xero", () => ({
@@ -66,6 +78,9 @@ function mockXero(quotes: XeroRow[] = [quote], pages: XeroRow[][] = [[invoice]])
     if (url.pathname.startsWith("/Quotes/")) {
       return { ok: true, text: async () => JSON.stringify({ Quotes: quotes.filter((q) => url.pathname.endsWith(String(q.QuoteID))) }) }
     }
+    if (url.pathname === "/Quotes") {
+      return { ok: true, text: async () => JSON.stringify({ Quotes: quotes.filter((quote) => String((quote.Contact as XeroRow)?.ContactID).toLowerCase() === url.searchParams.get("ContactID")) }) }
+    }
     if (url.pathname === "/Invoices") {
       return { ok: true, text: async () => JSON.stringify({ Invoices: pages[Number(url.searchParams.get("page")) - 1] || [] }) }
     }
@@ -77,7 +92,7 @@ function mockXero(quotes: XeroRow[] = [quote], pages: XeroRow[][] = [[invoice]])
 }
 
 beforeEach(() => {
-  state.jobs = [{ ...job }]; state.writes = []; state.conflict = false; state.raced = false; state.dbError = false
+  state.jobs = [{ ...job }]; state.writes = []; state.conflict = false; state.raced = false; state.dbError = false; state.cachedQuotes = null
   mockXero()
 })
 
@@ -245,17 +260,17 @@ describe("manual Check Xero and webhook linkback", () => {
     expect(state.writes[0]).toMatchObject({ status: rpmStatus })
     expect(state.writes[0]).not.toHaveProperty("xero_invoice_id")
   })
-  it("fails closed when another quote lookup fails", async () => {
+  it("does not fetch an unrelated orphan quote individually", async () => {
     state.jobs.push({ ...job, id: "job-2", xero_quote_id: "missing" })
-    expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: false })
-    expect(state.writes).toEqual([])
+    expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: true, changedToJob: true })
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/Quotes/missing"))).toBe(false)
   })
   it("propagates Xero and database errors without claiming success", async () => {
     state.dbError = true
     expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: false })
     state.dbError = false
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 429, text: async () => '{"Message":"Rate limited"}' })))
-    expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: false, error: "Rate limited" })
+    expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: false, retryAfter: 60, error: expect.stringContaining("Xero is temporarily limiting requests") })
     expect(state.writes).toEqual([])
   })
 })
@@ -266,5 +281,40 @@ describe("Xero date parsing", () => {
     expect(xeroDate(`/Date(${Date.UTC(2026, 10, 20)}+0000)/`)).toBe("2026-11-20")
     expect(xeroDate("invalid")).toBeNull()
     expect(xeroDate(null)).toBeNull()
+  })
+})
+
+describe("background request savings without weaker invoice matching", () => {
+  it("checks 18 customer quotes in three requests instead of fetching each quote", async () => {
+    const otherQuotes = Array.from({ length: 17 }, (_, index) => ({ ...quote, QuoteID: `quote-${index}`, Reference: `Other ${index}`, Total: index, LineItems: [] }))
+    state.jobs.push(...otherQuotes.map((quote, index) => ({ ...job, id: `job-${index}`, xero_quote_id: quote.QuoteID })))
+    mockXero([quote, ...otherQuotes])
+    expect(await syncOpenQuotesForInvoices([invoice])).toMatchObject([{ ok: true, invoiceNumber: "INV-7599" }])
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname.startsWith("/Quotes/"))).toHaveLength(0)
+  })
+  it("does not link using an old cached match when the current quote changed", async () => {
+    state.cachedQuotes = [quote]
+    mockXero([{ ...quote, Reference: "Different project", LineItems: [], Total: 1 }])
+    expect(await syncOpenQuotesForInvoices([invoice])).toEqual([])
+    expect(state.writes).toEqual([])
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it("does not fetch quotes belonging to unrelated customers", async () => {
+    state.jobs.push({ ...job, id: "unrelated", xero_quote_id: "unrelated-quote" })
+    mockXero([quote, { ...quote, QuoteID: "unrelated-quote", Contact: { ContactID: "another-customer" } }])
+    await syncOpenQuotesForInvoices([invoice])
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => !String(url).includes("another-customer"))).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+  it("does no background reads when RPM has no open linked quotes", async () => {
+    state.jobs = []
+    expect(await syncOpenQuotesForInvoices([invoice])).toEqual([])
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it("refreshes a cached miss so a newly edited quote can still be linked", async () => {
+    state.cachedQuotes = [{ ...quote, Reference: "Old project", LineItems: [], Total: 1 }]
+    expect(await syncOpenQuotesForInvoices([invoice])).toMatchObject([{ ok: true, changedToJob: true }])
+    expect(state.writes).toHaveLength(1)
   })
 })

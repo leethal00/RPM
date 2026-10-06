@@ -1,3 +1,14 @@
+vi.mock("@/lib/xero-requests", async () => {
+  const { XeroRateLimitError, xeroRetryAfter } = await import("@/lib/xero-rate-limit")
+  return {
+    xeroFetch: async (url: string, init: RequestInit) => {
+      const response = await fetch(url, init)
+      if (response.status === 429) throw new XeroRateLimitError(xeroRetryAfter(response.headers?.get("Retry-After") ?? null))
+      return response
+    },
+    cachedXeroJson: async (_tenant: string, _key: string, load: () => Promise<unknown>) => load(),
+  }
+})
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 

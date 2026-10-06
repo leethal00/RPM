@@ -1,6 +1,9 @@
+import { xeroErrorResponse } from "@/lib/xero-error-response"
 import { NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, XERO_API, xeroHeaders } from "@/lib/xero"
+
+import { xeroFetch } from "@/lib/xero-requests"
 
 export const dynamic = "force-dynamic"
 
@@ -25,10 +28,10 @@ export async function GET() {
     if (!xero) return NextResponse.json({ error: "Xero is not connected." }, { status: 409 })
 
     try {
-        const response = await fetch(`${XERO_API}/Items`, {
+        const response = await xeroFetch(`${XERO_API}/Items`, {
             headers: xeroHeaders(xero.accessToken, xero.tenantId),
             cache: "no-store",
-        })
+        }, xero.tenantId, "products")
         const text = await response.text()
         const body = text ? JSON.parse(text) : {}
 
@@ -56,6 +59,8 @@ export async function GET() {
 
         return NextResponse.json({ items })
     } catch (error) {
+        const limited = xeroErrorResponse(error)
+        if (limited) return limited
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load Xero items." }, { status: 500 })
     }
 }

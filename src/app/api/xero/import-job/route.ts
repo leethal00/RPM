@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { isStaffAdmin } from "@/lib/permissions"
-import { XeroRateLimitError, xeroRetryAfter } from "@/lib/xero-rate-limit"
+import { XeroRateLimitError } from "@/lib/xero-rate-limit"
+import { xeroFetch } from "@/lib/xero-requests"
 
 export const dynamic = "force-dynamic"
 
@@ -30,8 +31,7 @@ type XeroInvoice = {
 }
 
 async function xeroJson(url: string, accessToken: string, tenantId: string) {
-    const response = await fetch(url, { headers: xeroHeaders(accessToken, tenantId), cache: "no-store" })
-    if (response.status === 429) throw new XeroRateLimitError(xeroRetryAfter(response.headers.get("Retry-After")))
+    const response = await xeroFetch(url, { headers: xeroHeaders(accessToken, tenantId), cache: "no-store" }, tenantId, "import")
     const text = await response.text()
     const body = text ? JSON.parse(text) : {}
     if (!response.ok) throw new Error(body?.Message || body?.Detail || `Xero API error ${response.status}`)
@@ -42,18 +42,12 @@ async function getInvoice(invoiceNumber: string) {
     const xero = await getValidXero()
     if (!xero) throw new Error("Xero is not connected.")
 
-    const escaped = invoiceNumber.replaceAll('"', '\\"')
-    const where = encodeURIComponent(`InvoiceNumber==\"${escaped}\"`)
-    const body = await xeroJson(`${XERO_API}/Invoices?where=${where}`, xero.accessToken, xero.tenantId)
-    const summary = (body?.Invoices?.[0] || null) as XeroInvoice | null
-    if (!summary) return null
-    if (!summary.InvoiceID || summary.InvoiceNumber !== invoiceNumber) {
-        throw new Error("The Xero invoice could not be identified. Find it again.")
-    }
-    // Xero's filtered invoice list is a summary; line items require an individual invoice request.
-    const detail = await xeroJson(`${XERO_API}/Invoices/${encodeURIComponent(summary.InvoiceID)}?unitdp=4`, xero.accessToken, xero.tenantId)
+    // Paging includes full line items in the lookup, avoiding a second detail request.
+    const params = new URLSearchParams({ InvoiceNumbers: invoiceNumber, page: "1", pageSize: "100", unitdp: "4" })
+    const detail = await xeroJson(`${XERO_API}/Invoices?${params}`, xero.accessToken, xero.tenantId)
     const invoice = (detail?.Invoices?.[0] || null) as XeroInvoice | null
-    if (!invoice || invoice.InvoiceID !== summary.InvoiceID || invoice.InvoiceNumber !== invoiceNumber) {
+    if (!invoice) return null
+    if (!invoice.InvoiceID || invoice.InvoiceNumber !== invoiceNumber) {
         throw new Error("The Xero invoice detail did not match the lookup. Find it again.")
     }
     return invoice
@@ -90,13 +84,36 @@ export async function GET(req: NextRequest) {
     const { data: auth } = await server.auth.getUser()
     if (!auth.user) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
 
-    const invoiceNumber = (req.nextUrl.searchParams.get("invoice") || "").trim()
+    const requestedNumbers = Array.from(new Set((req.nextUrl.searchParams.get("invoice") || "").split(/[,;\n]+/).map((number) => number.trim()).filter(Boolean)))
+    const invoiceNumber = requestedNumbers.join(",")
     if (!invoiceNumber) return NextResponse.json({ error: "Enter a Xero invoice number." }, { status: 400 })
 
     try {
         const admin = xeroAdmin()
         const { data: profile } = await admin.from("users").select("role").eq("id", auth.user.id).single()
         if (!isStaffAdmin(profile?.role)) return NextResponse.json({ error: "Only Rodier administrators can import Xero invoices." }, { status: 403 })
+        const numbers = requestedNumbers
+        if (numbers.length > 40) return NextResponse.json({ error: "Find up to 40 invoices at a time." }, { status: 400 })
+        if (numbers.length > 1) {
+            const xero = await getValidXero()
+            if (!xero) throw new Error("Xero is not connected.")
+            const { data: existing, error: existingError } = await admin.from("costing_jobs").select("xero_invoice_number,xero_invoice_id").in("xero_invoice_number", numbers)
+            if (existingError) throw existingError
+            const params = new URLSearchParams({ InvoiceNumbers: numbers.join(","), page: "1", pageSize: "100", unitdp: "4" })
+            const result = await xeroJson(`${XERO_API}/Invoices?${params}`, xero.accessToken, xero.tenantId)
+            const rows = (result?.Invoices || []) as XeroInvoice[]
+            const invoices: ReturnType<typeof preview>[] = []
+            const warnings: string[] = []
+            for (const number of numbers) {
+                const matches = rows.filter((invoice) => invoice.InvoiceNumber === number)
+                const invoice = matches[0]
+                if (existing?.some((job) => job.xero_invoice_number === number)) warnings.push(`${number} is already in RPM.`)
+                else if (!invoice) warnings.push(`${number} was not found in Xero.`)
+                else if (matches.length !== 1 || !invoice.InvoiceID || invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "") || !hasImportableLines(invoice)) warnings.push(`${number} cannot be imported. Check its status and lines in Xero.`)
+                else invoices.push(preview(invoice))
+            }
+            return NextResponse.json({ ok: true, invoices, warnings })
+        }
         const { data: existing } = await admin
             .from("costing_jobs")
             .select("id,job_number,title")
@@ -283,4 +300,3 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not import the Xero invoice." }, { status: 500 })
     }
 }
-
