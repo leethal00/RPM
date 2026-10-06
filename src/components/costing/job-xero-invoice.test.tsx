@@ -38,3 +38,22 @@ describe("quote invoice linking dialog", () => {
     expect(screen.queryByRole("button", { name: "Link this invoice" })).not.toBeInTheDocument()
   })
 })
+
+describe("linked invoice line import", () => {
+  it("shows the invoice lines and imports them into the linked RPM job", async () => {
+    const linkedJob = { ...job, status: "in_progress", xero_quote_id: null, xero_invoice_id: null, xero_invoice_number: "INV-7570" } as CostingJob
+    const invoicePreview = { invoice: { ...preview.invoice, invoiceId: "invoice-1", invoiceNumber: "INV-7570", updatedAt: "2026-10-07T00:00:00Z", lines: [{ description: "Pylon survey", quantity: 1, unitAmount: 280 }] }, proposedLines: [], rpmItemCount: 0 }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => invoicePreview })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, imported: 1 }) })
+    vi.stubGlobal("fetch", fetchMock)
+    const changed = vi.fn()
+    render(<JobXeroInvoice job={linkedJob} onChanged={changed} />)
+    expect(screen.queryByRole("button", { name: "Create Xero invoice" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Import Xero invoice lines" }))
+    expect(await screen.findByText(/Pylon survey/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Import lines into RPM" }))
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce())
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/xero/invoices/job-1?importLines=1")
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ action: "import-lines", expectedInvoiceId: "invoice-1", expectedUpdatedAt: "2026-10-07T00:00:00Z" })
+  })
+})

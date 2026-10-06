@@ -4,17 +4,11 @@ import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { isStaffAdmin } from "@/lib/permissions"
 import { XeroRateLimitError } from "@/lib/xero-rate-limit"
 import { xeroFetch } from "@/lib/xero-requests"
+import { itemFromXeroLine, type XeroImportLine } from "@/lib/xero-import-lines"
 
 export const dynamic = "force-dynamic"
 
-type XeroLineItem = {
-    LineItemID?: string | null
-    ItemCode?: string | null
-    Description?: string | null
-    Quantity?: number | null
-    UnitAmount?: number | null
-    LineAmount?: number | null
-}
+type XeroLineItem = XeroImportLine
 
 type XeroInvoice = {
     InvoiceID?: string | null
@@ -150,29 +144,6 @@ function rateLimitResponse(error: XeroRateLimitError) {
     })
 }
 
-function itemFromLine(line: XeroLineItem, index: number) {
-    const description = String(line.Description || "").trim()
-    const parts = description.split(/\r?\n/).map((part) => part.trim()).filter(Boolean)
-    const firstLine = parts[0] || ""
-    const itemCode = String(line.ItemCode || "").trim()
-    const name = itemCode || firstLine.replace(/[:\s]+$/, "") || `Invoice line ${index + 1}`
-    const details = itemCode ? description : parts.slice(1).join("\n")
-
-    return {
-        name: name.slice(0, 200),
-        details: details || null,
-        mode: "simple",
-        qty: line.Quantity == null ? 1 : Number(line.Quantity),
-        unit_cost: 0,
-        unit_price: Number(line.UnitAmount || 0),
-        xero_imported_line: true,
-        xero_line_item_id: line.LineItemID || null,
-        xero_line_amount: line.LineAmount == null ? null : Number(line.LineAmount),
-        xero_unit_amount: line.UnitAmount == null ? null : Number(line.UnitAmount),
-        sort: index,
-    }
-}
-
 export async function POST(req: NextRequest) {
     const server = await createServerClient()
     const { data: auth } = await server.auth.getUser()
@@ -281,7 +252,7 @@ export async function POST(req: NextRequest) {
             if (sitesError) throw sitesError
         }
 
-        const rows = (invoice.LineItems || []).map((line, index) => ({ job_id: createdJobId, ...itemFromLine(line, index) }))
+        const rows = (invoice.LineItems || []).map((line, index) => ({ job_id: createdJobId, ...itemFromXeroLine(line, index) }))
         if (rows.length) {
             const { error: itemsError } = await admin.from("costing_items").insert(rows)
             if (itemsError) throw itemsError

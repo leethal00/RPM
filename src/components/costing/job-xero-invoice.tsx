@@ -22,11 +22,14 @@ type Preview = {
     lines: Array<{ description: string; quantity: number | null; unitAmount: number | null }>
   }
   proposedLines: Array<{ Description: string; Quantity?: number; UnitAmount?: number }>
+  rpmItemCount?: number
 }
 
 export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged: () => void }) {
   const [open, setOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importPreview, setImportPreview] = useState<Preview | null>(null)
   const [contactSearch, setContactSearch] = useState(job.clients?.name || "")
   const [contacts, setContacts] = useState<Array<{ id: string; name: string }>>([])
   const [contactId, setContactId] = useState("")
@@ -36,6 +39,7 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const linked = !!job.xero_invoice_id
+  const hasInvoiceNumber = !!job.xero_invoice_number
   const quoteStage = !!job.xero_quote_id && ["quoted", "approved"].includes(job.status)
   const approvedImport = job.xero_invoice_import_status === "AUTHORISED" || job.xero_invoice_import_status === "PAID"
   const baseUrl = "/api/xero/invoices/" + encodeURIComponent(job.id)
@@ -124,8 +128,52 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
     }
   }
 
+  async function showImportPreview() {
+    setImportOpen(true)
+    setImportPreview(null)
+    setError("")
+    setBusy(true)
+    try {
+      const response = await fetch(baseUrl + "?importLines=1", { cache: "no-store" })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || "Could not load the invoice lines.")
+      setImportPreview(body as Preview)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load the invoice lines.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function importLines() {
+    if (!importPreview) return
+    setBusy(true)
+    setError("")
+    try {
+      const response = await fetch(baseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import-lines", expectedInvoiceId: importPreview.invoice.invoiceId, expectedUpdatedAt: importPreview.invoice.updatedAt }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || "Could not import the invoice lines.")
+      toast.success(`${body.imported} Xero invoice lines added to this RPM job`)
+      setImportOpen(false)
+      setImportPreview(null)
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not import the invoice lines.")
+      setImportPreview(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <>
-    {!linked && !job.xero_quote_id && <Button size="sm" className="h-8" onClick={() => { setCreateOpen(true); setError(""); setContactSearch(job.clients?.name || ""); void findContacts(job.clients?.name || "") }}>
+    {hasInvoiceNumber && !job.xero_invoice_import_status && <Button variant="outline" size="sm" className="h-8" onClick={() => void showImportPreview()}>
+      Import Xero invoice lines
+    </Button>}
+    {!hasInvoiceNumber && !job.xero_quote_id && <Button size="sm" className="h-8" onClick={() => { setCreateOpen(true); setError(""); setContactSearch(job.clients?.name || ""); void findContacts(job.clients?.name || "") }}>
       Create Xero invoice
     </Button>}
     <Button variant="outline" size="sm" className="h-8" onClick={() => { setOpen(true); setError(""); setPreview(null); setNumber(job.xero_invoice_number || "") }}>
@@ -210,6 +258,29 @@ export function JobXeroInvoice({ job, onChanged }: { job: CostingJob; onChanged:
           {preview && <Button onClick={() => void submit(linked ? "push" : "link")} disabled={busy}>
             {busy ? "Working…" : linked ? "Replace draft invoice lines" : "Link this invoice"}
           </Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <DialogContent className="sm:max-w-[680px]">
+        <DialogHeader>
+          <DialogTitle>Import Xero invoice lines into RPM</DialogTitle>
+          <DialogDescription>Review the invoice below. Importing connects it to this RPM job and adds its lines as job items for job cards. It does not change the invoice in Xero.</DialogDescription>
+        </DialogHeader>
+        {busy && !importPreview && <p className="text-sm text-muted-foreground">Loading invoice lines…</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {importPreview && <div className="space-y-3 text-sm">
+          <p className="font-medium">{importPreview.invoice.invoiceNumber} · {importPreview.invoice.status} · {importPreview.invoice.lines.length} lines</p>
+          {(importPreview.rpmItemCount || 0) > 0 && <p className="text-amber-700">This RPM job already has {importPreview.rpmItemCount} items. Import is disabled so no existing work is overwritten or duplicated.</p>}
+          <div className="max-h-64 overflow-auto rounded-md border p-3 space-y-2">
+            {importPreview.invoice.lines.map((line, index) => <div key={index} className="border-b pb-2 last:border-0 whitespace-pre-wrap">
+              {line.description || `Invoice line ${index + 1}`}{line.quantity != null ? ` · Qty ${line.quantity}` : ""}{line.unitAmount != null ? ` · $${Number(line.unitAmount).toFixed(2)}` : ""}
+            </div>)}
+          </div>
+        </div>}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+          <Button disabled={busy || !importPreview?.invoice.lines.length || !!importPreview.rpmItemCount} onClick={() => void importLines()}>{busy ? "Importing…" : "Import lines into RPM"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

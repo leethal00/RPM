@@ -7,6 +7,7 @@ import { buildXeroInvoiceLines, type InvoiceCostLine, type InvoiceItem } from "@
 import { siteDisplayName } from "@/lib/site-name"
 import { xeroFetch } from "@/lib/xero-requests"
 import { linkQuoteToInvoice, previewQuoteInvoiceLink, xeroDate } from "@/lib/xero-job-sync"
+import { itemFromXeroLine, type XeroImportLine } from "@/lib/xero-import-lines"
 
 export const dynamic = "force-dynamic"
 
@@ -24,7 +25,7 @@ type XeroInvoice = {
   DueDateString?: string
   DueDate?: string
   Contact?: { Name?: string; ContactID?: string }
-  LineItems?: Array<{ Description?: string; Quantity?: number; UnitAmount?: number; LineAmount?: number }>
+  LineItems?: XeroImportLine[]
   ValidationErrors?: Array<{ Message?: string }>
   HasErrors?: boolean
 }
@@ -108,7 +109,7 @@ async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, incl
   const proposedLines = includeLines
     ? buildXeroInvoiceLines((items || []) as InvoiceItem[], (costs || []) as InvoiceCostLine[], intro)
     : []
-  return { job, proposedLines, clientName: client?.name || "" }
+  return { job, proposedLines, itemCount: items?.length || 0, clientName: client?.name || "" }
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -130,7 +131,19 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ contacts, clientName })
     }
     const number = req.nextUrl.searchParams.get("number")?.trim()
-    const { job, proposedLines } = await jobAndLines(admin, id, !number)
+    const importLines = req.nextUrl.searchParams.get("importLines") === "1"
+    const { job, proposedLines, itemCount } = await jobAndLines(admin, id, !number && !importLines)
+    if (importLines) {
+      if (!job.xero_invoice_number) return NextResponse.json({ error: "Add a Xero invoice number to this job first." }, { status: 409 })
+      const invoice = await getInvoice(job.xero_invoice_id || job.xero_invoice_number, xero.accessToken, xero.tenantId)
+      if (!invoice || !invoice.InvoiceID || (job.xero_invoice_id && invoice.InvoiceID !== job.xero_invoice_id) || invoice.InvoiceNumber !== job.xero_invoice_number) {
+        return NextResponse.json({ error: "The linked invoice identity changed in Xero. Nothing was imported." }, { status: 409 })
+      }
+      if (invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "")) {
+        return NextResponse.json({ error: "Only draft or approved Xero sales invoices can be imported." }, { status: 409 })
+      }
+      return NextResponse.json({ invoice: summary(invoice), proposedLines: [], rpmItemCount: itemCount })
+    }
     if (number && job.xero_quote_id && ["quoted", "approved"].includes(job.status)) {
       const { invoice } = await previewQuoteInvoiceLink(job, number)
       return NextResponse.json({ invoice: summary(invoice), proposedLines: [] })
@@ -157,7 +170,39 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (!admin || !xero) throw new Error("Xero access unavailable.")
     const { id } = await context.params
     const body = await req.json().catch(() => ({})) as { action?: string; invoiceNumber?: string; expectedInvoiceId?: string; expectedUpdatedAt?: string; contactId?: string }
-    const { job, proposedLines } = await jobAndLines(admin, id, body.action !== "link")
+    const { job, proposedLines, itemCount } = await jobAndLines(admin, id, body.action !== "link" && body.action !== "import-lines")
+
+    if (body.action === "import-lines") {
+      if (!job.xero_invoice_number) return NextResponse.json({ error: "Add a Xero invoice number to this job first." }, { status: 409 })
+      if (job.xero_invoice_import_status || itemCount) return NextResponse.json({ error: "This job already has RPM items or imported invoice lines. Existing items were left unchanged." }, { status: 409 })
+      if (!body.expectedInvoiceId || !body.expectedUpdatedAt) return NextResponse.json({ error: "Review the invoice lines before importing." }, { status: 400 })
+      const invoice = await getInvoice(job.xero_invoice_id || job.xero_invoice_number, xero.accessToken, xero.tenantId)
+      if (!invoice || !invoice.InvoiceID || (job.xero_invoice_id && invoice.InvoiceID !== job.xero_invoice_id) || invoice.InvoiceID !== body.expectedInvoiceId || invoice.InvoiceNumber !== job.xero_invoice_number) {
+        return NextResponse.json({ error: "The linked invoice identity changed in Xero. Nothing was imported." }, { status: 409 })
+      }
+      if (invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "")) {
+        return NextResponse.json({ error: "Only draft or approved Xero sales invoices can be imported." }, { status: 409 })
+      }
+      if (invoice.UpdatedDateUTC !== body.expectedUpdatedAt) return NextResponse.json({ error: "The invoice changed in Xero since the preview. Review it again before importing." }, { status: 409 })
+      if (!invoice.LineItems?.length) return NextResponse.json({ error: "The Xero invoice has no lines to import." }, { status: 409 })
+      if (!job.xero_invoice_id) {
+        const { data: claimed, error: claimError } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).neq("id", id).limit(1)
+        if (claimError) throw claimError
+        if (claimed?.length) return NextResponse.json({ error: "This Xero invoice is already linked to another RPM job." }, { status: 409 })
+      }
+      const rows = invoice.LineItems.map((line, index) => ({ job_id: id, ...itemFromXeroLine(line, index) }))
+      const { data: inserted, error: insertError } = await admin.from("costing_items").insert(rows).select("id")
+      if (insertError) throw insertError
+      const update = admin.from("costing_jobs").update({ xero_invoice_id: invoice.InvoiceID, xero_invoice_import_status: invoice.Status }).eq("id", id).eq("xero_invoice_number", job.xero_invoice_number).is("xero_invoice_import_status", null)
+      const guarded = job.xero_invoice_id ? update.eq("xero_invoice_id", job.xero_invoice_id) : update.is("xero_invoice_id", null)
+      const { data: saved, error: statusError } = await guarded.select("id").maybeSingle()
+      if (statusError || !saved) {
+        if (inserted?.length) await admin.from("costing_items").delete().in("id", inserted.map((item) => item.id))
+        if (statusError) throw statusError
+        return NextResponse.json({ error: "This job changed while importing. Refresh and review it again." }, { status: 409 })
+      }
+      return NextResponse.json({ ok: true, imported: rows.length, invoice: summary(invoice) })
+    }
 
     if (body.action === "create") {
       if (job.xero_invoice_id || job.xero_invoice_number || job.xero_quote_id) return NextResponse.json({ error: "This job is already connected to Xero. Refresh the job before continuing." }, { status: 409 })

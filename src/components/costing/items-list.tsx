@@ -86,7 +86,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         })()
         return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [job.id])
+    }, [job.id, job.xero_invoice_import_status])
 
     function unit(it: CostingItem) {
         if (isSectionHeading(it) || isNote(it)) return { cost: 0, sell: 0 }
