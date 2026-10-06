@@ -22,7 +22,9 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
   if (!job.xero_quote_id) return NextResponse.json({ error: "This quote has not been sent to Xero yet." }, { status: 400 })
 
   const result = await syncLinkedQuoteToJob(job)
-  if (!result.ok) return NextResponse.json({ error: result.error || "Could not sync Xero status." }, { status: 500 })
+  if (!result.ok) return NextResponse.json({ error: result.error || "Could not sync Xero status.", retryAfter: result.retryAfter }, {
+    status: result.retryAfter ? 429 : 500, headers: result.retryAfter ? { "Retry-After": String(result.retryAfter) } : undefined,
+  })
 
   return NextResponse.json({
     ok: true,

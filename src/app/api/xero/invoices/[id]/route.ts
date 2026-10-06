@@ -1,9 +1,11 @@
+import { xeroErrorResponse } from "@/lib/xero-error-response"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { isStaffAdmin } from "@/lib/permissions"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { buildXeroInvoiceLines, type InvoiceCostLine, type InvoiceItem } from "@/lib/xero-invoice-lines"
 import { siteDisplayName } from "@/lib/site-name"
+import { xeroFetch } from "@/lib/xero-requests"
 import { linkQuoteToInvoice, previewQuoteInvoiceLink, xeroDate } from "@/lib/xero-job-sync"
 
 export const dynamic = "force-dynamic"
@@ -28,11 +30,11 @@ type XeroInvoice = {
 }
 
 async function xeroJson(url: string, token: string, tenant: string, init?: RequestInit) {
-  const response = await fetch(url, {
+  const response = await xeroFetch(url, {
     ...init,
     headers: { ...xeroHeaders(token, tenant), ...(init?.headers || {}) },
     cache: "no-store",
-  })
+  }, tenant, "invoice-update")
   const text = await response.text()
   const body = text ? JSON.parse(text) : {}
   if (!response.ok) {
@@ -141,6 +143,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     if (!number && invoice?.InvoiceNumber !== job.xero_invoice_number) return NextResponse.json({ error: "The linked invoice number changed in Xero. No update was made." }, { status: 409 })
     return NextResponse.json({ invoice: summary(invoice!), proposedLines })
   } catch (error) {
+        const limited = xeroErrorResponse(error)
+        if (limited) return limited
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not preview invoice." }, { status: 400 })
   }
 }
@@ -237,8 +241,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     return NextResponse.json({ error: "Unknown invoice action." }, { status: 400 })
   } catch (error) {
+        const limited = xeroErrorResponse(error)
+        if (limited) return limited
     console.error("RPM Xero invoice action", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update the Xero invoice." }, { status: 400 })
   }
 }
-
+

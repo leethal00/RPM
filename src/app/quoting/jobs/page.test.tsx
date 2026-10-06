@@ -109,6 +109,27 @@ describe("Xero import site selection", () => {
         expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ clientId: "coates", storeIds: ["mcd-site", "mcd-site-2"], visibleToClient: true })
     })
 
+    it("reviews a fetched batch one job at a time and resets site selections for the next invoice", async () => {
+        const fetchMock = await openInvoice()
+        const first = { invoiceId: "one", invoiceNumber: "INV-1", reference: "First job", contactName: "Coates Signco", total: 10, lines: [] }
+        const second = { ...first, invoiceId: "two", invoiceNumber: "INV-2", reference: "Second job" }
+        fetchMock.mockReset().mockResolvedValueOnce({ ok: true, json: async () => ({ invoices: [first, second], warnings: [] }) })
+            .mockResolvedValue({ ok: true, json: async () => ({ jobId: "job-created" }) })
+        fireEvent.change(screen.getByPlaceholderText("Invoice number, e.g. INV-7569"), { target: { value: "INV-1,INV-2" } })
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Find invoice" })))
+        expect(screen.getByText("1 more invoice to review after this job.")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))
+        fireEvent.change(screen.getByRole("combobox", { name: "Site" }), { target: { value: "mcd-site" } })
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import as Job" })))
+        expect(screen.getByDisplayValue("Second job")).toBeInTheDocument()
+        expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("none")
+        expect(screen.getByRole("checkbox", { name: "Show all sites" })).not.toBeChecked()
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ invoiceNumber: "INV-1", storeIds: ["mcd-site"] })
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Import as Job" })))
+        expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ invoiceNumber: "INV-2", storeIds: [] })
+        expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
     it("keeps selected sites and client visibility on throttling and permits retry after the countdown", async () => {
         const fetchMock = await openInvoice()
         fireEvent.click(screen.getByRole("checkbox", { name: "Show all sites" }))

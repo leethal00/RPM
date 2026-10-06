@@ -1,3 +1,14 @@
+vi.mock("@/lib/xero-requests", async () => {
+  const { XeroRateLimitError, xeroRetryAfter } = await import("@/lib/xero-rate-limit")
+  return {
+    xeroFetch: async (url: string, init: RequestInit) => {
+      const response = await fetch(url, init)
+      if (response.status === 429) throw new XeroRateLimitError(xeroRetryAfter(response.headers?.get("Retry-After") ?? null))
+      return response
+    },
+    cachedXeroJson: async (_tenant: string, _key: string, load: () => Promise<unknown>) => load(),
+  }
+})
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
@@ -27,7 +38,7 @@ vi.mock("@/lib/xero", () => ({
     xeroAdmin: () => ({
         from: (table: string) => {
             if (table === "costing_jobs") return {
-                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }), in: async () => ({ data: [], error: null }) }),
                 insert: (payload: Record<string, unknown>) => {
                     state.job = payload
                     return { select: () => ({ single: async () => ({ data: { id: "job-1" }, error: null }) }) }
@@ -88,7 +99,7 @@ describe("Xero invoice import", () => {
             text: async () => JSON.stringify({ Invoices: [{
                 InvoiceID: "xero-invoice-1", InvoiceNumber: invoiceNumber, Type: "ACCREC", Status: state.status,
                 Reference: "Gateway signs", DateString: "2026-09-21T00:00:00", Total: 1115.5, Contact: { Name: "Brave Design", ContactID: "contact-1" },
-                ...(input.includes("/Invoices/xero-invoice-1") && state.detailLines ? { LineItems: [
+                ...(input.includes("/Invoices?") && state.detailLines ? { LineItems: [
                     { LineItemID: "line-1", Description: "Gateway Plinth Signs\nFabricated steel", Quantity: 2, UnitAmount: 485, LineAmount: 970 },
                     { LineItemID: "line-2", Description: "Discounted fitting", Quantity: 1, UnitAmount: 150, LineAmount: 145.5 },
                 ] } : {}),
@@ -105,8 +116,34 @@ describe("Xero invoice import", () => {
         expect(body.invoice.lines).toHaveLength(2)
         expect(body.invoice.lines[1].lineAmount).toBe(145.5)
         expect(body.invoice.contactName).toBe("Brave Design")
-        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
-        expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("/Invoices/xero-invoice-1?unitdp=4")
+        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
+        expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("InvoiceNumbers=INV-7564&page=1&pageSize=100&unitdp=4")
+    })
+
+    it("fetches a batch in one call, restores requested order and reports missing invoices", async () => {
+        const line = { Description: "Sign", Quantity: 1, UnitAmount: 10 }
+        vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ Invoices: [
+            { InvoiceID: "two", InvoiceNumber: "INV-2", Type: "ACCREC", Status: "DRAFT", LineItems: [line] },
+            { InvoiceID: "one", InvoiceNumber: "INV-1", Type: "ACCREC", Status: "PAID", LineItems: [line] },
+        ] })))
+        const response = await GET(new NextRequest("http://localhost/api/xero/import-job?invoice=INV-1,INV-2,INV-3,INV-1"))
+        const body = await response.json()
+        expect(body.invoices.map((invoice: { invoiceNumber: string }) => invoice.invoiceNumber)).toEqual(["INV-1", "INV-2"])
+        expect(body.warnings).toEqual(["INV-3 was not found in Xero."])
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(state.job).toBeNull()
+    })
+
+    it("rejects oversized batches before contacting Xero", async () => {
+        const response = await GET(new NextRequest(`http://localhost/api/xero/import-job?invoice=${Array.from({ length: 41 }, (_, index) => `INV-${index}`).join(",")}`))
+        expect(response.status).toBe(400)
+        expect(fetch).not.toHaveBeenCalled()
+    })
+
+    it("rejects a changed invoice identity before creating any job", async () => {
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber, invoiceId: "stale-id" }) }))
+        expect(response.status).toBe(409)
+        expect(state.job).toBeNull()
     })
 
     it.each(["GET", "POST"])("returns Xero's wait time for a throttled %s without creating a job", async (method) => {
@@ -124,8 +161,7 @@ describe("Xero invoice import", () => {
     })
 
     it("handles an empty throttled invoice detail response with a fallback wait", async () => {
-        vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ Invoices: [{ InvoiceID: "xero-invoice-1", InvoiceNumber: invoiceNumber }] })))
-            .mockResolvedValueOnce(new Response(null, { status: 429 }))
+        vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 429 }))
         const response = await GET(new NextRequest(url))
         expect(response.status).toBe(429)
         expect(response.headers.get("Retry-After")).toBe("60")
@@ -152,9 +188,8 @@ describe("Xero invoice import", () => {
             { job_id: "job-1", name: "Discounted fitting", qty: 1, unit_price: 150, xero_imported_line: true, xero_line_amount: 145.5 },
         ])
         expect(state.importStatus).toBe("AUTHORISED")
-        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
         expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBeUndefined()
-        expect(vi.mocked(fetch).mock.calls[1][1]?.method).toBeUndefined()
     })
 
     it("keeps a completion date chosen in RPM", async () => {
@@ -278,4 +313,3 @@ describe("Xero invoice import", () => {
         expect(state.job).toBeNull()
     })
 })
-

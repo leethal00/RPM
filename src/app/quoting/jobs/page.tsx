@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { xeroRetryAfter } from "@/lib/xero-rate-limit"
+import { xeroRetryAfter, formatXeroWait } from "@/lib/xero-rate-limit"
 import { createPortal, flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -226,6 +226,7 @@ export default function ActiveJobsPage() {
     const [creatingSite, setCreatingSite] = useState(false)
     const [invoiceSearch, setInvoiceSearch] = useState("")
     const [preview, setPreview] = useState<ImportPreview | null>(null)
+    const [invoiceQueue, setInvoiceQueue] = useState<ImportPreview[]>([])
     const [importError, setImportError] = useState<string | null>(null)
     const [lookingUp, setLookingUp] = useState(false)
     const [importing, setImporting] = useState(false)
@@ -439,6 +440,7 @@ export default function ActiveJobsPage() {
         setImportOpen(true)
         setCreatingSite(false)
         setPreview(null)
+        setInvoiceQueue([])
         setImportError(null)
         setCompletionDate("")
         setSelectedClient("auto")
@@ -481,6 +483,7 @@ export default function ActiveJobsPage() {
         setLookingUp(true)
         setImportError(null)
         setPreview(null)
+        setInvoiceQueue([])
         try {
             const response = await fetch(`/api/xero/import-job?invoice=${encodeURIComponent(invoiceNumber)}`, { cache: "no-store" })
             const body = await response.json()
@@ -490,24 +493,30 @@ export default function ActiveJobsPage() {
                 else setImportError(body?.error || "Could not find that Xero invoice.")
                 return
             }
-            const invoice = body.invoice as ImportPreview
-            setPreview(invoice)
-            setImportTitle(invoice.reference || invoice.invoiceNumber)
-            setCompletionDate(invoice.date?.slice(0, 10) || "")
-            const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
-            setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
-            setSelectedStore("none")
-            setMultipleSites(false)
-            setSelectedStores([])
-            setVisibleToClient(false)
-            setShowAllSites(false)
-            setSiteSearch("")
+            const invoices = (body.invoices || (body.invoice ? [body.invoice] : [])) as ImportPreview[]
+            setImportError(body.warnings?.join(" ") || (invoices.length ? null : "No invoices are available to import."))
+            setInvoiceQueue(invoices.slice(1))
+            if (invoices[0]) selectInvoice(invoices[0])
         } catch (error) {
             setImportError(error instanceof Error ? error.message : "Could not find that Xero invoice.")
         } finally {
             setLookingUp(false)
             xeroRequestBusy.current = false
         }
+    }
+
+    function selectInvoice(invoice: ImportPreview) {
+        setPreview(invoice)
+        setImportTitle(invoice.reference || invoice.invoiceNumber)
+        setCompletionDate(invoice.date?.slice(0, 10) || "")
+        const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
+        setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
+        setSelectedStore("none")
+        setMultipleSites(false)
+        setSelectedStores([])
+        setVisibleToClient(false)
+        setShowAllSites(false)
+        setSiteSearch("")
     }
 
     async function importInvoice() {
@@ -537,9 +546,14 @@ export default function ActiveJobsPage() {
                 throw new Error(body?.error || "Could not import the Xero invoice.")
             }
             toast.success(`${preview.invoiceNumber} imported as an RPM job`)
-            setImportOpen(false)
             mutate()
-            router.push(`/quoting/jobs/${body.jobId}`)
+            if (invoiceQueue.length) {
+                selectInvoice(invoiceQueue[0])
+                setInvoiceQueue((queue) => queue.slice(1))
+            } else {
+                setImportOpen(false)
+                router.push(`/quoting/jobs/${body.jobId}`)
+            }
         } catch (error) {
             setImportError(error instanceof Error ? error.message : "Could not import the Xero invoice.")
         } finally {
@@ -678,7 +692,9 @@ export default function ActiveJobsPage() {
                             </div>
 
                             {importError && <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{importError}</div>}
-                            {retrySeconds > 0 && <p role="status" className="text-sm text-muted-foreground">Retry available in {Math.floor(retrySeconds / 60)}m {retrySeconds % 60}s. Your job details are kept here.</p>}
+                            <p className="text-xs text-muted-foreground">Find one invoice, or enter up to 40 invoice numbers separated by commas. Review the sites for each job before importing.</p>
+                            {invoiceQueue.length > 0 && <p role="status" className="text-sm">{invoiceQueue.length} more {invoiceQueue.length === 1 ? "invoice" : "invoices"} to review after this job.</p>}
+                            {retrySeconds > 0 && <p role="status" className="text-sm text-muted-foreground">Retry available in {formatXeroWait(retrySeconds)}. Your job details are kept here.</p>}
 
                             {preview && <>
                                 <div className="min-w-0 rounded-lg border border-border/60 p-4 space-y-2">
@@ -781,6 +797,7 @@ export default function ActiveJobsPage() {
 
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+                            {invoiceQueue.length > 0 && <Button variant="outline" disabled={importing || lookingUp} onClick={() => { selectInvoice(invoiceQueue[0]); setInvoiceQueue((queue) => queue.slice(1)) }}>Skip this invoice</Button>}
                             <Button onClick={importInvoice} disabled={!preview || importing || lookingUp || retrySeconds > 0}>{importing ? "Importing…" : "Import as Job"}</Button>
                         </DialogFooter>
                         </>}
@@ -791,4 +808,3 @@ export default function ActiveJobsPage() {
         </DashboardLayout>
     )
 }
-

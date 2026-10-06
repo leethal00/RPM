@@ -1,4 +1,6 @@
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
+import { cachedXeroJson, xeroFetch, type XeroActivity } from "./xero-requests"
+import { XeroRateLimitError } from "./xero-rate-limit"
 
 type CostingJobRow = {
   id: string
@@ -20,10 +22,11 @@ type SyncResult = {
   changedToJob?: boolean
   warning?: string
   error?: string
+  retryAfter?: number
 }
 
 export type XeroRow = Record<string, unknown>
-type Connection = { accessToken: string; tenantId: string }
+type Connection = { accessToken: string; tenantId: string; activity?: XeroActivity }
 type LinkedQuote = { job: CostingJobRow; quote: XeroRow }
 const JOB_FIELDS = "id,title,status,reference,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,job_number"
 const OPEN_STATUSES = ["quoted", "approved"]
@@ -31,9 +34,9 @@ const INVOICE_STATUSES = ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID"]
 const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "INVOICED"]
 
 async function xeroJson(path: string, xero: Connection) {
-  const response = await fetch(`${XERO_API}${path}`, {
+  const response = await xeroFetch(`${XERO_API}${path}`, {
     headers: xeroHeaders(xero.accessToken, xero.tenantId), cache: "no-store",
-  })
+  }, xero.tenantId, xero.activity || "quote-check")
   const text = await response.text()
   const body = text ? JSON.parse(text) : {}
   if (!response.ok) throw new Error(body?.Message || body?.Detail || `Xero API error ${response.status}`)
@@ -126,14 +129,28 @@ async function quoteForJob(job: CostingJobRow, xero: Connection) {
   return quote
 }
 
-async function linkedQuotes(xero: Connection, known?: LinkedQuote) {
+async function linkedQuotes(xero: Connection, contacts: string[], known?: LinkedQuote, fresh: boolean | "refresh" = true) {
   const jobs = await openJobs()
   if (known && !jobs.some((job) => job.id === known.job.id)) jobs.push(known.job)
   const rows: LinkedQuote[] = []
-  for (const job of jobs) {
-    // Fail closed if a quote cannot be read: excluding it could conceal an ambiguous match.
-    const quote = known?.job.id === job.id ? known.quote : await quoteForJob(job, xero)
-    rows.push({ job, quote })
+  for (const contact of new Set(contacts)) {
+    const load = async () => {
+      const quotes: XeroRow[] = []
+      for (let page = 1; page <= 20; page++) {
+        const params = new URLSearchParams({ ContactID: contact, page: String(page) })
+        const result = await xeroJson(`/Quotes?${params}`, xero)
+        const batch = (result?.Quotes || []) as XeroRow[]
+        if (batch.some((quote) => contactId(quote) !== contact)) throw new Error("Xero returned quotes for another customer.")
+        quotes.push(...batch)
+        if (batch.length < 100) return quotes
+      }
+      throw new Error("Too many customer quotes to safely check all matches. Link the invoice explicitly.")
+    }
+    const quotes = fresh === true ? await load() : await cachedXeroJson(xero.tenantId, `quotes:${contact}`, load, 300, fresh === "refresh")
+    for (const job of jobs) {
+      const quote = quotes.find((quote) => quote.QuoteID === job.xero_quote_id)
+      if (quote) rows.push({ job, quote })
+    }
   }
   return rows
 }
@@ -228,9 +245,9 @@ export async function syncLinkedQuoteToJob(job: CostingJobRow): Promise<SyncResu
     // A draft invoice is linkable; it does not need approval or an INVOICED quote.
     const invoice = QUOTE_STATUSES.includes(xeroStatus) ? await uniqueInvoice(quote, xero) : null
     if (invoice) {
-      const matches = (await linkedQuotes(xero, { job, quote })).filter((row) => invoiceMatchesQuote(invoice, row.quote))
+      const matches = (await linkedQuotes(xero, [contactId(quote)], { job, quote })).filter((row) => invoiceMatchesQuote(invoice, row.quote))
       if (matches.length !== 1 || matches[0].job.id !== job.id) throw new Error("This invoice matches multiple RPM quotes. No link was changed.")
-      return await activateJobFromInvoice(job, quote, invoice)
+      return await activateJobFromInvoice(job, matches[0].quote, invoice)
     }
     await saveUnlinkedJob(job, {
       xero_quote_number: quote.QuoteNumber || job.xero_quote_number,
@@ -240,28 +257,51 @@ export async function syncLinkedQuoteToJob(job: CostingJobRow): Promise<SyncResu
     return { ok: true, jobId: job.id, xeroStatus, invoiceNumber: null, changedToJob: false,
       warning: "No matching Xero invoice was found. The quote status was checked; no invoice link was changed." }
   } catch (error) {
-    return { ok: false, jobId: job.id, error: error instanceof Error ? error.message : "Xero sync failed" }
+    return { ok: false, jobId: job.id, error: error instanceof Error ? error.message : "Xero sync failed", ...(error instanceof XeroRateLimitError ? { retryAfter: error.retryAfter } : {}) }
   }
 }
 
 export async function syncOpenQuotesForInvoices(invoices: XeroRow[]) {
   const salesInvoices = [...new Map(invoices.filter(isSalesInvoice).map((row) => [String(row.InvoiceID), row])).values()]
   if (!salesInvoices.length) return [] as SyncResult[]
-  const xero = await getValidXero()
-  if (!xero) throw new Error("Xero is not connected")
-  const quotes = await linkedQuotes(xero)
+  const connection = await getValidXero()
+  if (!connection) throw new Error("Xero is not connected")
+  // No open linked quotes means invoice notifications require no further Xero reads.
+  if (!(await openJobs()).length) return [] as SyncResult[]
+  const xero: Connection = { ...connection, activity: "background" }
+  const contacts = salesInvoices.map(contactId).filter(Boolean)
+  let quotes = await linkedQuotes(xero, contacts, undefined, false)
+  // A cached miss must not discard a notification after a quote was edited in
+  // Xero. Refresh the affected customers once before deciding there is no match.
+  const missedContacts = [...new Set(salesInvoices.filter((invoice) => !quotes.some((row) => invoiceMatchesQuote(invoice, row.quote))).map(contactId).filter(Boolean))]
+  if (missedContacts.length) {
+    const refreshed = await linkedQuotes(xero, missedContacts, undefined, "refresh")
+    quotes = [...quotes.filter((row) => !missedContacts.includes(contactId(row.quote))), ...refreshed]
+  }
   const results: SyncResult[] = []
   // Resolve the entire batch before writes so order cannot break ambiguity ties.
   const matches = salesInvoices.map((invoice) => ({ invoice, quotes: quotes.filter((row) => invoiceMatchesQuote(invoice, row.quote)) }))
+  const checkedQuotes = new Map<string, Promise<LinkedQuote[]>>()
+  const checkedInvoices = new Map<string, Promise<XeroRow[]>>()
   for (const match of matches) {
     if (match.quotes.length !== 1) continue
-    const { job, quote } = match.quotes[0]
+    const { job } = match.quotes[0]
     if (matches.filter((other) => other.quotes.some((row) => row.job.id === job.id)).length !== 1) continue
     try {
+      // Cached data is candidate discovery only. Recheck all customer quotes
+      // freshly before writing so edits or repeat orders cannot hide ambiguity.
+      const contact = contactId(match.invoice)
+      if (!checkedQuotes.has(contact)) checkedQuotes.set(contact, linkedQuotes(xero, [contact]))
+      const freshMatches = (await checkedQuotes.get(contact)!).filter((row) => invoiceMatchesQuote(match.invoice, row.quote))
+      if (freshMatches.length !== 1 || freshMatches[0].job.id !== job.id) continue
+      const freshQuote = freshMatches[0].quote
       // Check for competing invoices outside this webhook batch as well.
-      const invoice = await uniqueInvoice(quote, xero)
+      if (!checkedInvoices.has(contact)) checkedInvoices.set(contact, invoicesForContact(freshQuote, xero))
+      const candidates = (await checkedInvoices.get(contact)!).filter((row) => invoiceMatchesQuote(row, freshQuote))
+      if (candidates.length > 1) throw new Error("Multiple Xero invoices match this quote. No link was changed; link the intended invoice explicitly.")
+      const invoice = candidates[0]
       if (!invoice || invoice.InvoiceID !== match.invoice.InvoiceID) continue
-      results.push(await activateJobFromInvoice(job, quote, invoice))
+      results.push(await activateJobFromInvoice(job, freshQuote, invoice))
     } catch (error) {
       results.push({ ok: false, jobId: job.id, error: error instanceof Error ? error.message : "Xero sync failed" })
     }

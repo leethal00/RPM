@@ -1,7 +1,9 @@
+import { xeroErrorResponse } from "@/lib/xero-error-response"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { effectiveBuildSell } from "@/lib/costing/pricing"
+import { xeroFetch } from "@/lib/xero-requests"
 
 export const dynamic = "force-dynamic"
 const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
@@ -42,10 +44,10 @@ function accountCodeForItem(name: string) {
 }
 
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
-    const response = await fetch(url, {
+    const response = await xeroFetch(url, {
         ...init,
         headers: { ...xeroHeaders(accessToken, tenantId), ...(init.headers || {}) },
-    })
+    }, tenantId, "quote-update")
     const text = await response.text()
     const body = text ? JSON.parse(text) : {}
     if (!response.ok) {
@@ -196,6 +198,8 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         return NextResponse.json({ ok: true, quote: updated?.Quotes?.[0] || null })
     } catch (error) {
+        const limited = xeroErrorResponse(error)
+        if (limited) return limited
         console.error("update xero quote", error)
         return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update Xero quote." }, { status: 500 })
     }
