@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SWRConfig } from "swr"
+import userEvent from "@testing-library/user-event"
 import QuotesPage from "./page"
 
 const state = vi.hoisted(() => ({
@@ -33,8 +34,9 @@ vi.mock("@/lib/supabase/client", async () => {
                 return new Response(JSON.stringify(rows), { status: 200, headers: { "Content-Type": "application/json" } })
             }
             const empty = url.searchParams.get("store_id") === "eq.missing"
-            const completed = url.searchParams.get("status")?.includes("approved")
-            const rows = empty ? [] : [{ id: "quote-1", title: "Shop signs", status: completed ? "in_progress" : "quote", client_id: "client-a", clients: { name: "Alpha" }, stores: { name: "Auckland" }, quoted_by_name: "Sam", xero_quote_number: "QU-100", reference: "Ref 1" }]
+            const approved = url.searchParams.get("status")?.includes("approved")
+            const declined = url.searchParams.get("status") === "in.(cancelled)"
+            const rows = empty ? [] : [{ id: "quote-1", title: "Shop signs", status: declined ? "cancelled" : approved ? "in_progress" : "quote", client_id: "client-a", clients: { name: "Alpha" }, stores: { name: "Auckland" }, quoted_by_name: "Sam", xero_quote_number: "QU-100", reference: "Ref 1" }]
             return new Response(JSON.stringify(rows), { status: 200, headers: { "Content-Type": "application/json", "Content-Range": `0-0/${empty ? 0 : 41}` } })
         } },
     })
@@ -106,11 +108,36 @@ describe("Quotes column filters", () => {
         await choose("Filter by status", "Draft Quote")
         await waitFor(() => expect(lastQuery().getAll("status")).toContain("eq.quote"))
         await screen.findByText("Shop signs")
-        fireEvent.click(screen.getByRole("button", { name: "Completed Quotes" }))
-        await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(approved,in_progress,complete,invoiced,cancelled)"]))
+        await userEvent.click(screen.getByRole("tab", { name: "Approved" }))
+        await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(approved,in_progress,complete,invoiced)"]))
         expect(lastQuery().get("client_id")).toBe("is.null")
         await choose("Filter by status", "Accepted")
         await waitFor(() => expect(lastQuery().getAll("status")).toContain("eq.approved"))
+    })
+
+    it("separates declined records, resets pagination and status, and preserves search and client scope", async () => {
+        render(page())
+        await screen.findByText("Shop signs")
+        expect(screen.getAllByRole("tab")).toHaveLength(3)
+        expect(screen.getByRole("tab", { name: "Active" })).toHaveAttribute("aria-selected", "true")
+        await choose("Filter by client", "Beta")
+        fireEvent.change(screen.getByPlaceholderText("Search quote, reference or Xero quote #…"), { target: { value: "sign" } })
+        await choose("Filter by status", "Pending")
+        const pagination = (await screen.findByText("Page 1 of 3")).parentElement!
+        fireEvent.click(pagination.querySelectorAll("button")[2])
+        await waitFor(() => expect(lastQuery().get("offset")).toBe("20"))
+        await userEvent.click(screen.getByRole("tab", { name: "Declined" }))
+        await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(cancelled)"]))
+        expect(lastQuery().get("offset")).toBe("0")
+        expect(lastQuery().get("client_id")).toBe("eq.client-b")
+        expect(lastQuery().get("or")).toContain("title.ilike.%sign%")
+        await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument())
+        expect(screen.queryByTitle("Delete quote")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("Shop signs"))
+        expect(state.push).toHaveBeenCalledWith("/quoting/jobs/quote-1")
+        expect(state.requests.filter(url => !url.searchParams.get("select")?.startsWith("*")).at(-1)!.searchParams.get("status")).toBe("in.(cancelled)")
+        await userEvent.click(screen.getByRole("tab", { name: "Active" }))
+        await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(quote,quoted)"]))
     })
 
     it("respects global customer scope and resets local filters and pagination on scope change", async () => {
