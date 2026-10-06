@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Calculator, Search, Copy, Trash2 } from "lucide-react"
@@ -22,7 +23,12 @@ import type { CostingJob } from "@/types/database"
 
 const PAGE_SIZE = 20
 type QuoteRow = CostingJob & { clients?: { name: string } | null; stores?: { name: string } | null }
-type QuoteView = "active" | "completed"
+type QuoteView = "active" | "approved" | "declined"
+const QUOTE_VIEWS: Record<QuoteView, { label: string; statuses: string[]; empty: string }> = {
+    active: { label: "Active", statuses: ["quote", "quoted"], empty: "No active quotes." },
+    approved: { label: "Approved", statuses: ["approved", "in_progress", "complete", "invoiced"], empty: "No approved quotes yet." },
+    declined: { label: "Declined", statuses: ["cancelled"], empty: "No declined quotes." },
+}
 type FilterRow = Pick<QuoteRow, "store_id" | "stores" | "quoted_by_name" | "xero_quote_number">
 const EMPTY_FILTERS = { client: "all", site: "all", quotedBy: "all", xero: "all", status: "all" }
 const FILTER_TRIGGER_CLASS = "data-[size=sm]:h-6 w-auto min-w-0 max-w-40 gap-1 px-2 py-0 text-xs shadow-none [&>span]:truncate [&>span]:block"
@@ -65,7 +71,7 @@ export default function QuotesPage() {
     const [copyingId, setCopyingId] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<QuoteRow | null>(null)
     const [deleting, setDeleting] = useState(false)
-    const statuses = view === "active" ? ["quote", "quoted"] : ["approved", "in_progress", "complete", "invoiced", "cancelled"]
+    const statuses = QUOTE_VIEWS[view].statuses
     const key = JSON.stringify(["quotes", view, page, clientId, search, filters])
     const hasFilters = search.trim() !== "" || Object.values(filters).some(value => value !== "all")
 
@@ -200,12 +206,13 @@ export default function QuotesPage() {
     const totalCount = result?.count ?? 0
 
     return <DashboardLayout><PageShell width="full" className="px-4 xl:px-6 gap-2 py-4">
-        <PageHeader icon={Calculator} kicker="Job & Project Management" title="Quotes" description="Build active quotes and keep completed quotes as reusable history." actions={<div className="flex items-center gap-2"><XeroConnect /><Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}><DialogTrigger asChild><Button size="sm" className="gap-1.5 h-9"><Plus className="size-3.5" /> New quote</Button></DialogTrigger><DialogContent className="sm:max-w-[600px]"><DialogHeader><DialogTitle>New quote</DialogTitle><DialogDescription>Start a quote. Client and site are optional for ad-hoc / wholesale work.</DialogDescription></DialogHeader><CostingJobForm onSuccess={(id) => { setIsDialogOpen(false); mutate(); if (id) router.push(`/quoting/${id}`) }} onCancel={() => setIsDialogOpen(false)} /></DialogContent></Dialog></div>} />
+        <PageHeader icon={Calculator} kicker="Job & Project Management" title="Quotes" description="Manage active, approved and declined quotes." actions={<div className="flex items-center gap-2"><XeroConnect /><Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}><DialogTrigger asChild><Button size="sm" className="gap-1.5 h-9"><Plus className="size-3.5" /> New quote</Button></DialogTrigger><DialogContent className="sm:max-w-[600px]"><DialogHeader><DialogTitle>New quote</DialogTitle><DialogDescription>Start a quote. Client and site are optional for ad-hoc / wholesale work.</DialogDescription></DialogHeader><CostingJobForm onSuccess={(id) => { setIsDialogOpen(false); mutate(); if (id) router.push(`/quoting/${id}`) }} onCancel={() => setIsDialogOpen(false)} /></DialogContent></Dialog></div>} />
 
-        <div className="inline-flex w-fit rounded-md border border-border/60 bg-muted/30 p-0.5">
-            <button onClick={() => changeView("active")} className={`rounded px-3 py-1 text-sm ${view === "active" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Active Quotes</button>
-            <button onClick={() => changeView("completed")} className={`rounded px-3 py-1 text-sm ${view === "completed" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}>Completed Quotes</button>
-        </div>
+        <Tabs value={view} onValueChange={value => changeView(value as QuoteView)}>
+            <TabsList aria-label="Quote status">
+                {(Object.keys(QUOTE_VIEWS) as QuoteView[]).map(value => <TabsTrigger key={value} value={value}>{QUOTE_VIEWS[value].label}</TabsTrigger>)}
+            </TabsList>
+            <TabsContent key={view} value={view} className="space-y-2">
 
         <div className="flex items-center gap-2"><div className="relative flex-1 max-w-md"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" /><Input placeholder="Search quote, reference or Xero quote #…" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-8 h-8" /></div>{hasFilters && <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>Clear filters</Button>}<span aria-live="polite" className="text-xs text-muted-foreground ml-auto">{totalCount} {totalCount === 1 ? "quote" : "quotes"}</span></div>
 
@@ -243,9 +250,11 @@ export default function QuotesPage() {
                     </Select>
                 </th>
                 <th />
-            </tr></thead><tbody>{error ? <tr><td colSpan={6} role="alert" className="px-3 py-10 text-center text-sm">Could not load quotes. <Button variant="link" onClick={() => mutate()}>Try again</Button></td></tr> : isLoading ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">Loading quotes…</td></tr> : !quotes.length ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">{hasFilters ? "No quotes match these filters." : view === "active" ? "No active quotes." : "No completed quotes yet."}</td></tr> : quotes.map(q => { const meta = STATUS[q.status] || STATUS.quote; return <tr key={q.id} onClick={() => router.push(q.status === "in_progress" || q.status === "complete" || q.status === "invoiced" || q.status === "cancelled" ? `/quoting/jobs/${q.id}` : `/quoting/${q.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30"><td className="px-3 py-1.5"><div className="font-medium leading-tight">{q.title}</div>{q.reference && <div className="text-[11px] leading-tight text-muted-foreground">{q.reference}</div>}</td><td className="px-3 py-1.5 text-muted-foreground">{q.clients?.name || "Ad-hoc"}{q.stores?.name ? ` · ${q.stores.name}` : ""}</td><td className="px-3 py-1.5 text-xs"><div>Quoted: <span className="font-medium">{q.quoted_by_name || "—"}</span></div></td><td className="px-3 py-1.5 tabular-nums">{q.xero_quote_number || "—"}</td><td className="px-3 py-1.5"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td><td className="px-2 py-1"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" className="h-7 gap-1.5 px-2" disabled={copyingId === q.id} onClick={(e) => { e.stopPropagation(); copyQuote(q) }}><Copy className="size-3.5" /> Copy</Button>{view === "active" && <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete quote" onClick={(e) => { e.stopPropagation(); setDeleteTarget(q) }}><Trash2 className="size-3.5" /></Button>}</div></td></tr> })}</tbody></table></div>{!error && !isLoading && <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />}
+            </tr></thead><tbody>{error ? <tr><td colSpan={6} role="alert" className="px-3 py-10 text-center text-sm">Could not load quotes. <Button variant="link" onClick={() => mutate()}>Try again</Button></td></tr> : isLoading ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">Loading quotes…</td></tr> : !quotes.length ? <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">{hasFilters ? "No quotes match these filters." : QUOTE_VIEWS[view].empty}</td></tr> : quotes.map(q => { const meta = STATUS[q.status] || STATUS.quote; return <tr key={q.id} onClick={() => router.push(q.status === "in_progress" || q.status === "complete" || q.status === "invoiced" || q.status === "cancelled" ? `/quoting/jobs/${q.id}` : `/quoting/${q.id}`)} className="border-t border-border/60 cursor-pointer hover:bg-muted/30"><td className="px-3 py-1.5"><div className="font-medium leading-tight">{q.title}</div>{q.reference && <div className="text-[11px] leading-tight text-muted-foreground">{q.reference}</div>}</td><td className="px-3 py-1.5 text-muted-foreground">{q.clients?.name || "Ad-hoc"}{q.stores?.name ? ` · ${q.stores.name}` : ""}</td><td className="px-3 py-1.5 text-xs"><div>Quoted: <span className="font-medium">{q.quoted_by_name || "—"}</span></div></td><td className="px-3 py-1.5 tabular-nums">{q.xero_quote_number || "—"}</td><td className="px-3 py-1.5"><Badge variant="secondary" className={meta.className}>{meta.label}</Badge></td><td className="px-2 py-1"><div className="flex justify-end gap-1"><Button size="sm" variant="outline" className="h-7 gap-1.5 px-2" disabled={copyingId === q.id} onClick={(e) => { e.stopPropagation(); copyQuote(q) }}><Copy className="size-3.5" /> Copy</Button>{view === "active" && <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete quote" onClick={(e) => { e.stopPropagation(); setDeleteTarget(q) }}><Trash2 className="size-3.5" /></Button>}</div></td></tr> })}</tbody></table></div>{!error && !isLoading && <TablePagination page={page} pageCount={Math.ceil(totalCount / PAGE_SIZE)} onPageChange={setPage} totalItems={totalCount} pageSize={PAGE_SIZE} />}
 
         {optionsError && <div role="status" className="text-sm text-muted-foreground">Could not load filter choices. <Button variant="link" onClick={() => refreshOptions()}>Retry filters</Button></div>}
+            </TabsContent>
+        </Tabs>
         <Dialog open={deleteTarget != null} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
             <DialogContent className="sm:max-w-[440px]">
                 <DialogHeader>
