@@ -14,6 +14,7 @@ import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { bomTotals, effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 import { totalBomHours } from "@/lib/costing/bom-hours"
 import { WIRING_MODULES_PER_HOUR, wiringHours } from "@/lib/costing/wiring-hours"
+import { autoHeatShrinkNote, autoHeatShrinkSize, crimpHeatShrinkAllowance, hasManualHeatShrink, type HeatShrinkSize } from "@/lib/costing/crimp-heat-shrink"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
 
 const SUPPLIER_LIST_ID = "costing-suppliers-dl"
@@ -152,6 +153,76 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const [jobStatus, setJobStatus] = useState<string>("draft")
     const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null; unit: string | null }>>({})
     const syncingArgon = useRef(false)
+    const syncingHeatShrink = useRef(false)
+    const heatShrinkSyncPending = useRef(false)
+
+    // Catalogue prices are per 1.2 m length. A 50 mm allowance is 1/24 of a line qty.
+    async function syncCrimpHeatShrink() {
+        heatShrinkSyncPending.current = true
+        if (syncingHeatShrink.current) return
+        syncingHeatShrink.current = true
+        try {
+            while (heatShrinkSyncPending.current) {
+                heatShrinkSyncPending.current = false
+                const { data, error } = await supabase.from("costing_lines").select("*").eq("item_id", item.id)
+                if (error) throw error
+                const current = (data as CostingLine[]) || []
+                const allowance = crimpHeatShrinkAllowance(current)
+                const autoLines = current.filter((line) => autoHeatShrinkSize(line))
+                const savedAutoLines: CostingLine[] = []
+                for (const size of ["6.4", "9.6"] as HeatShrinkSize[]) {
+                    const existing = autoLines.filter((line) => autoHeatShrinkSize(line) === size)
+                    // Existing BOMs often have a hand-entered allowance. Leave that work and its price intact.
+                    const qty = hasManualHeatShrink(current, size) ? 0 : allowance[size]
+                    if (qty <= 0) {
+                        if (existing.length) {
+                            const { error: deleteError } = await supabase.from("costing_lines").delete().in("id", existing.map((line) => line.id))
+                            if (deleteError) throw deleteError
+                        }
+                        continue
+                    }
+                    if (existing[0]) {
+                        const retained = existing[0]
+                        if (Math.abs(Number(retained.qty) - qty) > 0.00001) {
+                            const { data: updated, error: updateError } = await supabase.from("costing_lines").update({ qty }).eq("id", retained.id).select("*").single()
+                            if (updateError) throw updateError
+                            savedAutoLines.push(updated as CostingLine)
+                        } else savedAutoLines.push(retained)
+                        if (existing.length > 1) {
+                            const { error: deleteError } = await supabase.from("costing_lines").delete().in("id", existing.slice(1).map((line) => line.id))
+                            if (deleteError) throw deleteError
+                        }
+                        continue
+                    }
+                    const description = `Heat Shrink - OHUG Dualwall, ${size}mm, 1.2m`
+                    const { data: material, error: materialError } = await supabase.from("materials")
+                        .select("*").eq("description", description).eq("active", true).limit(1).maybeSingle()
+                    if (materialError) throw materialError
+                    if (!material) throw new Error(`${description} is missing from the active materials catalogue`)
+                    const catalogueItem = material as Material
+                    const sort = Math.max(0, ...current.filter((line) => line.section === catalogueItem.section).map((line) => line.sort)) + 1
+                    const { data: added, error: insertError } = await supabase.from("costing_lines").insert({
+                        job_id: jobId, item_id: item.id, section: catalogueItem.section,
+                        subsection: catalogueItem.subsection, sort, material_id: catalogueItem.id,
+                        description: catalogueItem.description, supplier: catalogueItem.supplier,
+                        qty, unit_cost: catalogueItem.unit_cost, markup: catalogueItem.default_markup,
+                        catalogue_unit_cost_snapshot: catalogueItem.unit_cost,
+                        internal_note: autoHeatShrinkNote(size),
+                    }).select("*").single()
+                    if (insertError) throw insertError
+                    savedAutoLines.push(added as CostingLine)
+                    setCatalogueCosts((prices) => ({ ...prices, [catalogueItem.id]: {
+                        unit_cost: Number(catalogueItem.unit_cost), date_last_checked: catalogueItem.date_last_checked, unit: catalogueItem.unit,
+                    } }))
+                }
+                setLines((visible) => [...visible.filter((line) => !autoHeatShrinkSize(line)), ...savedAutoLines])
+            }
+        } catch (error) {
+            toast.error(`Could not calculate crimp heat shrink: ${error instanceof Error ? error.message : String(error)}`)
+        } finally {
+            syncingHeatShrink.current = false
+        }
+    }
 
     // Keep one catalogue Argon/Filler line equal to the combined welding hours.
     async function syncArgonFromWelding(sourceLines: CostingLine[]) {
@@ -249,6 +320,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                 setCatalogueCosts({})
             }
             if (loaded.some(isWeldingTime)) await syncArgonFromWelding(loaded)
+            await syncCrimpHeatShrink()
             if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
             const loadedSections = (secs as CostingSection[]) || []
@@ -292,6 +364,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         setLines((prev) => [...prev, added])
         if (m) setCatalogueCosts((current) => ({ ...current, [m.id]: { unit_cost: Number(m.unit_cost), date_last_checked: m.date_last_checked, unit: m.unit } }))
         if (isWeldingTime(added)) await syncArgonFromWelding(next)
+        if (m && /\bcrimps?\b/i.test(m.description)) await syncCrimpHeatShrink()
         if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
     }
 
@@ -347,6 +420,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         }
         const updated = next.find((line) => line.id === id)
         if ((original && isWeldingTime(original)) || (updated && isWeldingTime(updated))) await syncArgonFromWelding(next)
+        if ((original && /\bcrimps?\b/i.test(original.description)) || (updated && /\bcrimps?\b/i.test(updated.description))) await syncCrimpHeatShrink()
     }
 
     const isQuoteStage = !["in_progress", "complete", "invoiced", "cancelled"].includes(jobStatus)
@@ -402,6 +476,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             return
         }
         if (removed && isWeldingTime(removed)) await syncArgonFromWelding(next)
+        if (removed && /\bcrimps?\b/i.test(removed.description)) await syncCrimpHeatShrink()
     }
 
     // BOM suggestions and newly entered names share the Supplier Directory.
@@ -817,9 +892,13 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                                     <GripVertical className="size-3.5" />
                                                                 </button>
                                                                 <div className="min-w-0 flex-1">
-                                                                    <MaterialCombobox key={l.description} value={l.description} placeholder="Description / type to search…"
+                                                                    {autoHeatShrinkSize(l) ? (
+                                                                        <div className="px-1.5 py-1 text-sm" title="Automatically allowed at 50 mm per matching crimp">
+                                                                            {l.description} <span className="text-[10px] text-muted-foreground">Auto · 50 mm/crimp</span>
+                                                                        </div>
+                                                                    ) : <MaterialCombobox key={l.description} value={l.description} placeholder="Description / type to search…"
                                                                         onSelect={(m) => fillLineFromMaterial(l, m)}
-                                                                        onTextCommit={(v) => patchLine(l.id, { description: v })} />
+                                                                        onTextCommit={(v) => patchLine(l.id, { description: v })} />}
                                                                 </div>
                                                             </div>
                                                         </td>
@@ -832,7 +911,8 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                             </div>
                                                         </td>
                                                         <td className="px-2 py-1">
-                                                            <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />
+                                                            {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length">{Number(l.qty).toFixed(4)}</span>
+                                                                : <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />}
                                                             {showWeights && isGalvPerKg(l) && totalSteelWeight > 0 && Math.abs(Number(l.qty) - totalSteelWeight) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(totalSteelWeight * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
@@ -890,10 +970,10 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                                     className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground p-0.5" title="Move down">
                                                                     <ChevronDown className="size-3.5" />
                                                                 </button>
-                                                                <button onClick={() => removeLine(l.id)}
+                                                                {!autoHeatShrinkSize(l) && <button onClick={() => removeLine(l.id)}
                                                                     className="text-muted-foreground hover:text-destructive transition-colors p-0.5" title="Delete">
                                                                     <Trash2 className="size-3.5" />
-                                                                </button>
+                                                                </button>}
                                                             </div>
                                                         </td>
                                                     </tr>
