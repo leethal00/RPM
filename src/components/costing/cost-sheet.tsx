@@ -23,7 +23,7 @@ const DEFAULT_SECTIONS = ["Materials", "Steel", "Wiring - LED", "Labour", "Pack/
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
-const qtyFormatter = new Intl.NumberFormat("en-NZ", { maximumFractionDigits: 4 })
+const qtyFormatter = new Intl.NumberFormat("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // Derived line maths — mirrors the DB generated columns so edits feel instant.
 const unitSell = (l: CostingLine) =>
@@ -912,7 +912,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                             </div>
                                                         </td>
                                                         <td className="px-2 py-1">
-                                                            {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length">{Number(l.qty).toFixed(4)}</span>
+                                                            {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length; calculated precisely at 50 mm per crimp">{qtyFormatter.format(Number(l.qty))}</span>
                                                                 : <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />}
                                                             {showWeights && isGalvPerKg(l) && totalSteelWeight > 0 && Math.abs(Number(l.qty) - totalSteelWeight) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(totalSteelWeight * 100) / 100 })}
