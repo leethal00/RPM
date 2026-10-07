@@ -445,7 +445,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
                                 const showDetails = hasQuoteFacingDetails(it)
                                 const detailsOpen = expandedDetails.has(it.id)
                                 const detailToggle = showDetails ? <button type="button" onClick={() => toggleQuoteFacingDetails(it.id)} className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground" title={detailsOpen ? "Hide quote details" : "Show quote details"} aria-label={`${detailsOpen ? "Hide" : "Show"} quote details for ${it.name || "item"}`}><ChevronRight className={`size-3.5 transition-transform ${detailsOpen ? "rotate-90" : ""}`} /></button> : <span className="w-4 shrink-0" />
-                                const jobCardLink = build && !job.is_template ? (
+                                const jobCardLink = build && !job.is_template && ["in_progress", "complete", "invoiced", "cancelled"].includes(job.status) ? (
                                     <Link href={`/quoting/${job.id}/job-card?item=${it.id}`} target="_blank" rel="noopener noreferrer"
                                         className="inline-flex size-7 items-center justify-center rounded text-primary hover:bg-muted"
                                         title={`Open job card for ${it.name || "item"}`}
