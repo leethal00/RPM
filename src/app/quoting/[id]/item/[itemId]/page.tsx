@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { PageShell } from "@/components/page-shell"
 import { CostSheet } from "@/components/costing/cost-sheet"
+import { QuotePreviewButton } from "@/components/costing/quote-preview-button"
 import { NumCell } from "@/components/costing/cells"
 import type { CostingItem, CostingJob } from "@/types/database"
 
@@ -162,18 +163,19 @@ export default function ItemCostSheetPage() {
                         onClick={() => router.push(backPath)} disabled={loading}>
                         <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
                     </Button>
-                    {!isTemplate && !loading && item && item.mode === "build" && (
+                    {job && !isTemplate && !loading && (
                         <div className="flex items-center gap-2">
-                            {isJobStage && (
+                            {!isJobStage && <QuotePreviewButton jobId={jobId} />}
+                            {item?.mode === "build" && isJobStage && (
                                 <Button asChild variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
                                     <Link href={`/quoting/${jobId}/job-card?item=${itemId}`} target="_blank" rel="noopener noreferrer">
                                         <FileText className="size-3" /> Job card
                                     </Link>
                                 </Button>
                             )}
-                            <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
+                            {item?.mode === "build" && <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
                                 <Package2 className="size-3" /> Save as product
-                            </Button>
+                            </Button>}
                         </div>
                     )}
                 </div>

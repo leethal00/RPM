@@ -13,6 +13,7 @@ import { PageShell } from "@/components/page-shell"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ItemsList } from "@/components/costing/items-list"
+import { QuotePreviewButton } from "@/components/costing/quote-preview-button"
 import { JobDrawings } from "@/components/costing/job-drawings"
 import { JobEmails } from "@/components/costing/job-emails"
 import { JobInternalNotes } from "@/components/costing/job-internal-notes"
@@ -181,6 +182,7 @@ export default function CostingJobDetailPage() {
                             </div>
                             <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                                 {job.store_id && <Button asChild variant="outline" size="sm" className="h-9 gap-1.5"><Link href={`/stores/${job.store_id}`}><MapPin className="size-3.5" /> View site</Link></Button>}
+                                {!isJobStage && <QuotePreviewButton jobId={job.id} />}
                                 {!job.xero_quote_id && !job.xero_invoice_id && !isJobStage ? (
                                     <Button size="sm" className="h-9 gap-1.5" onClick={sendToXero} disabled={sendingXero}>
                                         {sendingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}

@@ -2,12 +2,10 @@ import { xeroErrorResponse } from "@/lib/xero-error-response"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
-import { effectiveBuildSell } from "@/lib/costing/pricing"
+import { buildXeroQuoteLines, type QuoteCostLine, type QuoteItem } from "@/lib/xero-quote-lines"
 import { xeroFetch } from "@/lib/xero-requests"
 
 export const dynamic = "force-dynamic"
-const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
-const NOTE_CODE = "__RPM_NOTE__"
 
 function normalise(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -15,32 +13,6 @@ function normalise(value: string) {
 
 function shortSiteName(name: string) {
     return name.replace(/\bfreestander\b/gi, "").replace(/\bstand\s*alone\b/gi, "").replace(/\s+/g, " ").trim()
-}
-
-function cleanItemDetails(name: string, details?: string | null) {
-    const raw = (details || "").trim()
-    if (!raw) return ""
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    return raw.replace(new RegExp(`^${escaped}\\s*[:—-]?\\s*`, "i"), "").trim()
-}
-
-
-function quoteItemDescription(item: { name: string; qty: number; build_qty?: number | null; mode?: string; size?: string | null; details?: string | null; delivery?: string | null }) {
-    const details = cleanItemDetails(item.name, item.details)
-    return [
-        item.name,
-        `Qty: ${Number(item.mode === "build" && item.build_qty != null ? item.build_qty : (item.qty || 1))}`,
-        item.size?.trim() ? `Size: ${item.size.trim()}` : null,
-        details ? `Details: ${details}` : null,
-        item.delivery?.trim() || null,
-    ].filter(Boolean).join("\n")
-}
-
-function accountCodeForItem(name: string) {
-    const n = normalise(name)
-    if (n.includes("travel") || n.includes("mileage")) return "250"
-    if (n.includes("material")) return "240"
-    return "200"
 }
 
 async function xeroJson(url: string, init: RequestInit, accessToken: string, tenantId: string) {
@@ -142,45 +114,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const standardTerms = existing.Terms?.trim() || await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId, job.xero_quote_id)
-        const lines = costingLines || []
-        let sectionNumber = 0
-        const pricedLineItems = (items || []).flatMap((item) => {
-            if (item.sign_code === SECTION_HEADING_CODE) {
-                sectionNumber += 1
-                return [
-                    { Description: "--" },
-                    { Description: `${sectionNumber}. ${(item.name || "SECTION").trim().toUpperCase()}` },
-                ]
-            }
-
-            if (item.sign_code === NOTE_CODE) return [{ Description: (item.name || "").trim() }]
-
-            let unitAmount = Number(item.unit_price || 0)
-            if (item.mode === "build") {
-                const calculated = lines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
-                    const sell = line.unit_sell_override != null ? Number(line.unit_sell_override) : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
-                    return sum + Number(line.qty || 0) * sell
-                }, 0)
-                unitAmount = effectiveBuildSell(calculated, item.unit_price)
-            }
-            return {
-                Description: quoteItemDescription(item),
-                Quantity: Number(item.qty || 1),
-                UnitAmount: Number(unitAmount.toFixed(2)),
-                AccountCode: accountCodeForItem(item.name),
-                TaxType: "OUTPUT2",
-            }
-        })
-
-        const introDescription = [
-            job.title.trim(),
-            job.details?.trim(),
-            job.contact_name?.trim() ? `Contact: ${job.contact_name.trim()}` : null,
-        ].filter(Boolean).join("\n")
-        const lineItems = [
-            { Description: introDescription },
-            ...pricedLineItems,
-        ]
+        const lineItems = buildXeroQuoteLines(job, (items || []) as QuoteItem[], (costingLines || []) as QuoteCostLine[])
 
         const visibleReference = job.title.trim()
         const updated = await xeroJson(`${XERO_API}/Quotes`, {
