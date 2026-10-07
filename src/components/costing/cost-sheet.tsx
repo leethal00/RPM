@@ -40,7 +40,9 @@ const isAutoArgon = (l: CostingLine) => {
 }
 // Weight (kg) for galvanising = factor × size × qty (manual; independent of cost qty).
 const lineWeight = (l: CostingLine) => Number(l.wt_factor ?? 0) * Number(l.wt_size ?? 0) * Number(l.wt_qty ?? 0)
+const AUTO_WIRING_NOTE = "RPM auto wiring labour: 25 LED modules per hour"
 const isWiringLabour = (l: CostingLine) => l.description.toLowerCase().includes("wiring labour")
+const isAutoWiringLabour = (l: CostingLine) => l.internal_note === AUTO_WIRING_NOTE
 const isLedDriver = (l: CostingLine) => {
     const description = l.description.toLowerCase()
     return /hlg-\d+h/.test(description) || description.includes("driver") || description.includes("transformer") || description.includes("t/x")
@@ -154,6 +156,8 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const [jobStatus, setJobStatus] = useState<string>("draft")
     const [catalogueCosts, setCatalogueCosts] = useState<Record<string, { unit_cost: number; date_last_checked: string | null; unit: string | null }>>({})
     const syncingArgon = useRef(false)
+    const syncingWiring = useRef(false)
+    const wiringSyncPending = useRef(false)
     const syncingHeatShrink = useRef(false)
     const heatShrinkSyncPending = useRef(false)
 
@@ -222,6 +226,88 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             toast.error(`Could not calculate crimp heat shrink: ${error instanceof Error ? error.message : String(error)}`)
         } finally {
             syncingHeatShrink.current = false
+        }
+    }
+
+    // Keep wiring labour in step with LED modules, using the catalogue rate for new lines.
+    async function syncWiringLabour() {
+        wiringSyncPending.current = true
+        if (syncingWiring.current) return
+        syncingWiring.current = true
+        try {
+            while (wiringSyncPending.current) {
+                wiringSyncPending.current = false
+                const { data, error } = await supabase.from("costing_lines").select("*").eq("item_id", item.id)
+                if (error) throw error
+                const current = (data as CostingLine[]) || []
+                const moduleCount = current
+                    .filter((line) => line.section === "Wiring - LED" && isLedModule(line))
+                    .reduce((total, line) => total + Number(line.qty || 0), 0)
+                const hours = Math.round(wiringHours(Math.max(0, moduleCount)) * 100) / 100
+                const automatic = current.filter(isAutoWiringLabour)
+                const manual = current.find((line) => line.section === "Wiring - LED" && isWiringLabour(line) && !isAutoWiringLabour(line))
+
+                if (hours <= 0) {
+                    if (automatic.length) {
+                        const { error: deleteError } = await supabase.from("costing_lines").delete().in("id", automatic.map((line) => line.id))
+                        if (deleteError) throw deleteError
+                        const removedIds = new Set(automatic.map((line) => line.id))
+                        setLines((visible) => visible.filter((line) => !removedIds.has(line.id)))
+                    }
+                    continue
+                }
+
+                // An existing hand-entered labour estimate is an intentional override.
+                if (manual && automatic.length === 0) continue
+                const target = manual ?? automatic[0]
+                const extras = manual ? automatic : automatic.slice(1)
+                if (extras.length) {
+                    const { error: deleteError } = await supabase.from("costing_lines").delete().in("id", extras.map((line) => line.id))
+                    if (deleteError) throw deleteError
+                }
+                if (target) {
+                    if (Math.abs(Number(target.qty) - hours) > 0.00001) {
+                        const { error: updateError } = await supabase.from("costing_lines").update({ qty: hours }).eq("id", target.id)
+                        if (updateError) throw updateError
+                    }
+                    const removedIds = new Set(extras.map((line) => line.id))
+                    setLines((visible) => {
+                        const retained = visible.filter((line) => !removedIds.has(line.id))
+                        return retained.some((line) => line.id === target.id)
+                            ? retained.map((line) => line.id === target.id ? { ...line, qty: hours } : line)
+                            : [...retained, { ...target, qty: hours }]
+                    })
+                    continue
+                }
+
+                const { data: material, error: materialError } = await supabase.from("materials")
+                    .select("*").eq("section", "Wiring - LED").ilike("description", "Wiring Labour%")
+                    .eq("active", true).limit(1).maybeSingle()
+                if (materialError) throw materialError
+                if (!material) throw new Error("No active Wiring Labour material is available")
+                const catalogueItem = material as Material
+                const sort = Math.max(0, ...current.filter((line) => line.section === "Wiring - LED").map((line) => line.sort)) + 1
+                const { data: added, error: insertError } = await supabase.from("costing_lines").insert({
+                    job_id: jobId, item_id: item.id, section: "Wiring - LED",
+                    subsection: catalogueItem.subsection ?? null, sort, material_id: catalogueItem.id,
+                    description: catalogueItem.description, supplier: catalogueItem.supplier,
+                    qty: hours, unit_cost: catalogueItem.unit_cost, markup: catalogueItem.default_markup,
+                    catalogue_unit_cost_snapshot: catalogueItem.unit_cost,
+                    internal_note: AUTO_WIRING_NOTE,
+                }).select("*").single()
+                if (insertError) throw insertError
+                const line = added as CostingLine
+                setLines((visible) => visible.some((existing) => existing.id === line.id) ? visible : [...visible, line])
+                setCatalogueCosts((prices) => ({ ...prices, [catalogueItem.id]: {
+                    unit_cost: Number(catalogueItem.unit_cost),
+                    date_last_checked: catalogueItem.date_last_checked,
+                    unit: catalogueItem.unit,
+                } }))
+            }
+        } catch (error) {
+            toast.error(`Could not calculate wiring labour: ${error instanceof Error ? error.message : String(error)}`)
+        } finally {
+            syncingWiring.current = false
         }
     }
 
@@ -322,6 +408,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             }
             if (loaded.some(isWeldingTime)) await syncArgonFromWelding(loaded)
             await syncCrimpHeatShrink()
+            await syncWiringLabour()
             if (loaded.some((l) => l.wt_factor != null || l.wt_size != null)) setShowWeights(true)  // steel jobs auto-show
             const order: Record<string, number> = {}
             const loadedSections = (secs as CostingSection[]) || []
@@ -365,6 +452,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         setLines((prev) => [...prev, added])
         if (m) setCatalogueCosts((current) => ({ ...current, [m.id]: { unit_cost: Number(m.unit_cost), date_last_checked: m.date_last_checked, unit: m.unit } }))
         if (isWeldingTime(added)) await syncArgonFromWelding(next)
+        if (added.section === "Wiring - LED" && (isLedModule(added) || isWiringLabour(added))) await syncWiringLabour()
         if (m && /\bcrimps?\b/i.test(m.description)) await syncCrimpHeatShrink()
         if (m?.mtr_weight != null) setShowWeights(true) // steel added -> reveal the weight columns
     }
@@ -421,6 +509,11 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
         }
         const updated = next.find((line) => line.id === id)
         if ((original && isWeldingTime(original)) || (updated && isWeldingTime(updated))) await syncArgonFromWelding(next)
+        if ((original?.section === "Wiring - LED" && isLedModule(original)) ||
+            (updated?.section === "Wiring - LED" && isLedModule(updated)) ||
+            ((patch.description !== undefined || patch.section !== undefined || patch.internal_note !== undefined) &&
+                ((original?.section === "Wiring - LED" && isWiringLabour(original)) ||
+                 (updated?.section === "Wiring - LED" && isWiringLabour(updated))))) await syncWiringLabour()
         if ((original && /\bcrimps?\b/i.test(original.description)) || (updated && /\bcrimps?\b/i.test(updated.description))) await syncCrimpHeatShrink()
     }
 
@@ -477,6 +570,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             return
         }
         if (removed && isWeldingTime(removed)) await syncArgonFromWelding(next)
+        if (removed?.section === "Wiring - LED" && (isLedModule(removed) || isWiringLabour(removed))) await syncWiringLabour()
         if (removed && /\bcrimps?\b/i.test(removed.description)) await syncCrimpHeatShrink()
     }
 
@@ -595,6 +689,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             toast.error(`Could not move line: ${error.message}`)
             return
         }
+        if (isLedModule(line) || isWiringLabour(line)) await syncWiringLabour()
         toast.success(`Moved to ${section}`)
     }
 
@@ -913,7 +1008,10 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length; calculated precisely at 50 mm per crimp">{qtyFormatter.format(Number(l.qty))}</span>
-                                                                : <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, { qty: v ?? 0 })} />}
+                                                                : <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, {
+                                                                qty: v ?? 0,
+                                                                ...(isAutoWiringLabour(l) ? { internal_note: null } : {}),
+                                                            })} />}
                                                             {showWeights && isGalvPerKg(l) && totalSteelWeight > 0 && Math.abs(Number(l.qty) - totalSteelWeight) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(totalSteelWeight * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
@@ -921,12 +1019,11 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                                     = {totalSteelWeight.toFixed(1)} kg
                                                                 </button>
                                                             )}
-                                                            {isWiring && isWiringLabour(l) && wiringHrs > 0 && Math.abs(Number(l.qty) - wiringHrs) > 0.01 && (
-                                                                <button onClick={() => patchLine(l.id, { qty: Math.round(wiringHrs * 100) / 100 })}
-                                                                    className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
-                                                                    title={`Set wiring labour to modules ÷ ${WIRING_MODULES_PER_HOUR}`}>
-                                                                    = {wiringHrs.toFixed(2)} hr
-                                                                </button>
+                                                            {isWiring && isAutoWiringLabour(l) && (
+                                                                <span className="mt-0.5 block text-[10px] leading-tight text-muted-foreground"
+                                                                    title={`Calculated from LED modules ÷ ${WIRING_MODULES_PER_HOUR}`}>
+                                                                    Auto · {WIRING_MODULES_PER_HOUR} modules/hr (edit to override)
+                                                                </span>
                                                             )}
                                                         </td>
                                                         <td className="px-2 py-1">
