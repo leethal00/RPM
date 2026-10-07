@@ -23,6 +23,7 @@ const DEFAULT_SECTIONS = ["Materials", "Steel", "Wiring - LED", "Labour", "Pack/
 
 const nz = (n: number) => n.toLocaleString("en-NZ", { style: "currency", currency: "NZD" })
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
+const qtyFormatter = new Intl.NumberFormat("en-NZ", { maximumFractionDigits: 4 })
 
 // Derived line maths — mirrors the DB generated columns so edits feel instant.
 const unitSell = (l: CostingLine) =>
@@ -999,7 +1000,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                         <tr className="border-t-2 border-border/70">
                                             <td className="px-3 py-1.5 font-medium text-muted-foreground">Subtotal</td>
                                             <td></td>
-                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{secLines.reduce((s, l) => s + Number(l.qty), 0) || ""}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{(() => { const qty = secLines.reduce((s, l) => s + Number(l.qty), 0); return qty ? qtyFormatter.format(qty) : "" })()}</td>
                                             <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{nz(secCost)}</td>
                                             <td></td>
                                             <td></td>
