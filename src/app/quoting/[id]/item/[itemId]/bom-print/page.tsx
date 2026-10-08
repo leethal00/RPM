@@ -121,7 +121,7 @@ export default function BomPrintPage() {
             : effectiveBuildSell(totals.sell / batchQty, item.unit_price)
         : 0
     // The page reserves 210 mm for the table. Keep every line visible, including large BOMs.
-    const lineHeight = Math.min(5.3, (210 - (hasDescription ? 18 : 0) - groups.length * 4 - 6) / Math.max(1, lines.length))
+    const lineHeight = Math.min(5.3, (210 - (hasDescription ? 18 : 0) - groups.length * 4 - 12) / Math.max(1, lines.length))
     const lineFont = Math.min(8.5, Math.max(5, lineHeight * 1.55))
     const issued = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
 
@@ -194,7 +194,10 @@ export default function BomPrintPage() {
                                 </tbody>
                             ))}
                             {!groups.length && <tbody><tr><td colSpan={7} className="bom-empty">No BOM lines yet</td></tr></tbody>}
-                            <tfoot><tr><td>BOM total · {lines.length} lines</td><td colSpan={3}></td><td>{money(totals.cost)}</td><td></td><td>{money(totals.sell)}</td></tr></tfoot>
+                            <tfoot>
+                                <tr><td>BOM total · {lines.length} lines</td><td colSpan={3}></td><td>{money(totals.cost)}</td><td></td><td>{money(totals.sell)}</td></tr>
+                                <tr className="bom-per-unit"><td>Cost per unit · total ÷ {number(batchQty)} batch units</td><td colSpan={3}></td><td>{money(costPerUnit)}</td><td colSpan={2}></td></tr>
+                            </tfoot>
                         </table>
                     </div>
 
@@ -241,7 +244,7 @@ export default function BomPrintPage() {
                 ".bom-quote-description strong { color: #53645b; }",
                 ".bom-details { display: grid; grid-template-columns: 1.7fr 1.2fr .6fr .75fr .7fr; gap: 10px; padding: 2mm 0; border-top: 1px solid #d8e3db; border-bottom: 1px solid #d8e3db; }",
                 ".bom-details strong { display: block; margin-top: 2px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
-                ".bom-table-wrap { flex: 1; min-height: 0; margin-top: 4mm; overflow: hidden; }",
+                ".bom-table-wrap { flex: 0 1 auto; min-height: 0; margin-top: 4mm; overflow: hidden; }",
                 ".bom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }",
                 ".bom-col-description { width: 49%; } .bom-col-qty { width: 7%; } .bom-col-unit { width: 6%; } .bom-col-unit-cost { width: 9.5%; } .bom-col-cost { width: 9.5%; } .bom-col-unit-sell { width: 9.5%; } .bom-col-sell { width: 9.5%; }",
                 ".bom-table th { height: 6mm; padding: 0 3px; background: #115d48; color: white; font-size: 8px; text-align: right; white-space: nowrap; }",
@@ -251,11 +254,12 @@ export default function BomPrintPage() {
                 ".bom-table .bom-group td { border-bottom: 1px solid #c8d9cd; padding-left: 4px; }",
                 ".bom-description { font-weight: 600; } .bom-subsection { color: #738178; font-size: .9em; }",
                 ".bom-table tfoot td { height: 6mm; background: #eaf3ee; color: #115d48; font-size: 9px; font-weight: 800; border-top: 2px solid #115d48; }",
+                ".bom-table tfoot .bom-per-unit td { background: #f2f7f3; border-top: 1px solid #c8d9cd; }",
                 ".bom-empty { height: 30mm; text-align: center !important; color: #829188; }",
                 ".bom-totals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 3mm; }",
                 ".bom-totals > div { padding: 7px 6px; background: #f2f7f3; border-top: 2px solid #115d48; }",
                 ".bom-totals strong { display: block; margin-top: 3px; font-size: 12px; white-space: nowrap; }",
-                ".bom-footer { display: flex; justify-content: space-between; margin-top: 2mm; padding-top: 2mm; border-top: 1px solid #d8e3db; color: #78877e; font-size: 8px; }",
+                ".bom-footer { display: flex; justify-content: space-between; margin-top: auto; padding-top: 2mm; border-top: 1px solid #d8e3db; color: #78877e; font-size: 8px; }",
                 "@media print { html, body { width: 210mm; height: 297mm; margin: 0 !important; padding: 0 !important; overflow: hidden !important; } .bom-print-app { width: 210mm; height: 297mm; min-height: 0; overflow: hidden; background: white; } .bom-print-toolbar, .bom-message { display: none !important; } .bom-sheet { width: 210mm; height: 297mm; margin: 0; box-shadow: none; break-inside: avoid; page-break-inside: avoid; } .bom-header, .bom-table th, .bom-table .bom-group, .bom-table tfoot td, .bom-totals > div { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }",
             ].join("\n")}</style>
         </div>
