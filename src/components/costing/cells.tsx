@@ -6,10 +6,9 @@
 
 const cls = "w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
 
-export function NumCell({ value, onCommit, step, placeholder, align = "right", decimals }: {
+export function NumCell({ value, onCommit, placeholder, align = "right", decimals }: {
     value: number | null
     onCommit: (v: number | null) => void
-    step?: string
     placeholder?: string
     align?: "right" | "left"
     decimals?: number
@@ -18,17 +17,16 @@ export function NumCell({ value, onCommit, step, placeholder, align = "right", d
     return (
         <input
             key={committed}
-            type="number" step={step ?? "any"} defaultValue={committed} placeholder={placeholder}
+            type="text" inputMode="decimal" defaultValue={committed} placeholder={placeholder}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
             onBlur={(e) => {
                 const raw = e.target.value
                 const n = raw.trim() === "" ? null : Number(raw)
-                if (n != null && isNaN(n)) { e.target.value = committed; return }
+                if (n != null && !Number.isFinite(n)) { e.target.value = committed; return }
                 if (n !== value) onCommit(n)
                 else if (decimals != null && n != null) e.target.value = n.toFixed(decimals)
             }}
-            // Hide the number spinner — in Chrome it overlaps right-aligned text and clips the last digit.
-            className={`${cls} tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${align === "right" ? "text-right" : ""}`}
+            className={`${cls} tabular-nums ${align === "right" ? "text-right" : ""}`}
         />
     )
 }
