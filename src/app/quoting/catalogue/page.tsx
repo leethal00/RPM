@@ -479,7 +479,7 @@ export default function CataloguePage() {
             }
             case "unit": return <TextCell value={m.unit ?? ""} placeholder="hour" onCommit={(v) => patch(m.id, { unit: v.trim() || null })} />
             case "unit_cost": return <NumCell value={m.unit_cost} onCommit={(v) => patch(m.id, { unit_cost: v ?? 0 })} />
-            case "default_markup": return <NumCell value={m.default_markup} step="0.05" onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
+            case "default_markup": return <NumCell value={m.default_markup} onCommit={(v) => patch(m.id, { default_markup: v ?? 0 })} />
             case "watts": return m.section === "Wiring - LED"
                 ? <NumCell value={m.watts} placeholder="—" onCommit={(v) => patch(m.id, { watts: v })} />
                 : <span className="text-muted-foreground/40 pl-1.5">—</span>
