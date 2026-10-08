@@ -209,7 +209,7 @@ export default function ItemCostSheetPage() {
                                 <div className="flex items-center gap-2 shrink-0">
                                     <div className="flex items-center gap-1.5">
                                         <label className="text-[11px] text-muted-foreground whitespace-nowrap">Build qty</label>
-                                        <div className="w-16"><NumCell value={item.build_qty ?? item.qty} onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} /></div>
+                                        <div className="w-16"><NumCell value={item.build_qty ?? item.qty} allowExpression onCommit={(v) => patchItem({ build_qty: v == null ? null : v })} /></div>
                                     </div>
                                     {item.build_qty != null && Number(item.build_qty) !== Number(item.qty) && (
                                         <span className="hidden xl:inline text-[11px] text-muted-foreground whitespace-nowrap">
@@ -259,7 +259,7 @@ export default function ItemCostSheetPage() {
                                         <div>
                                             <label className="mb-0.5 block text-[11px] text-muted-foreground">Qty</label>
                                             <div className="h-8 flex items-center rounded-md border border-input bg-background px-1.5">
-                                                {approvedImportLine ? <span className="px-1 text-sm tabular-nums">{item.qty}</span> : <NumCell value={item.qty} onCommit={(v) => patchItem({ qty: v ?? 1 })} />}
+                                                {approvedImportLine ? <span className="px-1 text-sm tabular-nums">{item.qty}</span> : <NumCell value={item.qty} allowExpression onCommit={(v) => patchItem({ qty: v ?? 1 })} />}
                                             </div>
                                         </div>
                                         <div>

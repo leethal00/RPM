@@ -4,27 +4,35 @@
 // committed value: typing stays local; a commit (or external change) updates the
 // prop -> key changes -> input re-seeds. Enter commits (blur); native Tab moves on.
 
+import { toast } from "sonner"
+import { parseQuantityExpression } from "@/lib/costing/quantity-expression"
+
 const cls = "w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 py-1 text-sm outline-none"
 
-export function NumCell({ value, onCommit, placeholder, align = "right", decimals }: {
+export function NumCell({ value, onCommit, placeholder, align = "right", decimals, allowExpression = false }: {
     value: number | null
     onCommit: (v: number | null) => void
     placeholder?: string
     align?: "right" | "left"
     decimals?: number
+    allowExpression?: boolean
 }) {
     const committed = value == null ? "" : (decimals != null ? Number(value).toFixed(decimals) : String(value))
     return (
         <input
             key={committed}
-            type="text" inputMode="decimal" defaultValue={committed} placeholder={placeholder}
+            type="text" inputMode={allowExpression ? "text" : "decimal"} defaultValue={committed} placeholder={placeholder}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur() }}
             onBlur={(e) => {
                 const raw = e.target.value
-                const n = raw.trim() === "" ? null : Number(raw)
-                if (n != null && !Number.isFinite(n)) { e.target.value = committed; return }
+                const n = raw.trim() === "" ? null : (allowExpression ? parseQuantityExpression(raw) : Number(raw))
+                if (raw.trim() !== "" && (n == null || !Number.isFinite(n))) {
+                    e.target.value = committed
+                    if (allowExpression) toast.error("Enter a valid quantity calculation")
+                    return
+                }
                 if (n !== value) onCommit(n)
-                else if (decimals != null && n != null) e.target.value = n.toFixed(decimals)
+                else e.target.value = n == null ? "" : (decimals != null ? n.toFixed(decimals) : String(n))
             }}
             className={`${cls} tabular-nums ${align === "right" ? "text-right" : ""}`}
         />
