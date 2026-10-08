@@ -213,7 +213,7 @@ export default function BomPrintPage() {
                 ".bom-details strong { display: block; margin-top: 2px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
                 ".bom-table-wrap { flex: 1; min-height: 0; margin-top: 4mm; overflow: hidden; }",
                 ".bom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }",
-                ".bom-col-description { width: 43%; } .bom-col-qty { width: 7%; } .bom-col-unit { width: 6%; } .bom-col-unit-cost { width: 11%; } .bom-col-cost { width: 11%; } .bom-col-unit-sell { width: 11%; } .bom-col-sell { width: 11%; }",
+                ".bom-col-description { width: 49%; } .bom-col-qty { width: 7%; } .bom-col-unit { width: 6%; } .bom-col-unit-cost { width: 9.5%; } .bom-col-cost { width: 9.5%; } .bom-col-unit-sell { width: 9.5%; } .bom-col-sell { width: 9.5%; }",
                 ".bom-table th { height: 6mm; padding: 0 3px; background: #115d48; color: white; font-size: 8px; text-align: right; white-space: nowrap; }",
                 ".bom-table th:first-child, .bom-table td:first-child { text-align: left; }",
                 ".bom-table td { padding: 0 3px; border-bottom: 1px solid #dce6df; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }",
