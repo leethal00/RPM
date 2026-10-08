@@ -18,6 +18,10 @@ type PrintJob = {
     stores: { name: string } | null
 }
 
+const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
+
+type SectionItem = Pick<CostingItem, "id" | "name" | "sign_code" | "sort">
+
 type PrintLine = CostingLine & {
     materials?: { unit: string | null } | { unit: string | null }[] | null
 }
@@ -65,6 +69,7 @@ export default function BomPrintPage() {
     const supabase = useMemo(() => createClient(), [])
     const [job, setJob] = useState<PrintJob | null>(null)
     const [item, setItem] = useState<CostingItem | null>(null)
+    const [sectionName, setSectionName] = useState("")
     const [lines, setLines] = useState<PrintLine[]>([])
     const [definitions, setDefinitions] = useState<CostingSection[]>([])
     const [loading, setLoading] = useState(true)
@@ -73,18 +78,23 @@ export default function BomPrintPage() {
     useEffect(() => {
         let active = true
         ;(async () => {
-            const [jobResult, itemResult, lineResult, sectionResult] = await Promise.all([
+            const [jobResult, itemResult, lineResult, sectionResult, itemsResult] = await Promise.all([
                 supabase.from("costing_jobs").select("id,title,reference,job_number,is_template,clients(name),stores(name)").eq("id", jobId).single(),
                 supabase.from("costing_items").select("*").eq("id", itemId).single(),
                 supabase.from("costing_lines").select("*,materials(unit)").eq("item_id", itemId),
                 supabase.from("costing_sections").select("*"),
+                supabase.from("costing_items").select("id,name,sign_code,sort").eq("job_id", jobId).order("sort"),
             ])
             if (!active) return
-            if (jobResult.error || itemResult.error || lineResult.error || sectionResult.error || !itemResult.data || itemResult.data.job_id !== jobId) {
+            if (jobResult.error || itemResult.error || lineResult.error || sectionResult.error || itemsResult.error || !itemResult.data || itemResult.data.job_id !== jobId) {
                 setError("This BOM could not be loaded. Return to the item and try again.")
             } else {
                 setJob(jobResult.data as unknown as PrintJob)
                 setItem(itemResult.data as CostingItem)
+                const orderedItems = (itemsResult.data as SectionItem[]) || []
+                const itemIndex = orderedItems.findIndex((row) => row.id === itemId)
+                const heading = itemIndex < 0 ? undefined : orderedItems.slice(0, itemIndex).reverse().find((row) => row.sign_code === SECTION_HEADING_CODE)
+                setSectionName(heading?.name?.trim() || "")
                 setLines((lineResult.data as PrintLine[]) || [])
                 setDefinitions((sectionResult.data as CostingSection[]) || [])
             }
@@ -128,7 +138,7 @@ export default function BomPrintPage() {
 
                     <div className="bom-title-row">
                         <div>
-                            <p className="bom-eyebrow">Bill of materials</p>
+                            <p className="bom-eyebrow">{sectionName ? `Section · ${sectionName}` : "Bill of materials"}</p>
                             <h1>{item.name || "Untitled build item"}</h1>
                             <p className="bom-subtitle">{job.is_template ? "Product template" : job.title}</p>
                         </div>
@@ -203,7 +213,7 @@ export default function BomPrintPage() {
                 ".bom-brand strong { font-size: 11px; }",
                 ".bom-document-kind { color: #115d48; font-size: 9px; font-weight: 800; letter-spacing: 1px; }",
                 ".bom-title-row { display: flex; justify-content: space-between; gap: 18px; padding: 4mm 0 3mm; }",
-                ".bom-eyebrow { margin: 0 0 2px; color: #3b7964; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }",
+                ".bom-eyebrow { max-width: 138mm; margin: 0 0 2px; color: #3b7964; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
                 ".bom-title-row h1 { max-width: 138mm; margin: 0; font-size: 19px; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }",
                 ".bom-subtitle { margin: 3px 0 0; max-width: 138mm; color: #5d6c62; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
                 ".bom-reference { flex: none; min-width: 30mm; text-align: right; }",
