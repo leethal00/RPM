@@ -13,6 +13,7 @@ import { NumCell, TextCell, SupplierCell } from "./cells"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import { bomTotals, effectiveBuildSell, sellMargin } from "@/lib/costing/pricing"
 import { totalBomHours } from "@/lib/costing/bom-hours"
+import { parseQuantityExpression } from "@/lib/costing/quantity-expression"
 import { WIRING_MODULES_PER_HOUR, wiringHours } from "@/lib/costing/wiring-hours"
 import { autoHeatShrinkNote, autoHeatShrinkSize, crimpHeatShrinkAllowance, hasManualHeatShrink, type HeatShrinkSize } from "@/lib/costing/crimp-heat-shrink"
 import type { CostingItem, CostingLine, CostingSection, Material } from "@/types/database"
@@ -468,8 +469,8 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
 
     async function commitStaged() {
         if (!staged) return
-        const q = Number(stagedQty)
-        if (!stagedQty.trim() || !Number.isFinite(q)) {
+        const q = parseQuantityExpression(stagedQty)
+        if (q == null) {
             toast.error("Enter a valid quantity")
             qtyRef.current?.focus()
             return
@@ -1013,7 +1014,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                         </td>
                                                         <td className="px-2 py-1">
                                                             {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length; calculated precisely at 50 mm per crimp">{qtyFormatter.format(Number(l.qty))}</span>
-                                                                : <NumCell value={l.qty} onCommit={(v) => patchLine(l.id, {
+                                                                : <NumCell value={l.qty} allowExpression onCommit={(v) => patchLine(l.id, {
                                                                 qty: v ?? 0,
                                                                 ...(isAutoWiringLabour(l) ? { internal_note: null } : {}),
                                                             })} />}
@@ -1054,7 +1055,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                         {showWeights && <>
                                                             <td className="px-2 py-1"><NumCell value={l.wt_factor} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_factor: v })} /></td>
                                                             <td className="px-2 py-1"><NumCell value={l.wt_size} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_size: v })} /></td>
-                                                            <td className="px-2 py-1"><NumCell value={l.wt_qty} placeholder="—" onCommit={(v) => patchLine(l.id, { wt_qty: v })} /></td>
+                                                            <td className="px-2 py-1"><NumCell value={l.wt_qty} allowExpression placeholder="—" onCommit={(v) => patchLine(l.id, { wt_qty: v })} /></td>
                                                             <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{lineWeight(l) > 0 ? `${lineWeight(l).toFixed(1)}` : "—"}</td>
                                                         </>}
                                                         <td className="px-1 py-1">
