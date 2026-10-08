@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus, FileText, ExternalLink } from "lucide-react"
+import { ArrowLeft, Layers, Package2, Copy, Check, ImagePlus, FileText, ExternalLink, Printer } from "lucide-react"
 import {
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
@@ -163,17 +163,24 @@ export default function ItemCostSheetPage() {
                         onClick={() => router.push(backPath)} disabled={loading}>
                         <ArrowLeft className="size-3.5" /> {isTemplate ? "Products" : (job?.title || "Job")}
                     </Button>
-                    {job && !isTemplate && !loading && (
+                    {job && !loading && (
                         <div className="flex items-center gap-2">
-                            {!isJobStage && <QuotePreviewButton jobId={jobId} />}
-                            {item?.mode === "build" && isJobStage && (
+                            {item?.mode === "build" && (
+                                <Button asChild variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                                    <Link href={`/quoting/${jobId}/item/${itemId}/bom-print`} target="_blank" rel="noopener noreferrer">
+                                        <Printer className="size-3" /> Print BOM
+                                    </Link>
+                                </Button>
+                            )}
+                            {!isTemplate && !isJobStage && <QuotePreviewButton jobId={jobId} />}
+                            {!isTemplate && item?.mode === "build" && isJobStage && (
                                 <Button asChild variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
                                     <Link href={`/quoting/${jobId}/job-card?item=${itemId}`} target="_blank" rel="noopener noreferrer">
                                         <FileText className="size-3" /> Job card
                                     </Link>
                                 </Button>
                             )}
-                            {item?.mode === "build" && <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
+                            {!isTemplate && item?.mode === "build" && <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={saveAsProduct}>
                                 <Package2 className="size-3" /> Save as product
                             </Button>}
                         </div>
