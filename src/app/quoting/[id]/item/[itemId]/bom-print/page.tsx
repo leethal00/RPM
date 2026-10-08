@@ -107,14 +107,21 @@ export default function BomPrintPage() {
     const groups = groupedLines(lines, definitions)
     const totals = bomTotals(lines)
     const itemQty = Number(item?.qty ?? 1)
+    const rawBatchQty = Number(item?.build_qty ?? item?.qty ?? 1)
+    const batchQty = Number.isFinite(rawBatchQty) && rawBatchQty > 0 ? rawBatchQty : 1
+    const costPerUnit = totals.cost / batchQty
+    const size = item?.size?.trim()
+    const description = item?.details?.trim()
+    const delivery = item?.delivery?.trim()
+    const hasDescription = Boolean(size || description || delivery)
     const importedSell = !!item?.xero_imported_line && item.xero_line_amount != null && itemQty !== 0
     const finalUnitSell = item
         ? importedSell
             ? Number(item.xero_line_amount) / itemQty
-            : effectiveBuildSell(totals.sell, item.unit_price)
+            : effectiveBuildSell(totals.sell / batchQty, item.unit_price)
         : 0
     // The page reserves 210 mm for the table. Keep every line visible, including large BOMs.
-    const lineHeight = Math.min(5.3, (210 - groups.length * 4 - 6) / Math.max(1, lines.length))
+    const lineHeight = Math.min(5.3, (210 - (hasDescription ? 18 : 0) - groups.length * 4 - 6) / Math.max(1, lines.length))
     const lineFont = Math.min(8.5, Math.max(5, lineHeight * 1.55))
     const issued = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
 
@@ -148,10 +155,18 @@ export default function BomPrintPage() {
                         </div>
                     </div>
 
+                    {hasDescription && <div className="bom-quote-description">
+                        <span>Customer quote description</span>
+                        {size && <p><strong>Size:</strong> {size}</p>}
+                        {description && <p><strong>Details:</strong> {description}</p>}
+                        {delivery && <p><strong>Delivery:</strong> {delivery}</p>}
+                    </div>}
+
                     <div className="bom-details">
                         <div><span>Client / site</span><strong>{[job.clients?.name, job.stores?.name].filter(Boolean).join(" · ") || "—"}</strong></div>
                         <div><span>Reference</span><strong>{job.reference || "—"}</strong></div>
-                        <div><span>Item quantity</span><strong>{number(itemQty)}</strong></div>
+                        <div><span>Item qty</span><strong>{number(itemQty)}</strong></div>
+                        <div><span>BOM batch qty</span><strong>{number(batchQty)}</strong></div>
                         <div><span>Prepared</span><strong>{issued}</strong></div>
                     </div>
 
@@ -184,14 +199,15 @@ export default function BomPrintPage() {
                     </div>
 
                     <div className="bom-totals">
-                        <div><span>Final sell / item</span><strong>{money(finalUnitSell)}</strong></div>
-                        <div><span>Final margin</span><strong>{percent(sellMargin(totals.cost, finalUnitSell))}</strong></div>
-                        <div><span>Total cost · {number(itemQty)} items</span><strong>{money(totals.cost * itemQty)}</strong></div>
-                        <div><span>Total final sell</span><strong>{money(finalUnitSell * itemQty)}</strong></div>
+                        <div><span>BOM cost · {number(batchQty)} units</span><strong>{money(totals.cost)}</strong></div>
+                        <div><span>Cost per unit</span><strong>{money(costPerUnit)}</strong></div>
+                        <div><span>Final sell / unit</span><strong>{money(finalUnitSell)}</strong></div>
+                        <div><span>Final margin</span><strong>{percent(sellMargin(costPerUnit, finalUnitSell))}</strong></div>
+                        <div><span>Final sell · {number(itemQty)} quoted</span><strong>{money(finalUnitSell * itemQty)}</strong></div>
                     </div>
 
                     <footer className="bom-footer">
-                        <span>Internal bill of materials · Prices are per item unless noted.</span>
+                        <span>Internal bill of materials · BOM totals cover the batch shown; unit cost = total cost ÷ batch qty.</span>
                         <span>1 / 1</span>
                     </footer>
                 </main>}
@@ -219,7 +235,11 @@ export default function BomPrintPage() {
                 ".bom-reference { flex: none; min-width: 30mm; text-align: right; }",
                 ".bom-reference span, .bom-details span, .bom-totals span { display: block; color: #687970; font-size: 8px; text-transform: uppercase; letter-spacing: .4px; }",
                 ".bom-reference strong { display: block; margin-top: 3px; color: #115d48; font-size: 15px; }",
-                ".bom-details { display: grid; grid-template-columns: 2fr 1.5fr .7fr .7fr; gap: 10px; padding: 2mm 0; border-top: 1px solid #d8e3db; border-bottom: 1px solid #d8e3db; }",
+                ".bom-quote-description { padding: 0 0 2.5mm; font-size: 9px; line-height: 1.3; overflow-wrap: anywhere; }",
+                ".bom-quote-description > span { display: block; margin-bottom: 1mm; color: #3b7964; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }",
+                ".bom-quote-description p { margin: 0 0 .7mm; white-space: pre-wrap; }",
+                ".bom-quote-description strong { color: #53645b; }",
+                ".bom-details { display: grid; grid-template-columns: 1.7fr 1.2fr .6fr .75fr .7fr; gap: 10px; padding: 2mm 0; border-top: 1px solid #d8e3db; border-bottom: 1px solid #d8e3db; }",
                 ".bom-details strong { display: block; margin-top: 2px; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
                 ".bom-table-wrap { flex: 1; min-height: 0; margin-top: 4mm; overflow: hidden; }",
                 ".bom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }",
@@ -232,7 +252,7 @@ export default function BomPrintPage() {
                 ".bom-description { font-weight: 600; } .bom-subsection { color: #738178; font-size: .9em; }",
                 ".bom-table tfoot td { height: 6mm; background: #eaf3ee; color: #115d48; font-size: 9px; font-weight: 800; border-top: 2px solid #115d48; }",
                 ".bom-empty { height: 30mm; text-align: center !important; color: #829188; }",
-                ".bom-totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 3mm; }",
+                ".bom-totals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 3mm; }",
                 ".bom-totals > div { padding: 7px 6px; background: #f2f7f3; border-top: 2px solid #115d48; }",
                 ".bom-totals strong { display: block; margin-top: 3px; font-size: 12px; white-space: nowrap; }",
                 ".bom-footer { display: flex; justify-content: space-between; margin-top: 2mm; padding-top: 2mm; border-top: 1px solid #d8e3db; color: #78877e; font-size: 8px; }",
