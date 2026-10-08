@@ -469,7 +469,12 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     async function commitStaged() {
         if (!staged) return
         const q = Number(stagedQty)
-        await addLine(staged.section, staged.m, staged.sub, isNaN(q) ? 0 : q)
+        if (!stagedQty.trim() || !Number.isFinite(q)) {
+            toast.error("Enter a valid quantity")
+            qtyRef.current?.focus()
+            return
+        }
+        await addLine(staged.section, staged.m, staged.sub, q)
         setStaged(null)
         setStagedAt(null)
         setStagedQty("1")
@@ -739,7 +744,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
             <label className="text-xs text-muted-foreground shrink-0">Qty</label>
             <input
                 ref={qtyRef}
-                type="number" step="any" value={stagedQty} autoFocus
+                type="text" inputMode="decimal" value={stagedQty} autoFocus
                 onChange={(e) => setStagedQty(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === "Enter") { e.preventDefault(); commitStaged() }
@@ -1042,7 +1047,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        <td className="px-2 py-1"><NumCell value={l.markup} step="0.05" onCommit={(v) => patchLine(l.id, { markup: v ?? 0 })} /></td>
+                                                        <td className="px-2 py-1"><NumCell value={l.markup} onCommit={(v) => patchLine(l.id, { markup: v ?? 0 })} /></td>
                                                         <td className="px-2 py-1"><NumCell value={l.unit_sell_override} placeholder={unitSell(l).toFixed(2)} onCommit={(v) => patchLine(l.id, { unit_sell_override: v })} /></td>
                                                         <td className="px-2 py-1 text-right tabular-nums">{nz(lineSell(l))}</td>
                                                         <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">{pct(lineMargin(l))}</td>
