@@ -154,7 +154,7 @@ export function CostingActuals({ job }: { job: CostingJob }) {
                                         <td className="px-3 py-1"><DateCell value={r.order_date} onCommit={(v) => patchMat(r.id, { order_date: v })} /></td>
                                         <td className="px-2 py-1"><TextCell value={r.supplier ?? ""} placeholder="Supplier" onCommit={(v) => patchMat(r.id, { supplier: v || null })} /></td>
                                         <td className="px-2 py-1"><TextCell value={r.description ?? ""} placeholder="Item" onCommit={(v) => patchMat(r.id, { description: v || null })} /></td>
-                                        <td className="px-2 py-1"><NumCell value={r.qty} placeholder="1" onCommit={(v) => patchMat(r.id, { qty: v })} /></td>
+                                        <td className="px-2 py-1"><NumCell value={r.qty} allowExpression placeholder="1" onCommit={(v) => patchMat(r.id, { qty: v })} /></td>
                                         <td className="px-2 py-1"><NumCell value={r.cost} onCommit={(v) => patchMat(r.id, { cost: v })} /></td>
                                         <td className="px-2 py-1 text-right tabular-nums">{nz(Number(r.qty ?? 1) * Number(r.cost ?? 0))}</td>
                                         <td className="px-1 py-1 text-right">
