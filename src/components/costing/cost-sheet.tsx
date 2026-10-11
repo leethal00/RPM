@@ -1013,23 +1013,27 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                                             </div>
                                                         </td>
                                                         <td className="px-2 py-1">
-                                                            {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length; calculated precisely at 50 mm per crimp">{qtyFormatter.format(Number(l.qty))}</span>
-                                                                : <NumCell value={l.qty} allowExpression onCommit={(v) => patchLine(l.id, {
-                                                                qty: v ?? 0,
-                                                                ...(isAutoWiringLabour(l) ? { internal_note: null } : {}),
-                                                            })} />}
+                                                            <div className="flex items-center gap-1">
+                                                                {isWiring && isAutoWiringLabour(l) && (
+                                                                    <span className="shrink-0 text-[10px] text-muted-foreground"
+                                                                        title={`Calculated from LED modules ÷ ${WIRING_MODULES_PER_HOUR}; edit quantity to override`}>
+                                                                        Auto
+                                                                    </span>
+                                                                )}
+                                                                <div className="min-w-0 flex-1">
+                                                                    {autoHeatShrinkSize(l) ? <span className="block text-right tabular-nums" title="Fraction of a 1.2 m catalogue length; calculated precisely at 50 mm per crimp">{qtyFormatter.format(Number(l.qty))}</span>
+                                                                        : <NumCell value={l.qty} allowExpression onCommit={(v) => patchLine(l.id, {
+                                                                        qty: v ?? 0,
+                                                                        ...(isAutoWiringLabour(l) ? { internal_note: null } : {}),
+                                                                    })} />}
+                                                                </div>
+                                                            </div>
                                                             {showWeights && isGalvPerKg(l) && totalSteelWeight > 0 && Math.abs(Number(l.qty) - totalSteelWeight) > 0.01 && (
                                                                 <button onClick={() => patchLine(l.id, { qty: Math.round(totalSteelWeight * 100) / 100 })}
                                                                     className="mt-0.5 text-[10px] leading-tight text-primary hover:underline whitespace-nowrap"
                                                                     title="Set qty to the total steel weight">
                                                                     = {totalSteelWeight.toFixed(1)} kg
                                                                 </button>
-                                                            )}
-                                                            {isWiring && isAutoWiringLabour(l) && (
-                                                                <span className="mt-0.5 block text-[10px] leading-tight text-muted-foreground"
-                                                                    title={`Calculated from LED modules ÷ ${WIRING_MODULES_PER_HOUR}`}>
-                                                                    Auto · {WIRING_MODULES_PER_HOUR} modules/hr (edit to override)
-                                                                </span>
                                                             )}
                                                         </td>
                                                         <td className="px-2 py-1">
