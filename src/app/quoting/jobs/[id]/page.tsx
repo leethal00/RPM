@@ -63,6 +63,7 @@ export default function ActiveJobDetailPage() {
   const [canManageXero, setCanManageXero] = useState(false)
   const [canDeleteJobPhotos, setCanDeleteJobPhotos] = useState(false)
   const [savingJob, setSavingJob] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
   const [deletingJob, setDeletingJob] = useState(false)
 
   const { data, isLoading, mutate } = useSupabaseQuery<ActiveJob | null>(id ? `active-job-${id}` : null, async () => {
@@ -131,6 +132,27 @@ export default function ActiveJobDetailPage() {
     mutate()
   }
 
+  async function changeJobStatus(next: "complete" | "in_progress") {
+    if (!job || changingStatus) return
+    const expected = next === "complete" ? "in_progress" : "complete"
+    if (job.status !== expected) return
+
+    setChangingStatus(true)
+    try {
+      const { data: updated, error } = await supabase.from("costing_jobs")
+        .update({ status: next, updated_at: new Date().toISOString() })
+        .eq("id", job.id).eq("status", expected).select("id").maybeSingle()
+      if (error) throw error
+      if (!updated) throw new Error("The job status changed or you do not have permission. Refresh and try again.")
+      await mutate()
+      toast.success(next === "complete" ? "Job moved to Completed Jobs" : "Job reopened in Active Jobs")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the job status.")
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
   async function deleteJob() {
     if (!job || deletingJob) return
     const jobNumber = job.job_number || job.xero_invoice_number || "no job number"
@@ -169,6 +191,8 @@ export default function ActiveJobDetailPage() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openEdit}>
             <Pencil className="size-3.5"/> Edit
           </Button>
+          {canManageXero && job.status === "in_progress" && <Button size="sm" className="h-8" onClick={() => void changeJobStatus("complete")} disabled={changingStatus}>{changingStatus ? "Completing…" : "Mark complete"}</Button>}
+          {canManageXero && job.status === "complete" && <Button variant="outline" size="sm" className="h-8" onClick={() => void changeJobStatus("in_progress")} disabled={changingStatus}>{changingStatus ? "Reopening…" : "Reopen job"}</Button>}
           <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-pack`}><FileText className="size-3.5"/> Job pack</Link></Button>
           {canManageXero && <JobXeroInvoice job={job} onChanged={() => mutate()} />}
           <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
@@ -181,6 +205,7 @@ export default function ActiveJobDetailPage() {
         {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
         {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
         <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
+        <span>Status: <strong className="text-foreground">{job.status === "complete" ? "Complete" : job.status === "in_progress" ? "In progress" : job.status}</strong></span>
         <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
         <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
         {editingDate ? <span className="inline-flex items-center gap-1.5"><span>Complete by:</span><Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="h-7 w-36 text-xs"/><Button size="xs" onClick={saveCompletionDate}>Save</Button><Button size="xs" variant="ghost" onClick={() => setEditingDate(false)}>Cancel</Button></span> : <button className="hover:underline" onClick={() => { setDateValue(job.completion_date || ""); setEditingDate(true) }}>Complete by: <strong className="text-foreground">{formatDate(job.completion_date)}</strong> <Pencil className="ml-1 inline size-3"/></button>}
