@@ -419,8 +419,100 @@ export default function JobCardPage() {
           </Box>
         </div>
       </Sheet>
+      {selectedDepartments.includes("Electrical") && <ElectricalCheckSheet
+        header={header}
+        number={number}
+        itemName={activeItem?.name || title}
+        quantity={prettyQty(activeItem?.build_qty ?? activeItem?.qty ?? 1)}
+      />}
     </div>
   )
+}
+
+const electricalChecks = [
+  ["Voltage", "All LEDs and drivers are the same voltage"],
+  ["Wire", "All wire is an adequate gauge for the current"],
+  ["Polarity", "All connections have correct positive / negative wiring"],
+  ["Connections", "All connections are crimped and insulated correctly"],
+  ["Terminals", "Any terminal connections are tight"],
+  ["Wires", "All wires are secured with P-clips as needed"],
+  ["Effects", "Any effects are tested and working, e.g. RGB / dimming"],
+  ["Job number", "Noted inside the sign"],
+] as const
+
+export function ElectricalCheckSheet({ header, number, itemName, quantity }: { header: React.ReactNode; number: string; itemName: string; quantity: string }) {
+  return <>
+    <Sheet className="electrical-check-sheet">
+      {header}
+      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: GREEN }}>
+        <div>
+          <h2 className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>ELECTRICAL CHECK SHEET</h2>
+          <p className="text-[10.5px]">Wiring record · circuit diagram</p>
+        </div>
+        <div className="text-right text-[10px] font-bold">1 / 2</div>
+      </div>
+
+      <div className="mt-[3mm] grid grid-cols-2 gap-x-[6mm] gap-y-[2mm] border border-[#b9c5c1] p-[2.5mm] text-[11px]">
+        {(["Wired by", "Date", "Checked by", "Date", "Approved by", "Date"] as const).map((label, index) =>
+          <div key={index} className="flex h-[6mm] items-end gap-[2mm]"><span className="w-[21mm] shrink-0 font-bold">{label}:</span><span className="flex-1 border-b border-[#9eaaa6]" /></div>
+        )}
+      </div>
+
+      <Bar>DESCRIPTION</Bar>
+      <div className="min-h-[18mm] border border-t-0 border-[#b9c5c1] p-[2mm] text-[11.5px]">
+        <strong>{itemName}</strong><span className="ml-[3mm]">Build qty: {quantity}</span>
+        <div className="mt-[5mm] border-b border-[#c7d1ce]" />
+      </div>
+
+      <Bar>CIRCUIT DIAGRAM / SKETCH</Bar>
+      <div className="h-[157mm] border border-t-0 border-[#b9c5c1]" style={{ backgroundImage: "linear-gradient(#e6ecea 1px, transparent 1px), linear-gradient(90deg, #e6ecea 1px, transparent 1px)", backgroundSize: "10mm 10mm" }} />
+      <div className="mt-[1.5mm] text-right text-[9.5px] text-neutral-600">Continue the diagram on an additional page if needed.</div>
+    </Sheet>
+
+    <Sheet className="electrical-check-sheet electrical-check-details">
+      {header}
+      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: GREEN }}>
+        <div>
+          <h2 className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>ELECTRICAL CHECK SHEET</h2>
+          <p className="text-[10.5px]">Actual components · testing · checks</p>
+        </div>
+        <div className="text-right text-[10px] font-bold">2 / 2 · Job {number}</div>
+      </div>
+
+      <Bar>WIRING DETAILS</Bar>
+      <div className="grid grid-cols-2 border-x border-[#b9c5c1] text-[11px]">
+        {[
+          "Type of LEDs used", "Number of LEDs used",
+          "Transformers supplied", "",
+          "Fuse size and quantity", "Watts",
+          "Soak tested (1 hour minimum) by", "Test voltage",
+          "Photos taken by", "Uploaded (Yes / No)",
+        ].map((label, index) => <div key={index} className="flex h-[10mm] items-center gap-[1mm] border-b border-r border-[#b9c5c1] px-[2mm] last:border-r-0">
+          {label && <span className="shrink-0 font-bold">{label}:</span>}
+          <span className="min-w-0 flex-1 border-b border-[#c7d1ce]" />
+        </div>)}
+      </div>
+
+      <Bar>CHECKS</Bar>
+      <table className="w-full table-fixed border-collapse text-[11px]">
+        <thead><tr style={{ background: PRINT_TINT }}>
+          <th className="w-[74%] border border-[#b9c5c1] px-[2mm] py-[1mm] text-left">Check</th>
+          <th className="w-[13%] border border-[#b9c5c1] px-[1mm] py-[1mm]">Yes / No</th>
+          <th className="w-[13%] border border-[#b9c5c1] px-[1mm] py-[1mm]">Checked by</th>
+        </tr></thead>
+        <tbody>{electricalChecks.map(([name, description]) => <tr key={name}>
+          <td className="h-[15mm] border border-[#b9c5c1] px-[2mm]"><strong>{name}:</strong> {description}</td>
+          <td className="border border-[#b9c5c1] px-[1mm] text-center text-[9.5px]"><span className="inline-flex items-center gap-[.8mm]"><CheckBox /> Yes <CheckBox /> No</span></td>
+          <td className="border border-[#b9c5c1]" />
+        </tr>)}</tbody>
+      </table>
+
+      <Bar>NOTES / CORRECTIVE ACTIONS</Bar>
+      <div className="h-[25mm] border border-t-0 border-[#b9c5c1] px-[2mm] pt-[2mm]">
+        <div className="space-y-[6mm]">{rows(3).map((_, index) => <div key={index} className="border-b border-[#c7d1ce]" />)}</div>
+      </div>
+    </Sheet>
+  </>
 }
 
 function PaginatedJobCard({
