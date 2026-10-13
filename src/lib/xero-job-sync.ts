@@ -195,7 +195,7 @@ async function activateJobFromInvoice(job: CostingJobRow, quote: XeroRow, invoic
   await saveUnlinkedJob(job, {
     xero_quote_number: quote.QuoteNumber || job.xero_quote_number,
     xero_invoice_id: invoiceId, xero_invoice_number: invoiceNumber,
-    job_number: invoiceNumber, status: "in_progress", updated_at: now,
+    job_number: invoiceNumber, status: String(invoice.Status).toUpperCase() === "PAID" ? "complete" : "in_progress", updated_at: now,
     ...(dueDate ? { completion_date: dueDate } : {}),
   })
   return { ok: true, jobId: job.id, xeroStatus: String(quote.Status), invoiceNumber, changedToJob: true }

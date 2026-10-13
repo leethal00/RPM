@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
                 store_id: storeIds[0] || null,
                 visible_to_client: body.visibleToClient === true,
                 qty: 1,
-                status: "in_progress",
+                status: invoice.Status === "PAID" ? "complete" : "in_progress",
                 xero_invoice_id: invoice.InvoiceID,
                 xero_invoice_number: invoiceNumber,
                 completion_date: body.completionDate || invoice.DateString?.slice(0, 10) || null,
