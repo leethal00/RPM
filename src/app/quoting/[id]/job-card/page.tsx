@@ -419,8 +419,79 @@ export default function JobCardPage() {
           </Box>
         </div>
       </Sheet>
+      {selectedDepartments.includes("Electrical") && <Sheet className="electrical-check-sheet">
+        {header}
+        <ElectricalCheckSheet
+          itemName={activeItem?.name || title}
+          quantity={prettyQty(activeItem?.build_qty ?? activeItem?.qty ?? 1)}
+          lines={bomLines.filter((line) => !activeItem || line.item_id === activeItem.id)}
+        />
+      </Sheet>}
     </div>
   )
+}
+
+function ElectricalCheckSheet({ itemName, quantity, lines }: { itemName: string; quantity: string; lines: BomLine[] }) {
+  const wiringParts = lines.filter((line) => /\bled\b|module|driver|transformer|power supply|cable|wire|connector|crimp|heat shrink/i.test(line.description) && !materialMeta(line)?.is_labour && !/labou?r/i.test(line.section || ""))
+
+  return <>
+    <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: GREEN }}>
+      <div>
+        <h2 className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>ELECTRICAL CHECK SHEET</h2>
+        <p className="text-[10.5px]">Record the wiring actually installed and the checks completed.</p>
+      </div>
+      <div className="text-right text-[10px]"><strong>Build quantity:</strong> {quantity}</div>
+    </div>
+
+    <div className="mt-[3mm] grid grid-cols-[2fr_1fr_1fr] gap-[2mm] text-[11px]">
+      <div><strong>Item:</strong> {itemName}</div>
+      <div><strong>Wired by:</strong> <span className="inline-block w-[22mm] border-b border-[#9eaaa6]" /></div>
+      <div><strong>Date:</strong> <span className="inline-block w-[22mm] border-b border-[#9eaaa6]" /></div>
+    </div>
+
+    <Bar>PLANNED ELECTRICAL PARTS <span className="font-normal">(from BOM — confirm actuals below)</span></Bar>
+    <table className="w-full table-fixed border-collapse text-[10.5px]">
+      <thead><tr style={{ background: PRINT_TINT }}>
+        <th className="w-[70%] border border-[#b9c5c1] px-[1.5mm] py-[1mm] text-left">Description</th>
+        <th className="w-[12%] border border-[#b9c5c1] px-[1mm] py-[1mm]">BOM qty</th>
+        <th className="w-[18%] border border-[#b9c5c1] px-[1mm] py-[1mm]">Actual qty</th>
+      </tr></thead>
+      <tbody>{Array.from({ length: Math.max(4, Math.min(7, wiringParts.length)) }, (_, index) => {
+        const part = wiringParts[index]
+        return <tr key={part?.id || index}>
+          <td className="h-[6mm] break-words border border-[#b9c5c1] px-[1.5mm]">{part?.description || ""}</td>
+          <td className="border border-[#b9c5c1] text-center">{part ? prettyQty(part.qty) : ""}</td>
+          <td className="border border-[#b9c5c1]" />
+        </tr>
+      })}</tbody>
+    </table>
+    {wiringParts.length > 7 && <p className="mt-[1mm] text-[9px]">Additional BOM electrical parts: {wiringParts.length - 7}. Record these in the notes below.</p>}
+
+    <Bar>ACTUAL WIRING DETAILS</Bar>
+    <table className="w-full table-fixed border-collapse text-[10px]">
+      <thead><tr style={{ background: PRINT_TINT }}>
+        {["Circuit / sign section", "LED type / count", "Driver / rating", "Cable / connection", "Voltage / current"].map((label) =>
+          <th key={label} className="border border-[#b9c5c1] px-[1mm] py-[1mm] text-left">{label}</th>
+        )}
+      </tr></thead>
+      <tbody>{rows(5).map((_, index) => <tr key={index}>{rows(5).map((__, cell) => <td key={cell} className="h-[10mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+    </table>
+
+    <div className="mt-[2mm] grid grid-cols-2 gap-[2mm]">
+      <Box title="CHECKS" className="h-[47mm]">
+        <Checks items={["Cable routes and protection checked", "Connections and polarity checked", "Drivers matched to connected load", "Earth / bonding checked where applicable", "Electrical operation tested", "Defects or changes recorded below"]} tight />
+      </Box>
+      <Box title="TEST RESULTS / NOTES" className="h-[47mm]">
+        <div className="space-y-[7mm] pt-[5mm]">{rows(4).map((_, index) => <div key={index} className="border-b border-[#b9c5c1]" />)}</div>
+      </Box>
+    </div>
+
+    <div className="mt-[3mm] grid grid-cols-3 gap-[5mm] text-[11px]">
+      <SignLine label="Checked by" />
+      <SignLine label="Signature" />
+      <SignLine label="Date" />
+    </div>
+  </>
 }
 
 function PaginatedJobCard({

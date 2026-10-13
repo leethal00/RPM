@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, FileText, Printer } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { inferDepartments } from "@/lib/job-card-departments"
 
 type Item = {
   id: string
@@ -39,19 +40,27 @@ export default function JobPackPage() {
   const supabase = useMemo(() => createClient(), [])
   const [job, setJob] = useState<Job | null>(null)
   const [items, setItems] = useState<Item[]>([])
+  const [electricalItemIds, setElectricalItemIds] = useState<string[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [includeSummary, setIncludeSummary] = useState(true)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     ;(async () => {
-      const [{ data: jobData }, { data: itemData }] = await Promise.all([
+      const [{ data: jobData }, { data: itemData }, { data: lineData }] = await Promise.all([
         supabase.from("costing_jobs").select("id,title,job_number,xero_invoice_number,clients(name),stores(name)").eq("id", id).single(),
         supabase.from("costing_items").select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort").eq("job_id", id).order("sort"),
+        supabase.from("costing_lines").select("item_id,section,subsection,description").eq("job_id", id),
       ])
       const nextItems = ((itemData || []) as Item[]).filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+      const lines = (lineData || []) as { item_id: string | null; section: string | null; subsection: string | null; description: string | null }[]
       setJob(jobData as Job)
       setItems(nextItems)
+      setElectricalItemIds(nextItems.filter((item) => item.mode === "build" && inferDepartments(
+        item.name,
+        item.details || "",
+        lines.filter((line) => line.item_id === item.id),
+      ).includes("Electrical")).map((item) => item.id))
       setSelected(nextItems.filter((item) => item.mode === "build").map((item) => item.id))
       setLoading(false)
     })()
@@ -61,6 +70,7 @@ export default function JobPackPage() {
   if (!job) return <div className="p-8 text-sm text-muted-foreground">Job not found.</div>
 
   const builds = items.filter((item) => item.mode === "build")
+  const selectedElectricalCount = selected.filter((itemId) => electricalItemIds.includes(itemId)).length
   const client = [job.clients?.name, job.stores?.name].filter(Boolean).join(" · ")
   const number = (job.job_number || job.xero_invoice_number || "").replace(/^INV-/i, "")
 
@@ -105,6 +115,7 @@ export default function JobPackPage() {
                     <div className="mt-0.5 text-sm text-muted-foreground">
                       Qty {qtyFor(item)}{item.size ? ` · ${item.size}` : ""}
                     </div>
+                    {electricalItemIds.includes(item.id) && <div className="mt-1 text-sm font-medium">Electrical check sheet included</div>}
                     {item.details && <div className="mt-1 max-w-2xl whitespace-pre-wrap text-sm">{item.details}</div>}
                   </div>
                 </div>
@@ -120,6 +131,7 @@ export default function JobPackPage() {
           <div className="mt-5 rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
             <strong className="text-foreground">Selected pack:</strong> {includeSummary ? "Summary" : "No summary"}
             {selected.length ? ` + ${selected.length} BOM job card${selected.length === 1 ? "" : "s"}` : ""}
+            {selectedElectricalCount > 0 && ` (including ${selectedElectricalCount} electrical check sheet${selectedElectricalCount === 1 ? "" : "s"})`}
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">

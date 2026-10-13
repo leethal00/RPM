@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import JobCardPage from "./page"
 
 let selectedItemId: string | null = null
+let lines: { id: string; item_id: string; section: string; subsection: string; description: string; qty: number; materials: null }[] = []
 
 const items = [
   { id: "first", name: "Front sign", sign_code: null, mode: "build", qty: 1, build_qty: 1, size: null, details: null, delivery: null, internal_notes: "Use the blue backing\nCheck the wiring", sort: 1, image_path: null },
@@ -20,7 +21,7 @@ vi.mock("@/lib/supabase/client", () => ({
       select: () => ({
         eq: () => ({
           single: async () => ({ data: { id: "job", title: "Signs", created_at: "2026-09-24", clients: { name: "Client" }, stores: null } }),
-          order: async () => ({ data: table === "costing_items" ? items : [] }),
+          order: async () => ({ data: table === "costing_items" ? items : lines }),
         }),
       }),
     }),
@@ -29,7 +30,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }))
 
 describe("production job card internal BOM notes", () => {
-  beforeEach(() => { selectedItemId = null })
+  beforeEach(() => { selectedItemId = null; lines = [] })
 
   it("shows each private note on the full job card", async () => {
     const { container } = render(<JobCardPage />)
@@ -60,5 +61,22 @@ describe("production job card internal BOM notes", () => {
     expect(card.getByText("Front sign")).toBeInTheDocument()
     expect(card.queryByText("Side sign")).not.toBeInTheDocument()
     expect(card.queryByText("Keep this note private", { exact: false })).not.toBeInTheDocument()
+  })
+
+  it("adds a printable electrical check sheet when the selected BOM includes wiring", async () => {
+    selectedItemId = "first"
+    lines = [{ id: "led", item_id: "first", section: "Electrical", subsection: "LED", description: "LED modules", qty: 20, materials: null }]
+    const { container } = render(<JobCardPage />)
+    await waitFor(() => expect(container.querySelector(".electrical-check-sheet")).not.toBeNull())
+    const sheet = within(container.querySelector<HTMLElement>(".electrical-check-sheet")!)
+    expect(sheet.getByText("ELECTRICAL CHECK SHEET")).toBeInTheDocument()
+    expect(sheet.getByText("LED modules")).toBeInTheDocument()
+  })
+
+  it("does not add an electrical check sheet for a non-electrical build", async () => {
+    selectedItemId = "second"
+    const { container } = render(<JobCardPage />)
+    await waitFor(() => expect(container.querySelector(".safety-sheet")).not.toBeNull())
+    expect(container.querySelector(".electrical-check-sheet")).toBeNull()
   })
 })
