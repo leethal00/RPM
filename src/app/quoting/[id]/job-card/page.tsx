@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { paginateJobCard, type JobCardPagePlan } from "@/lib/job-card-pagination"
+import { inferDepartments } from "@/lib/job-card-departments"
 import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
 import type { CostingJob } from "@/types/database"
 
@@ -120,43 +121,6 @@ function deliveryLabel(value?: string | null) {
   if (!value) return ""
   if (value.toLowerCase() === "ex-factory") return "Ex-factory"
   return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function inferDepartments(title: string, details: string, lines: BomLine[]) {
-  const result = new Set<string>()
-
-  // Department names in the BOM section/subsection are the strongest signal.
-  const sectionText = lines
-    .map((line) => `${line.section || ""} ${line.subsection || ""}`)
-    .join(" ")
-    .toLowerCase()
-
-  if (/\bcnc\b|router|routing|milling|lathe/.test(sectionText)) result.add("CNC")
-  if (/metal|steel|aluminium|aluminum|weld|fabricat|bracket|shs|rhs/.test(sectionText)) result.add("Metal")
-  if (/\bfab\b|fabrication|assembly|assemble|fold|press|guillotine/.test(sectionText)) result.add("Fab")
-  if (/electrical|illumin|\bled\b|wiring|power|transformer/.test(sectionText)) result.add("Electrical")
-  if (/vinyl|graphic|print|laminat/.test(sectionText)) result.add("Vinyl")
-  if (/install|site work|service|repair|maintenance/.test(sectionText)) result.add("Install")
-
-  // Descriptions are only a fallback. Strip obvious exclusions so text such as
-  // "no allowance for vinyl work" does not incorrectly route the job to Vinyl.
-  const descriptiveText = `${title} ${details} ${lines.map((line) => line.description || "").join(" ")}`
-    .toLowerCase()
-    .replace(/no allowance for[^.\n]*/g, "")
-    .replace(/no [^.\n]*work/g, "")
-    .replace(/exclude(?:d|s|ing)?[^.\n]*/g, "")
-    .replace(/not included[^.\n]*/g, "")
-    .replace(/not required[^.\n]*/g, "")
-
-  if (/\bcnc\b|router|routing|milling|lathe/.test(descriptiveText)) result.add("CNC")
-  if (/steel|aluminium|aluminum|weld|metal|bracket|shs|rhs/.test(descriptiveText)) result.add("Metal")
-  if (/illumin|electrical|\bled\b|wiring|power|transformer/.test(descriptiveText)) result.add("Electrical")
-  if (/vinyl|graphic|print|laminat/.test(descriptiveText)) result.add("Vinyl")
-  if (/servic|repair|site work|install|maintenance/.test(descriptiveText)) result.add("Install")
-
-  // Do not infer Fab from generic words like "folded" or "fabricated" in a
-  // customer description; Fab should come from the BOM routing itself.
-  return Array.from(result)
 }
 
 export default function JobCardPage() {
