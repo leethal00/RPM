@@ -198,6 +198,11 @@ describe("manual Check Xero and webhook linkback", () => {
     expect(state.writes[0]).not.toHaveProperty("xero_invoice_synced_at")
     expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method)).toBe(true)
   })
+  it("completes a job immediately when its newly linked invoice is already paid", async () => {
+    mockXero([quote], [[{ ...invoice, Status: "PAID" }]])
+    expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: true, changedToJob: true })
+    expect(state.writes[0]).toMatchObject({ xero_invoice_id: invoice.InvoiceID, status: "complete" })
+  })
   it("refreshes the stale QU-3499 label using the actual QU-3504 identity and links INV-7599", async () => {
     mockXero([{ ...quote, QuoteNumber: "QU-3504", Status: "INVOICED", Total: 3934.24, LineItems: [{ ...line, UnitAmount: 3421.08 }] }])
     expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: true, invoiceNumber: "INV-7599" })

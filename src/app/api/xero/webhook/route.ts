@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "crypto"
 import { after, NextRequest, NextResponse } from "next/server"
 import { getValidXero, xeroAdmin, XERO_API, xeroHeaders } from "@/lib/xero"
 import { syncOpenQuotesForInvoices, type XeroRow } from "@/lib/xero-job-sync"
+import { completePaidLinkedJobs } from "@/lib/xero-paid-job-sync"
 import { xeroFetch } from "@/lib/xero-requests"
 import { XeroRateLimitError } from "@/lib/xero-rate-limit"
 
@@ -67,6 +68,10 @@ async function processInvoiceEvents() {
     for (const result of results.filter((result) => !result.ok)) {
       console.error("Xero webhook linkback failed", result.jobId, result.error)
     }
+    // Quote linkback runs first: a paid invoice may have created the RPM job
+    // through this same notification. Keep the queued event if either step fails.
+    const completed = results.every((result) => result.ok)
+      ? await completePaidLinkedJobs(invoices) : []
     if (results.every((result) => result.ok)) {
       for (const row of processed) {
         // A newer notification for this invoice must survive an older worker.
@@ -80,6 +85,7 @@ async function processInvoiceEvents() {
       invoices: invoices.length,
       matched: results.length,
       activated: activated.length,
+      completed: completed.length,
     })
   } catch (error) {
     console.error("Xero webhook background sync failed", error)

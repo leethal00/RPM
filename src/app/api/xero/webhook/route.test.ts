@@ -2,7 +2,7 @@ import { createHmac } from "crypto"
 import { NextRequest } from "next/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 type Pending = { tenant_id: string; cache_key: string; payload: { resourceId: string; queueToken?: string }; expires_at: string }
-const state = vi.hoisted(() => ({ pending: new Map<string, Pending>(), callbacks: [] as (() => Promise<void>)[], blocked: false, failQueue: false, newer: false }))
+const state = vi.hoisted(() => ({ pending: new Map<string, Pending>(), callbacks: [] as (() => Promise<void>)[], blocked: false, failQueue: false, newer: false, paid: false, failCompletion: false, completed: [] as string[] }))
 vi.mock("next/server", async (original) => ({ ...await original<typeof import("next/server")>(), after: (callback: () => Promise<void>) => { state.callbacks.push(callback) } }))
 vi.mock("@/lib/xero", () => ({
     XERO_API: "https://xero.test", xeroHeaders: () => ({}), getValidXero: async () => ({ accessToken: "secret", tenantId: "tenant" }),
@@ -27,6 +27,11 @@ vi.mock("@/lib/xero-job-sync", () => ({ syncOpenQuotesForInvoices: async () => {
     if (state.newer) for (const row of state.pending.values()) row.payload.queueToken = "newer-event"
     return []
 } }))
+vi.mock("@/lib/xero-paid-job-sync", () => ({ completePaidLinkedJobs: async (invoices: { InvoiceID: string; Status: string }[]) => {
+    if (state.failCompletion) throw new Error("Database unavailable")
+    state.completed.push(...invoices.filter((invoice) => invoice.Status === "PAID").map((invoice) => invoice.InvoiceID))
+    return state.completed
+} }))
 import { POST } from "./route"
 function request(events = [{ tenantId: "tenant", resourceId: "invoice-one", eventCategory: "INVOICE" }], valid = true) {
     const body = JSON.stringify({ events })
@@ -35,9 +40,9 @@ function request(events = [{ tenantId: "tenant", resourceId: "invoice-one", even
     })
 }
 beforeEach(() => {
-    state.pending.clear(); state.callbacks = []; state.blocked = false; state.failQueue = false; state.newer = false
+    state.pending.clear(); state.callbacks = []; state.blocked = false; state.failQueue = false; state.newer = false; state.paid = false; state.failCompletion = false; state.completed = []
     vi.stubEnv("XERO_WEBHOOK_KEY", "test-key")
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ Invoices: [{ InvoiceID: "invoice-one", Type: "ACCREC" }] }))))
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ Invoices: [{ InvoiceID: "invoice-one", Type: "ACCREC", Status: state.paid ? "PAID" : "DRAFT" }] }))))
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe("durable Xero invoice notifications", () => {
@@ -71,6 +76,23 @@ describe("durable Xero invoice notifications", () => {
         state.failQueue = true
         expect((await POST(request())).status).toBe(503)
         expect(state.callbacks).toHaveLength(0)
+    })
+    it("processes paid invoices before clearing the notification", async () => {
+        state.paid = true
+        await POST(request())
+        await state.callbacks[0]()
+        expect(state.completed).toEqual(["invoice-one"])
+        expect(state.pending.size).toBe(0)
+    })
+    it("keeps the notification when job completion fails, then retries", async () => {
+        state.paid = true; state.failCompletion = true
+        await POST(request())
+        await state.callbacks[0]()
+        expect(state.pending.size).toBe(1)
+        state.failCompletion = false
+        await state.callbacks[0]()
+        expect(state.completed).toEqual(["invoice-one"])
+        expect(state.pending.size).toBe(0)
     })
     it("does not discard a newer notification when an older worker completes", async () => {
         state.newer = true

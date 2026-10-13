@@ -208,7 +208,8 @@ describe("Xero invoice import", () => {
             invoiceNumber, clientId: "coates", storeIds: ["timaru", "dunedin", "timaru"], showAllSites: true, visibleToClient: true,
         }) }))
         expect(response.status).toBe(200)
-        expect(state.job).toMatchObject({ client_id: "coates", store_id: "timaru", visible_to_client: true })
+        expect(state.job).toMatchObject({ client_id: "coates", store_id: "timaru", visible_to_client: true,
+            status: status === "PAID" ? "complete" : "in_progress" })
         expect(state.linkedSites).toEqual([
             { job_id: "job-1", store_id: "timaru", sort: 0 }, { job_id: "job-1", store_id: "dunedin", sort: 1 },
         ])
