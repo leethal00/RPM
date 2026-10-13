@@ -68,9 +68,12 @@ describe("production job card internal BOM notes", () => {
     lines = [{ id: "led", item_id: "first", section: "Electrical", subsection: "LED", description: "LED modules", qty: 20, materials: null }]
     const { container } = render(<JobCardPage />)
     await waitFor(() => expect(container.querySelector(".electrical-check-sheet")).not.toBeNull())
-    const sheet = within(container.querySelector<HTMLElement>(".electrical-check-sheet")!)
-    expect(sheet.getByText("ELECTRICAL CHECK SHEET")).toBeInTheDocument()
-    expect(sheet.getByText("LED modules")).toBeInTheDocument()
+    const sheets = container.querySelectorAll<HTMLElement>(".electrical-check-sheet")
+    expect(sheets).toHaveLength(2)
+    expect(within(sheets[0]).getByText("CIRCUIT DIAGRAM / SKETCH")).toBeInTheDocument()
+    expect(within(sheets[1]).getByText("Type of LEDs used:")).toBeInTheDocument()
+    expect(within(sheets[1]).getByText("Soak tested (1 hour minimum) by:")).toBeInTheDocument()
+    expect(within(sheets[1]).getByText("All connections are crimped and insulated correctly", { exact: false })).toBeInTheDocument()
   })
 
   it("does not add an electrical check sheet for a non-electrical build", async () => {
