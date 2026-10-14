@@ -40,15 +40,17 @@ export function CustomerManager() {
 
     const fetchCustomers = async () => {
         setLoading(true)
-        const { data, error } = await supabase
-            .from('clients')
-            .select('*')
-            .order('name')
-
-        if (error) {
-            toast.error(error.message)
-        } else {
-            setCustomers(data || [])
+        try {
+            const all: Client[] = []
+            for (let offset = 0; offset < 200000; offset += 1000) {
+                const { data, error } = await supabase.from('clients').select('*').order('name').range(offset, offset + 999)
+                if (error) throw error
+                all.push(...((data || []) as Client[]))
+                if ((data || []).length < 1000) break
+            }
+            setCustomers(all)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not load customers")
         }
         setLoading(false)
     }

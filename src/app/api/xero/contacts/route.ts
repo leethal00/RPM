@@ -57,13 +57,23 @@ export async function POST(request: Request) {
         const xero = await getValidXero()
         if (!xero) return NextResponse.json({ error: "Xero is not connected." }, { status: 409 })
         const contacts = await allCustomerContacts(xero.accessToken, xero.tenantId)
-        const { data: clients, error: clientsError } = await admin.from("clients").select("id,name,contact_email")
-        if (clientsError) throw clientsError
-        const { data: links, error: linksError } = await admin.from("xero_client_contacts").select("xero_contact_id,client_id,preferred")
-        if (linksError) throw linksError
+        const clients: Array<{ id: string; name: string; contact_email: string | null }> = []
+        const links: Array<{ xero_contact_id: string; client_id: string; preferred: boolean }> = []
+        for (let offset = 0; offset < 200000; offset += 1000) {
+            const { data, error } = await admin.from("clients").select("id,name,contact_email").order("id").range(offset, offset + 999)
+            if (error) throw error
+            clients.push(...(data || []))
+            if ((data || []).length < 1000) break
+        }
+        for (let offset = 0; offset < 200000; offset += 1000) {
+            const { data, error } = await admin.from("xero_client_contacts").select("xero_contact_id,client_id,preferred").order("xero_contact_id").range(offset, offset + 999)
+            if (error) throw error
+            links.push(...(data || []))
+            if ((data || []).length < 1000) break
+        }
         if (body.contactId || body.clientId) {
             const contact = contacts.find((c) => c.id === body.contactId)
-            const client = (clients || []).find((c) => c.id === body.clientId)
+            const client = clients.find((c) => c.id === body.clientId)
             if (!contact || !client) return NextResponse.json({ error: "Choose a current Xero customer and RPM customer." }, { status: 400 })
             if (body.preferred) {
                 const { error } = await admin.from("xero_client_contacts").update({ preferred: false }).eq("client_id", client.id)
@@ -73,15 +83,16 @@ export async function POST(request: Request) {
             if (error) throw error
             return NextResponse.json({ linked: true })
         }
-        const byName = new Map((clients || []).map((client) => [key(client.name), client]))
-        const linked = new Set((links || []).map((link) => link.xero_contact_id))
-        const preferred = new Set((links || []).filter((link) => link.preferred).map((link) => link.client_id))
+        const byName = new Map(clients.map((client) => [key(client.name), client]))
+        const byContactId = new Map(links.map((link) => [link.xero_contact_id, link]))
+        const linked = new Set(links.map((link) => link.xero_contact_id))
+        const preferred = new Set(links.filter((link) => link.preferred).map((link) => link.client_id))
         const unlinked = contacts.filter((contact) => !linked.has(contact.id))
         const newNames = new Map<string, Contact>()
         const review: Array<{ contactId: string; name: string; suggestedClientId?: string; suggestedClientName?: string }> = []
         for (const contact of unlinked) {
             if (byName.has(key(contact.name))) continue
-            const candidates = (clients || []).filter((entry) => legalKey(entry.name) === legalKey(contact.name))
+            const candidates = clients.filter((entry) => legalKey(entry.name) === legalKey(contact.name))
             if (candidates.length) review.push({ contactId: contact.id, name: contact.name, suggestedClientId: candidates.length === 1 ? candidates[0].id : undefined, suggestedClientName: candidates.length === 1 ? candidates[0].name : undefined })
             else newNames.set(key(contact.name), contact)
         }
@@ -91,17 +102,21 @@ export async function POST(request: Request) {
             for (const client of createdClients || []) byName.set(key(client.name), client)
         }
         const reviewIds = new Set(review.map((contact) => contact.contactId))
-        const rows = unlinked.filter((contact) => !reviewIds.has(contact.id)).map((contact) => {
+        const newRows = unlinked.filter((contact) => !reviewIds.has(contact.id)).map((contact) => {
             const client = byName.get(key(contact.name))!
             const isPreferred = !preferred.has(client.id)
             if (isPreferred) preferred.add(client.id)
             return { xero_contact_id: contact.id, client_id: client.id, xero_name: contact.name, email: contact.email || null, preferred: isPreferred, updated_at: new Date().toISOString() }
         })
+        const rows = [...contacts.filter((contact) => linked.has(contact.id)).map((contact) => {
+            const link = byContactId.get(contact.id)!
+            return { xero_contact_id: contact.id, client_id: link.client_id, xero_name: contact.name, email: contact.email || null, preferred: link.preferred, updated_at: new Date().toISOString() }
+        }), ...newRows]
         for (let index = 0; index < rows.length; index += 200) {
             const { error } = await admin.from("xero_client_contacts").upsert(rows.slice(index, index + 200))
             if (error) throw error
         }
-        return NextResponse.json({ created: newNames.size, matched: rows.length - newNames.size, alreadyLinked: linked.size, review })
+        return NextResponse.json({ created: newNames.size, matched: newRows.length - newNames.size, alreadyLinked: linked.size, review })
     } catch (error) {
         return xeroErrorResponse(error) || NextResponse.json({ error: error instanceof Error ? error.message : "Could not sync Xero customers." }, { status: 500 })
     }
