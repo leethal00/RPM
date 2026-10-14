@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
     details: null as string | null,
     contact: null as string | null,
     store: null as { name: string } | null,
+    xeroStatus: "DRAFT",
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/lib/xero", () => ({
                     id: "job-1", title: " University of Otago - Plinth ",
                     reference: "2500mm high plinth sign", details: state.details,
                     contact_name: state.contact, xero_quote_id: state.quoteId,
+                    status: "quoted", xero_invoice_id: null, xero_invoice_number: null,
                     clients: { name: "Brand Partners" }, stores: state.store,
                 }, error: null }) }) }),
                 update: () => ({ eq: async () => ({ error: null }) }),
@@ -69,14 +71,15 @@ describe.each([
         state.details = ` ${details} `
         state.contact = " Devan Rowe "
         state.store = null
+        state.xeroStatus = "DRAFT"
         vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
             let body: unknown
             if (input.startsWith("https://xero.test/Contacts?")) {
                 body = { Contacts: [{ ContactID: "contact-1", Name: "Brand Partners Campus" }] }
-            } else if (input === "https://xero.test/Quotes" && init?.method === "POST") {
-                body = { Quotes: [{ QuoteID: "quote-1", QuoteNumber: "QU-001" }] }
+            } else if (input.startsWith("https://xero.test/Quotes") && init?.method === "POST") {
+                body = { Quotes: [{ QuoteID: "quote-1", QuoteNumber: "QU-001", Status: state.xeroStatus }] }
             } else if (input.startsWith("https://xero.test/Quotes")) {
-                body = { Quotes: [{ QuoteID: "quote-1", Status: "DRAFT", Terms: "Standard terms",
+                body = { Quotes: [{ QuoteID: "quote-1", QuoteNumber: "QU-001", Status: state.xeroStatus, Terms: "Standard terms", Contact: { ContactID: "contact-1" },
                     DateString: "2026-09-01", ExpiryDateString: "2026-10-01",
                     LineItems: [{ Description: "Brand Partners:\nOld details" }],
                 }] }
@@ -92,7 +95,7 @@ describe.each([
             params: Promise.resolve({ id: "job-1" }),
         })
         expect(response.status).toBe(200)
-        const calls = vi.mocked(fetch).mock.calls.filter(([url, init]) => url === "https://xero.test/Quotes" && init?.method === "POST")
+        const calls = vi.mocked(fetch).mock.calls.filter(([url, init]) => String(url).startsWith("https://xero.test/Quotes") && init?.method === "POST")
         expect(calls).toHaveLength(1)
         const quote = JSON.parse(String(calls[0][1]?.body)).Quotes[0]
         expect(quote.Reference).toBe(title)
@@ -131,5 +134,38 @@ describe.each([
     it("preserves multiline Details", async () => {
         state.details = `${details}\nInstall on site.`
         expect(await pushQuote()).toEqual({ Description: `${title}\n${details}\nInstall on site.\nContact: Devan Rowe` })
+    })
+})
+
+describe("sent quote revisions", () => {
+    beforeEach(() => {
+        state.quoteId = "quote-1"
+        state.xeroStatus = "SENT"
+        vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+            if (input === "https://xero.test/Quotes/quote-1" && init?.method === "POST") return { ok: true, text: async () => JSON.stringify({ Quotes: [{
+                QuoteID: "quote-1", Status: "SENT", QuoteNumber: "QU-001",
+            }] }) }
+            if (input === "https://xero.test/Quotes/quote-1") return { ok: true, text: async () => JSON.stringify({ Quotes: [{
+                QuoteID: "quote-1", QuoteNumber: "QU-001", Status: state.xeroStatus, Contact: { ContactID: "contact-1" },
+                DateString: "2026-09-01", ExpiryDateString: "2026-10-01", Terms: "Terms",
+            }] }) }
+            throw new Error(`Unexpected request ${input}`)
+        }))
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it("updates a sent quote in place and asks for the revised version to be resent", async () => {
+        const response = await update(new NextRequest("http://localhost/api/xero/quotes/job-1/update", { method: "POST" }), { params: Promise.resolve({ id: "job-1" }) })
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({ resendRequired: true })
+        const call = vi.mocked(fetch).mock.calls.find(([url, init]) => url === "https://xero.test/Quotes/quote-1" && init?.method === "POST")
+        expect(JSON.parse(String(call?.[1]?.body)).Quotes[0]).toMatchObject({ QuoteID: "quote-1", Status: "SENT", Contact: { ContactID: "contact-1" } })
+    })
+
+    it("refuses an accepted quote before sending any update", async () => {
+        state.xeroStatus = "ACCEPTED"
+        const response = await update(new NextRequest("http://localhost/api/xero/quotes/job-1/update", { method: "POST" }), { params: Promise.resolve({ id: "job-1" }) })
+        expect(response.status).toBe(409)
+        expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false)
     })
 })

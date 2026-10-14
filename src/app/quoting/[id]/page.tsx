@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
@@ -51,6 +51,10 @@ export default function CostingJobDetailPage() {
     const [syncingXero, setSyncingXero] = useState(false)
     const [updatingXero, setUpdatingXero] = useState(false)
     const [xeroError, setXeroError] = useState("")
+    const [xeroNotice, setXeroNotice] = useState("")
+    const autoCheckedQuoteId = useRef<string | null>(null)
+    const xeroCheckInFlight = useRef(false)
+    const lastXeroCheckAt = useRef(0)
     const [canManageXero, setCanManageXero] = useState(false)
 
     useEffect(() => {
@@ -86,6 +90,35 @@ export default function CostingJobDetailPage() {
         ? `https://go.xero.com/Accounts/Receivable/Quotes/View/${job.xero_quote_id}`
         : null
 
+    useEffect(() => {
+        if (!job?.xero_quote_id || job.status !== "quoted") return
+        if (autoCheckedQuoteId.current !== job.id) {
+            autoCheckedQuoteId.current = job.id
+            lastXeroCheckAt.current = 0
+        }
+        const quoteId = job.id
+        async function checkOnReturn() {
+            if (xeroCheckInFlight.current || Date.now() - lastXeroCheckAt.current < 15_000) return
+            xeroCheckInFlight.current = true
+            lastXeroCheckAt.current = Date.now()
+            setSyncingXero(true)
+            try {
+                const response = await fetch(`/api/xero/quotes/${quoteId}/sync`, { method: "POST" })
+                const body = await response.json()
+                if (!response.ok) throw new Error(body.error || "Could not check Xero quote status.")
+                if (body.changedToJob || body.xeroStatus === "ACCEPTED" || body.xeroStatus === "INVOICED") await mutate()
+            } catch (error) {
+                setXeroError(error instanceof Error ? error.message : "Could not check Xero quote status.")
+            } finally {
+                xeroCheckInFlight.current = false
+                setSyncingXero(false)
+            }
+        }
+        void checkOnReturn()
+        window.addEventListener("focus", checkOnReturn)
+        return () => window.removeEventListener("focus", checkOnReturn)
+    }, [job?.id, job?.status, job?.xero_quote_id, mutate])
+
     async function sendToXero() {
         if (!job || sendingXero) return
         setXeroError("")
@@ -105,12 +138,16 @@ export default function CostingJobDetailPage() {
     async function updateXero() {
         if (!job || updatingXero) return
         setXeroError("")
+        setXeroNotice("")
         setUpdatingXero(true)
         try {
             const response = await fetch(`/api/xero/quotes/${job.id}/update`, { method: "POST" })
             const body = await response.json()
             if (!response.ok) throw new Error(body.error || "Could not update Xero quote.")
             await mutate()
+            setXeroNotice(body.resendRequired
+                ? "Xero quote updated. Open it in Xero and resend the revised quote to the client."
+                : "Xero draft updated. Review and send it from Xero when ready.")
         } catch (error) {
             setXeroError(error instanceof Error ? error.message : "Could not update Xero quote.")
         } finally {
@@ -191,7 +228,7 @@ export default function CostingJobDetailPage() {
                                 ) : job.xero_quote_id && !isJobStage ? (
                                     <>
                                         {job.status === "quoted" && (
-                                            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={updateXero} disabled={updatingXero}>
+                                            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={updateXero} disabled={updatingXero || syncingXero}>
                                                 {updatingXero ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                                                 {updatingXero ? "Updating..." : "Update Xero"}
                                             </Button>
@@ -227,6 +264,9 @@ export default function CostingJobDetailPage() {
                                 {xeroError}
                             </div>
                         )}
+                        {xeroNotice && <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+                            {xeroNotice} {xeroQuoteUrl && <a href={xeroQuoteUrl} target="_blank" rel="noreferrer" className="font-medium underline">Open Xero quote</a>}
+                        </div>}
 
                         <Dialog open={editOpen} onOpenChange={setEditOpen}>
                             <DialogContent className="sm:max-w-[600px]">

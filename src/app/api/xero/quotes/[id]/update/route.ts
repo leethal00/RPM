@@ -82,12 +82,15 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     const admin = xeroAdmin()
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,contact_name,xero_quote_id,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,contact_name,status,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
     if (jobError || !job) return NextResponse.json({ error: "Quote not found" }, { status: 404 })
     if (!job.xero_quote_id) return NextResponse.json({ error: "This quote has not been sent to Xero yet." }, { status: 400 })
+    if (job.status !== "quoted" || job.xero_invoice_id || job.xero_invoice_number) {
+        return NextResponse.json({ error: "Only an open quote without a linked invoice can be updated in Xero." }, { status: 409 })
+    }
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
         admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
@@ -103,34 +106,50 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const existingResult = await xeroJson(`${XERO_API}/Quotes/${job.xero_quote_id}`, { method: "GET" }, xero.accessToken, xero.tenantId)
         const existing = existingResult?.Quotes?.[0]
         if (!existing) throw new Error("Quote could not be found in Xero.")
-        if (String(existing.Status || "").toUpperCase() !== "DRAFT") {
-            throw new Error(`Xero quote is ${existing.Status || "not draft"}; only draft quotes can be updated from RPM.`)
+        if (existing.QuoteID !== job.xero_quote_id) throw new Error("Xero returned a different quote. No update was made.")
+        const xeroStatus = String(existing.Status || "").toUpperCase()
+        if (xeroStatus !== "DRAFT" && xeroStatus !== "SENT") {
+            return NextResponse.json({ error: `Xero quote is ${existing.Status || "unavailable"}. Only draft and sent quotes can be revised; check its status in RPM first.` }, { status: 409 })
         }
 
         const client = Array.isArray(job.clients) ? job.clients[0] : job.clients
         const store = Array.isArray(job.stores) ? job.stores[0] : job.stores
         const clientName = client?.name || "Rodier RPM customer"
-        const contactId = await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
+        // A sent quote may already be in a customer's hands. Keep its Xero
+        // contact stable while revising the scope and prices in place.
+        const contactId = xeroStatus === "SENT"
+            ? existing.Contact?.ContactID
+            : await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
-        const standardTerms = existing.Terms?.trim() || await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId, job.xero_quote_id)
+        const standardTerms = xeroStatus === "SENT"
+            ? existing.Terms
+            : existing.Terms?.trim() || await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId, job.xero_quote_id)
         const lineItems = buildXeroQuoteLines(job, (items || []) as QuoteItem[], (costingLines || []) as QuoteCostLine[])
 
         const visibleReference = job.title.trim()
-        const updated = await xeroJson(`${XERO_API}/Quotes`, {
+        const updated = await xeroJson(`${XERO_API}/Quotes/${job.xero_quote_id}`, {
             method: "POST",
             body: JSON.stringify({ Quotes: [{
                 QuoteID: job.xero_quote_id,
                 Contact: { ContactID: contactId },
+                Status: xeroStatus,
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
                 Reference: visibleReference,
-                ...(standardTerms ? { Terms: standardTerms } : {}),
+                ...(standardTerms !== undefined ? { Terms: standardTerms } : {}),
                 LineItems: lineItems,
             }] }),
         }, xero.accessToken, xero.tenantId)
 
-        return NextResponse.json({ ok: true, quote: updated?.Quotes?.[0] || null })
+        const saved = updated?.Quotes?.[0]
+        if (!saved?.QuoteID || saved.QuoteID !== job.xero_quote_id
+            || (existing.QuoteNumber && saved.QuoteNumber !== existing.QuoteNumber)
+            || saved.HasErrors || saved.StatusAttributeString === "ERROR"
+            || String(saved.Status || "").toUpperCase() !== xeroStatus) {
+            throw new Error("Xero did not confirm the quote number and status after the update. Check the quote in Xero before sending it to the client.")
+        }
+        return NextResponse.json({ ok: true, quote: saved, resendRequired: xeroStatus === "SENT" })
     } catch (error) {
         const limited = xeroErrorResponse(error)
         if (limited) return limited
