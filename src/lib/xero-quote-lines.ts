@@ -40,7 +40,7 @@ function quoteItemDescription(item: QuoteItem) {
     const details = cleanItemDetails(item.name, item.details)
     return [
         item.name,
-        `Qty: ${Number(item.mode === "build" && item.build_qty != null ? item.build_qty : (item.qty || 1))}`,
+        `Qty: ${Number(item.mode === "build" && item.build_qty != null ? item.build_qty : (item.qty ?? 1))}`,
         item.size?.trim() ? `Size: ${item.size.trim()}` : null,
         details ? `Details: ${details}` : null,
         item.delivery?.trim() || null,
@@ -62,16 +62,26 @@ export function buildXeroQuoteLines(job: { title: string; details?: string | nul
     ].filter(Boolean).join("\n")
     const result: QuoteLine[] = [{ Description: intro }]
     let sectionNumber = 0
+    let pendingSection: string | null = null
+    const addSection = () => {
+        if (!pendingSection) return
+        sectionNumber += 1
+        result.push({ Description: "--" }, { Description: `${sectionNumber}. ${pendingSection}` })
+        pendingSection = null
+    }
     for (const item of items) {
         if (item.sign_code === "__RPM_SECTION_HEADING__") {
-            sectionNumber += 1
-            result.push({ Description: "--" }, { Description: `${sectionNumber}. ${(item.name || "SECTION").trim().toUpperCase()}` })
+            pendingSection = (item.name || "SECTION").trim().toUpperCase()
             continue
         }
         if (item.sign_code === "__RPM_NOTE__") {
+            addSection()
             result.push({ Description: (item.name || "").trim() })
             continue
         }
+        const quantity = item.qty == null ? 1 : Number(item.qty)
+        if (!Number.isFinite(quantity) || quantity <= 0) continue
+        addSection()
         let unitAmount = Number(item.unit_price || 0)
         if (item.mode === "build") {
             const calculated = costingLines.filter((line) => line.item_id === item.id).reduce((sum, line) => {
@@ -82,7 +92,7 @@ export function buildXeroQuoteLines(job: { title: string; details?: string | nul
         }
         result.push({
             Description: quoteItemDescription(item),
-            Quantity: Number(item.qty || 1),
+            Quantity: quantity,
             UnitAmount: Number(unitAmount.toFixed(2)),
             AccountCode: accountCodeForItem(item.name),
             TaxType: "OUTPUT2",
