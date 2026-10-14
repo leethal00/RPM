@@ -94,12 +94,19 @@ export async function POST(request: Request) {
             if (byName.has(key(contact.name))) continue
             const candidates = clients.filter((entry) => legalKey(entry.name) === legalKey(contact.name))
             if (candidates.length) review.push({ contactId: contact.id, name: contact.name, suggestedClientId: candidates.length === 1 ? candidates[0].id : undefined, suggestedClientName: candidates.length === 1 ? candidates[0].name : undefined })
-            else newNames.set(key(contact.name), contact)
+            else {
+                const newCandidates = Array.from(newNames.values()).filter((entry) => legalKey(entry.name) === legalKey(contact.name))
+                if (newCandidates.length) review.push({ contactId: contact.id, name: contact.name, suggestedClientName: newCandidates.length === 1 ? newCandidates[0].name : undefined })
+                else newNames.set(key(contact.name), contact)
+            }
         }
         if (newNames.size) {
             const { data: createdClients, error } = await admin.from("clients").insert(Array.from(newNames.values()).map((contact) => ({ name: contact.name, contact_email: contact.email || null, active: true }))).select("id,name,contact_email")
             if (error) throw error
             for (const client of createdClients || []) byName.set(key(client.name), client)
+        }
+        for (const contact of review) {
+            if (contact.suggestedClientName && !contact.suggestedClientId) contact.suggestedClientId = byName.get(key(contact.suggestedClientName))?.id
         }
         const reviewIds = new Set(review.map((contact) => contact.contactId))
         const newRows = unlinked.filter((contact) => !reviewIds.has(contact.id)).map((contact) => {
