@@ -146,6 +146,7 @@ describe("sent quote revisions", () => {
     beforeEach(() => {
         state.quoteId = "quote-1"
         state.xeroStatus = "SENT"
+        state.rpmQuoteNumber = "QU-001"
         vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
             if (input === "https://xero.test/Quotes/quote-1" && init?.method === "POST") return { ok: true, text: async () => JSON.stringify({ Quotes: [{
                 QuoteID: "quote-1", Status: "SENT", QuoteNumber: "QU-001",
@@ -169,6 +170,13 @@ describe("sent quote revisions", () => {
 
     it("refuses an accepted quote before sending any update", async () => {
         state.xeroStatus = "ACCEPTED"
+        const response = await update(new NextRequest("http://localhost/api/xero/quotes/job-1/update", { method: "POST" }), { params: Promise.resolve({ id: "job-1" }) })
+        expect(response.status).toBe(409)
+        expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false)
+    })
+
+    it("refuses to update if RPM and Xero quote numbers differ", async () => {
+        state.rpmQuoteNumber = "QU-OTHER"
         const response = await update(new NextRequest("http://localhost/api/xero/quotes/job-1/update", { method: "POST" }), { params: Promise.resolve({ id: "job-1" }) })
         expect(response.status).toBe(409)
         expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false)

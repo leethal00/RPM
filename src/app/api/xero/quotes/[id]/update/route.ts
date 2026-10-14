@@ -137,6 +137,9 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const existing = existingResult?.Quotes?.[0]
         if (!existing) throw new Error("Quote could not be found in Xero.")
         if (existing.QuoteID !== job.xero_quote_id) throw new Error("Xero returned a different quote. No update was made.")
+        if (job.xero_quote_number && existing.QuoteNumber !== job.xero_quote_number) {
+            return NextResponse.json({ error: `RPM shows ${job.xero_quote_number}, but Xero shows ${existing.QuoteNumber || "no quote number"}. Check the linked quote before updating.` }, { status: 409 })
+        }
         const xeroStatus = String(existing.Status || "").toUpperCase()
         if (xeroStatus !== "DRAFT" && xeroStatus !== "SENT") {
             return NextResponse.json({ error: `Xero quote is ${existing.Status || "unavailable"}. Only draft and sent quotes can be revised; check its status in RPM first.` }, { status: 409 })
