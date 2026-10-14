@@ -35,6 +35,14 @@ const STATUS_LABEL: Record<CostingStatus, string> = {
     cancelled: "Cancelled",
 }
 
+type XeroQuoteSnapshot = {
+    xeroQuoteNumber: string
+    rpmQuoteNumber: string | null
+    status: string
+    subtotal: number
+    lines: { description?: string; quantity?: number; unitAmount?: number; amount?: number }[]
+}
+
 function formatDate(value?: string | null) {
     if (!value) return null
     return new Date(`${value}T00:00:00`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })
@@ -52,6 +60,9 @@ export default function CostingJobDetailPage() {
     const [updatingXero, setUpdatingXero] = useState(false)
     const [xeroError, setXeroError] = useState("")
     const [xeroNotice, setXeroNotice] = useState("")
+    const [xeroSnapshot, setXeroSnapshot] = useState<XeroQuoteSnapshot | null>(null)
+    const [xeroSnapshotOpen, setXeroSnapshotOpen] = useState(false)
+    const [inspectingXero, setInspectingXero] = useState(false)
     const autoCheckedQuoteId = useRef<string | null>(null)
     const xeroCheckInFlight = useRef(false)
     const lastXeroCheckAt = useRef(0)
@@ -172,6 +183,23 @@ export default function CostingJobDetailPage() {
         }
     }
 
+    async function inspectXero() {
+        if (!job || inspectingXero) return
+        setXeroError("")
+        setInspectingXero(true)
+        try {
+            const response = await fetch(`/api/xero/quotes/${job.id}/update`, { cache: "no-store" })
+            const body = await response.json()
+            if (!response.ok) throw new Error(body.error || "Could not read the Xero quote.")
+            setXeroSnapshot(body)
+            setXeroSnapshotOpen(true)
+        } catch (error) {
+            setXeroError(error instanceof Error ? error.message : "Could not read the Xero quote.")
+        } finally {
+            setInspectingXero(false)
+        }
+    }
+
     return (
         <DashboardLayout>
             <PageShell>
@@ -237,6 +265,9 @@ export default function CostingJobDetailPage() {
                                             {syncingXero ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                                             {syncingXero ? "Checking..." : "Check Xero"}
                                         </Button>
+                                        {job.status === "quoted" && <Button variant="outline" size="sm" className="h-9" onClick={inspectXero} disabled={inspectingXero}>
+                                            {inspectingXero ? "Loading Xero..." : "View Xero lines"}
+                                        </Button>}
                                         {canManageXero && !job.xero_invoice_id && !job.xero_invoice_number && ["quoted", "approved"].includes(job.status) && (
                                             <JobXeroInvoice job={job} onChanged={() => { setXeroError(""); void mutate() }} />
                                         )}
@@ -275,6 +306,22 @@ export default function CostingJobDetailPage() {
                                     <DialogDescription>Update the title, reference, client/site, qty or details.</DialogDescription>
                                 </DialogHeader>
                                 <CostingJobForm job={job} onSuccess={() => { setEditOpen(false); mutate() }} onCancel={() => setEditOpen(false)} />
+                            </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={xeroSnapshotOpen} onOpenChange={setXeroSnapshotOpen}>
+                            <DialogContent className="sm:max-w-[760px] max-h-[85vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle>Xero quote {xeroSnapshot?.xeroQuoteNumber}</DialogTitle>
+                                    <DialogDescription>Current lines saved in Xero · {xeroSnapshot?.status} · subtotal before GST ${Number(xeroSnapshot?.subtotal || 0).toFixed(2)}</DialogDescription>
+                                </DialogHeader>
+                                {xeroSnapshot?.xeroQuoteNumber !== xeroSnapshot?.rpmQuoteNumber && <p className="text-sm text-red-700">RPM and Xero quote numbers differ. Check this before sending the quote.</p>}
+                                <div className="space-y-2 text-sm">
+                                    {xeroSnapshot?.lines.map((line, index) => <div key={index} className="flex gap-4 border-b pb-2">
+                                        <span className="whitespace-pre-wrap flex-1">{line.description || "—"}</span>
+                                        {line.amount != null && <span className="shrink-0 font-medium">${Number(line.amount).toFixed(2)}</span>}
+                                    </div>)}
+                                </div>
                             </DialogContent>
                         </Dialog>
 
