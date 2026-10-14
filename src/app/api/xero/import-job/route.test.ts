@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
     importStatus: null as string | null,
     customers: [] as Array<{ id: string; name: string }>,
     createdCustomer: null as Record<string, unknown> | null,
+    linkedClientId: null as string | null,
     detailLines: true,
     site: { id: "site-1", client_id: "client-1" } as { id: string; client_id: string } | null,
     sites: null as Array<{ id: string; client_id: string }> | null,
@@ -64,6 +65,9 @@ vi.mock("@/lib/xero", () => ({
                     return { select: () => ({ single: async () => ({ data: { id: "new-client-1" }, error: null }) }) }
                 },
             }
+            if (table === "xero_client_contacts") return {
+                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.linkedClientId ? { client_id: state.linkedClientId } : null, error: null }) }) }),
+            }
             if (table === "stores") return {
                 select: () => ({ eq: (_column: string, id: string) => ({ maybeSingle: async () => ({ data: state.sites ? state.sites.find((site) => site.id === id) || null : state.site, error: null }) }) }),
             }
@@ -88,6 +92,7 @@ describe("Xero invoice import", () => {
         state.importStatus = null
         state.customers = []
         state.createdCustomer = null
+        state.linkedClientId = null
         state.detailLines = true
         state.site = { id: "site-1", client_id: "client-1" }
         state.sites = null
@@ -297,6 +302,14 @@ describe("Xero invoice import", () => {
         const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber }) }))
         expect(response.status).toBe(200)
         expect(state.job?.client_id).toBe("existing-client-1")
+        expect(state.createdCustomer).toBeNull()
+    })
+
+    it("uses a saved Xero contact link when the customer names differ", async () => {
+        state.linkedClientId = "brand-bunker-client"
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({ invoiceNumber }) }))
+        expect(response.status).toBe(200)
+        expect(state.job?.client_id).toBe("brand-bunker-client")
         expect(state.createdCustomer).toBeNull()
     })
 

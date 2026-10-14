@@ -65,6 +65,15 @@ async function findContactId(clientName: string, storeName: string | undefined, 
     const exact = await xeroJson(`${XERO_API}/Contacts?where=${exactWhere}`, { method: "GET" }, accessToken, tenantId)
     if (exact?.Contacts?.[0]?.ContactID) return exact.Contacts[0].ContactID as string
 
+    const stem = normalise(clientName).replace(/\b(limited|ltd)$/, "").trim()
+    if (stem) {
+        const candidateWhere = encodeURIComponent(`Name.Contains("${stem.replaceAll('"', '\\"')}")`)
+        const nearby = await xeroJson(`${XERO_API}/Contacts?where=${candidateWhere}`, { method: "GET" }, accessToken, tenantId)
+        if ((nearby?.Contacts || []).some((contact: { Name?: string }) => normalise(contact.Name || "").replace(/\b(limited|ltd)$/, "").trim() === stem)) {
+            throw new Error(`Xero has a similar contact for ${clientName}. Link it to the RPM customer in Customer Management before updating.`)
+        }
+    }
+
     const newContactName = siteShort ? `${clientName} ${siteShort}` : clientName
     const created = await xeroJson(`${XERO_API}/Contacts`, {
         method: "POST",
@@ -112,7 +121,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     const admin = xeroAdmin()
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,contact_name,status,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,contact_name,status,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,client_id,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
@@ -150,9 +159,13 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const clientName = client?.name || "Rodier RPM customer"
         // A sent quote may already be in a customer's hands. Keep its Xero
         // contact stable while revising the scope and prices in place.
+        const { data: linkedContact, error: linkError } = job.client_id
+            ? await admin.from("xero_client_contacts").select("xero_contact_id").eq("client_id", job.client_id).eq("preferred", true).maybeSingle()
+            : { data: null, error: null }
+        if (linkError) throw linkError
         const contactId = xeroStatus === "SENT"
             ? existing.Contact?.ContactID
-            : await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
+            : linkedContact?.xero_contact_id || await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const standardTerms = xeroStatus === "SENT"

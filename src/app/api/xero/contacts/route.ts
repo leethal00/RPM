@@ -3,8 +3,31 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getValidXero, XERO_API, xeroHeaders } from "@/lib/xero"
 import { xeroFetch } from "@/lib/xero-requests"
 import { xeroErrorResponse } from "@/lib/xero-error-response"
+import { xeroAdmin } from "@/lib/xero"
+import { isStaffAdmin } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
+
+type Contact = { id: string; name: string; email: string; firstName: string; lastName: string; phones: unknown[]; addresses: unknown[]; people: unknown[] }
+
+async function allCustomerContacts(accessToken: string, tenantId: string): Promise<Contact[]> {
+    const contacts: Contact[] = []
+    for (let page = 1; page <= 200; page++) {
+        const params = new URLSearchParams({ where: 'ContactStatus=="ACTIVE"', order: "Name", page: String(page), pageSize: "1000" })
+        const response = await xeroFetch(`${XERO_API}/Contacts?${params}`, {
+            headers: xeroHeaders(accessToken, tenantId), cache: "no-store"
+        }, tenantId, "contacts")
+        const body = await response.json()
+        if (!response.ok) throw new Error(body?.Message || "Could not load Xero contacts.")
+        const batch = (body?.Contacts || []) as Array<{ ContactID: string; Name: string; IsCustomer?: boolean; EmailAddress?: string; FirstName?: string; LastName?: string; Phones?: unknown[]; Addresses?: unknown[]; ContactPersons?: unknown[] }>
+        contacts.push(...batch.filter((c) => c.IsCustomer).map((c) => ({
+            id: c.ContactID, name: c.Name, email: c.EmailAddress || "", firstName: c.FirstName || "", lastName: c.LastName || "",
+            phones: c.Phones || [], addresses: c.Addresses || [], people: c.ContactPersons || []
+        })))
+        if (batch.length < 1000) return contacts
+    }
+    throw new Error("Xero has more contacts than this sync can safely load. Contact support before importing.")
+}
 
 export async function GET() {
     const server = await createServerClient()
@@ -13,17 +36,73 @@ export async function GET() {
     const xero = await getValidXero()
     if (!xero) return NextResponse.json({ error: "Xero is not connected." }, { status: 409 })
     try {
-    const response = await xeroFetch(`${XERO_API}/Contacts?where=${encodeURIComponent('ContactStatus=="ACTIVE"')}&order=Name`, {
-        headers: xeroHeaders(xero.accessToken, xero.tenantId), cache: "no-store"
-    }, xero.tenantId, "contacts")
-    const body = await response.json()
-    if (!response.ok) return NextResponse.json({ error: body?.Message || "Could not load Xero contacts." }, { status: response.status })
-    const contacts = (body?.Contacts || []).map((c: { ContactID: string; Name: string; EmailAddress?: string; FirstName?: string; LastName?: string; Phones?: unknown[]; Addresses?: unknown[]; ContactPersons?: unknown[] }) => ({
-        id: c.ContactID, name: c.Name, email: c.EmailAddress || "", firstName: c.FirstName || "", lastName: c.LastName || "",
-        phones: c.Phones || [], addresses: c.Addresses || [], people: c.ContactPersons || []
-    }))
-    return NextResponse.json({ contacts })
+    return NextResponse.json({ contacts: await allCustomerContacts(xero.accessToken, xero.tenantId) })
     } catch (error) {
         return xeroErrorResponse(error) || NextResponse.json({ error: error instanceof Error ? error.message : "Could not load Xero contacts." }, { status: 500 })
+    }
+}
+
+function key(name: string) { return name.trim().toLocaleLowerCase("en-NZ").replace(/\s+/g, " ") }
+function legalKey(name: string) { return key(name).replace(/\s+(limited|ltd)\.?$/, "") }
+
+export async function POST(request: Request) {
+    const server = await createServerClient()
+    const { data: auth } = await server.auth.getUser()
+    if (!auth.user) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
+    const admin = xeroAdmin()
+    const { data: profile } = await admin.from("users").select("role").eq("id", auth.user.id).single()
+    if (!isStaffAdmin(profile?.role)) return NextResponse.json({ error: "Only Rodier administrators can sync Xero customers." }, { status: 403 })
+    const body = await request.json().catch(() => ({})) as { contactId?: string; clientId?: string; preferred?: boolean }
+    try {
+        const xero = await getValidXero()
+        if (!xero) return NextResponse.json({ error: "Xero is not connected." }, { status: 409 })
+        const contacts = await allCustomerContacts(xero.accessToken, xero.tenantId)
+        const { data: clients, error: clientsError } = await admin.from("clients").select("id,name,contact_email")
+        if (clientsError) throw clientsError
+        const { data: links, error: linksError } = await admin.from("xero_client_contacts").select("xero_contact_id,client_id,preferred")
+        if (linksError) throw linksError
+        if (body.contactId || body.clientId) {
+            const contact = contacts.find((c) => c.id === body.contactId)
+            const client = (clients || []).find((c) => c.id === body.clientId)
+            if (!contact || !client) return NextResponse.json({ error: "Choose a current Xero customer and RPM customer." }, { status: 400 })
+            if (body.preferred) {
+                const { error } = await admin.from("xero_client_contacts").update({ preferred: false }).eq("client_id", client.id)
+                if (error) throw error
+            }
+            const { error } = await admin.from("xero_client_contacts").upsert({ xero_contact_id: contact.id, client_id: client.id, xero_name: contact.name, email: contact.email || null, preferred: !!body.preferred, updated_at: new Date().toISOString() })
+            if (error) throw error
+            return NextResponse.json({ linked: true })
+        }
+        const byName = new Map((clients || []).map((client) => [key(client.name), client]))
+        const linked = new Set((links || []).map((link) => link.xero_contact_id))
+        const preferred = new Set((links || []).filter((link) => link.preferred).map((link) => link.client_id))
+        const unlinked = contacts.filter((contact) => !linked.has(contact.id))
+        const newNames = new Map<string, Contact>()
+        const review: Array<{ contactId: string; name: string; suggestedClientId?: string; suggestedClientName?: string }> = []
+        for (const contact of unlinked) {
+            if (byName.has(key(contact.name))) continue
+            const candidates = (clients || []).filter((entry) => legalKey(entry.name) === legalKey(contact.name))
+            if (candidates.length) review.push({ contactId: contact.id, name: contact.name, suggestedClientId: candidates.length === 1 ? candidates[0].id : undefined, suggestedClientName: candidates.length === 1 ? candidates[0].name : undefined })
+            else newNames.set(key(contact.name), contact)
+        }
+        if (newNames.size) {
+            const { data: createdClients, error } = await admin.from("clients").insert(Array.from(newNames.values()).map((contact) => ({ name: contact.name, contact_email: contact.email || null, active: true }))).select("id,name,contact_email")
+            if (error) throw error
+            for (const client of createdClients || []) byName.set(key(client.name), client)
+        }
+        const reviewIds = new Set(review.map((contact) => contact.contactId))
+        const rows = unlinked.filter((contact) => !reviewIds.has(contact.id)).map((contact) => {
+            const client = byName.get(key(contact.name))!
+            const isPreferred = !preferred.has(client.id)
+            if (isPreferred) preferred.add(client.id)
+            return { xero_contact_id: contact.id, client_id: client.id, xero_name: contact.name, email: contact.email || null, preferred: isPreferred, updated_at: new Date().toISOString() }
+        })
+        for (let index = 0; index < rows.length; index += 200) {
+            const { error } = await admin.from("xero_client_contacts").upsert(rows.slice(index, index + 200))
+            if (error) throw error
+        }
+        return NextResponse.json({ created: newNames.size, matched: rows.length - newNames.size, alreadyLinked: linked.size, review })
+    } catch (error) {
+        return xeroErrorResponse(error) || NextResponse.json({ error: error instanceof Error ? error.message : "Could not sync Xero customers." }, { status: 500 })
     }
 }

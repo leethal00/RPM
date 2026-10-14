@@ -83,6 +83,15 @@ async function findContactId(
     const exact = await xeroJson(`${XERO_API}/Contacts?where=${exactWhere}`, { method: "GET" }, accessToken, tenantId)
     if (exact?.Contacts?.[0]?.ContactID) return exact.Contacts[0].ContactID as string
 
+    const stem = normalise(clientName).replace(/\b(limited|ltd)$/, "").trim()
+    if (stem) {
+        const candidateWhere = encodeURIComponent(`Name.Contains("${stem.replaceAll('"', '\\"')}")`)
+        const nearby = await xeroJson(`${XERO_API}/Contacts?where=${candidateWhere}`, { method: "GET" }, accessToken, tenantId)
+        if ((nearby?.Contacts || []).some((contact: { Name?: string }) => normalise(contact.Name || "").replace(/\b(limited|ltd)$/, "").trim() === stem)) {
+            throw new Error(`Xero has a similar contact for ${clientName}. Link it to the RPM customer in Customer Management before sending.`)
+        }
+    }
+
     const newContactName = siteShort ? `${clientName} ${siteShort}` : clientName
     const created = await xeroJson(`${XERO_API}/Contacts`, {
         method: "POST",
@@ -125,7 +134,11 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         const client = Array.isArray(job.clients) ? job.clients[0] : job.clients
         const store = Array.isArray(job.stores) ? job.stores[0] : job.stores
         const clientName = client?.name || "Rodier RPM customer"
-        const contactId = await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
+        const { data: linkedContact, error: linkError } = job.client_id
+            ? await admin.from("xero_client_contacts").select("xero_contact_id").eq("client_id", job.client_id).eq("preferred", true).maybeSingle()
+            : { data: null, error: null }
+        if (linkError) throw linkError
+        const contactId = linkedContact?.xero_contact_id || await findContactId(clientName, store?.name, client?.contact_email || undefined, xero.accessToken, xero.tenantId)
         if (!contactId) throw new Error("Xero contact could not be found or created.")
 
         const standardTerms = await getXeroStandardQuoteTerms(xero.accessToken, xero.tenantId)

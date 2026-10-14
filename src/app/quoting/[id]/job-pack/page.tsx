@@ -52,7 +52,7 @@ export default function JobPackPage() {
         supabase.from("costing_items").select("id,name,sign_code,mode,qty,build_qty,size,details,delivery,sort").eq("job_id", id).order("sort"),
         supabase.from("costing_lines").select("item_id,section,subsection,description").eq("job_id", id),
       ])
-      const nextItems = ((itemData || []) as Item[]).filter((item) => item.sign_code !== SECTION_HEADING_CODE)
+      const nextItems = ((itemData || []) as Item[]).filter((item) => item.sign_code !== SECTION_HEADING_CODE && Number(item.qty) > 0)
       const lines = (lineData || []) as { item_id: string | null; section: string | null; subsection: string | null; description: string | null }[]
       setJob(jobData as Job)
       setItems(nextItems)

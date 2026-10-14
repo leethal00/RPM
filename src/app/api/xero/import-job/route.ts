@@ -205,12 +205,24 @@ export async function POST(req: NextRequest) {
         if (!resolvedClientId) {
             const contactName = String(invoice.Contact?.Name || "").trim()
             if (!contactName) return NextResponse.json({ error: "The Xero invoice has no customer name to import." }, { status: 409 })
+            if (invoice.Contact?.ContactID) {
+                const { data: linked, error: linkError } = await admin.from("xero_client_contacts").select("client_id").eq("xero_contact_id", invoice.Contact.ContactID).maybeSingle()
+                if (linkError) throw linkError
+                resolvedClientId = linked?.client_id || null
+            }
+        }
+        if (!resolvedClientId) {
+            const contactName = String(invoice.Contact?.Name || "").trim()
             const { data: customers, error: customerError } = await admin.from("clients").select("id,name")
             if (customerError) throw customerError
             const matches = (customers || []).filter((customer) => String(customer.name || "").trim().toLocaleLowerCase() === contactName.toLocaleLowerCase())
             if (matches.length > 1) return NextResponse.json({ error: `Multiple RPM customers match ${contactName}. Select the correct customer before importing.` }, { status: 409 })
             if (matches.length === 1) resolvedClientId = matches[0].id
             else {
+                const base = (value: string) => value.trim().toLocaleLowerCase("en-NZ").replace(/\s+(limited|ltd)\.?$/, "")
+                if ((customers || []).some((customer) => base(customer.name) === base(contactName))) {
+                    return NextResponse.json({ error: `${contactName} looks like an existing RPM customer. Link the Xero contact in Customer Management or choose the customer before importing.` }, { status: 409 })
+                }
                 const { data: customer, error: createError } = await admin.from("clients")
                     .insert({ name: contactName, active: true })
                     .select("id")

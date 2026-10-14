@@ -13,7 +13,7 @@ import { BrandManager } from "@/components/brand-manager"
 import Link from "next/link"
 
 type XeroContact = {
-    name: string; email?: string | null
+    id: string; name: string; email?: string | null
     phones?: { PhoneNumber?: string | null }[]
     addresses?: { AddressLine1?: string | null; AddressLine2?: string | null; City?: string | null; Region?: string | null; PostalCode?: string | null }[]
     people?: { FirstName?: string | null; LastName?: string | null; EmailAddress?: string | null }[]
@@ -33,6 +33,8 @@ export function CustomerManager() {
     const [xeroContacts, setXeroContacts] = useState<XeroContact[]>([])
     const [xeroLoading, setXeroLoading] = useState(false)
     const [syncingCustomers, setSyncingCustomers] = useState(false)
+    const [reviewContacts, setReviewContacts] = useState<{ contactId: string; name: string; suggestedClientId?: string; suggestedClientName?: string }[]>([])
+    const [reviewChoices, setReviewChoices] = useState<Record<string, string>>({})
     const [editCustomer, setEditCustomer] = useState<Client | null>(null)
     const [editName, setEditName] = useState("")
 
@@ -109,23 +111,30 @@ export function CustomerManager() {
     const importXeroCustomers = async () => {
         setSyncingCustomers(true)
         try {
-            const response = await fetch("/api/xero/contacts", { cache: "no-store" })
-            const body = await response.json() as { contacts?: XeroContact[]; error?: string }
+            const response = await fetch("/api/xero/contacts", { method: "POST" })
+            const body = await response.json() as { created?: number; matched?: number; review?: typeof reviewContacts; error?: string }
             if (!response.ok) throw new Error(body.error || "Could not load Xero customers")
-            const contacts = body.contacts || []
-            const existing = new Map(customers.map(c => [c.name.trim().toLowerCase(), c]))
-            const missing = contacts.filter((c: XeroContact) => c.name?.trim() && !existing.has(c.name.trim().toLowerCase()))
-            if (missing.length) {
-                const { error } = await supabase.from('clients').insert(missing.map((c: XeroContact) => ({ name: c.name.trim(), contact_email: c.email || null, active: true })))
-                if (error) throw error
-            }
-            const exactMatches = contacts.filter((c: XeroContact) => existing.has((c.name || '').trim().toLowerCase()) && c.email)
-            await Promise.all(exactMatches.map((c: XeroContact) => supabase.from('clients').update({ contact_email: c.email }).eq('id', existing.get(c.name.trim().toLowerCase())!.id)))
-            toast.success(missing.length ? `Imported ${missing.length} customer${missing.length === 1 ? "" : "s"} from Xero` : "Customer list already matches Xero")
+            setReviewContacts(body.review || [])
+            setReviewChoices(Object.fromEntries((body.review || []).map((contact) => [contact.contactId, contact.suggestedClientId || ""])))
+            toast.success(`Xero customers synced: ${body.created || 0} added, ${body.matched || 0} matched${body.review?.length ? `, ${body.review.length} need review` : ""}`)
             await fetchCustomers()
-            setXeroContacts(contacts)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Could not import Xero customers")
+        } finally { setSyncingCustomers(false) }
+    }
+
+    const linkReviewedContact = async (contactId: string) => {
+        const clientId = reviewChoices[contactId]
+        if (!clientId) return
+        setSyncingCustomers(true)
+        try {
+            const response = await fetch("/api/xero/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contactId, clientId, preferred: true }) })
+            const body = await response.json() as { error?: string }
+            if (!response.ok) throw new Error(body.error || "Could not link Xero contact")
+            setReviewContacts((current) => current.filter((contact) => contact.contactId !== contactId))
+            toast.success("Xero contact linked to RPM customer")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not link Xero contact")
         } finally { setSyncingCustomers(false) }
     }
 
@@ -169,6 +178,19 @@ export function CustomerManager() {
                     {syncingCustomers ? "Syncing…" : "Import customers from Xero"}
                 </Button>
             </div>
+
+            {reviewContacts.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+                <h4 className="font-semibold">Review similar Xero customer names</h4>
+                <p className="text-sm text-muted-foreground">Link each Xero contact to its RPM customer. The linked contact will be used for future quotes.</p>
+                {reviewContacts.map((contact) => <div key={contact.contactId} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="min-w-48 font-medium">{contact.name}</span>
+                    <select aria-label={`RPM customer for ${contact.name}`} value={reviewChoices[contact.contactId] || ""} onChange={(event) => setReviewChoices((current) => ({ ...current, [contact.contactId]: event.target.value }))} className="h-9 rounded-md border bg-white px-2">
+                        <option value="">Choose RPM customer</option>
+                        {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+                    </select>
+                    <Button size="sm" disabled={!reviewChoices[contact.contactId] || syncingCustomers} onClick={() => linkReviewedContact(contact.contactId)}>Link</Button>
+                </div>)}
+            </div>}
 
             <form onSubmit={handleAdd} className="flex gap-2 max-w-md">
                 <Input

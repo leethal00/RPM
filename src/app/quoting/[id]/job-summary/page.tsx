@@ -67,6 +67,15 @@ function itemQty(item: Item) {
   return item.mode === "build" ? (item.build_qty ?? item.qty ?? 1) : (item.qty ?? 1)
 }
 
+function printableItems(items: Item[]) {
+  return items.filter((item, index) => {
+    if (item.sign_code !== SECTION_HEADING_CODE) return Number(item.qty) > 0
+    const nextHeading = items.findIndex((later, laterIndex) => laterIndex > index && later.sign_code === SECTION_HEADING_CODE)
+    const sectionEnd = nextHeading < 0 ? items.length : nextHeading
+    return items.slice(index + 1, sectionEnd).some((later) => Number(later.qty) > 0)
+  })
+}
+
 function inferDepartments(title: string, details: string, lines: BomLine[]) {
   const result = new Set<string>()
   const sectionText = lines
@@ -114,7 +123,8 @@ export default function JobSummaryPage() {
         supabase.from("costing_lines").select("id,item_id,section,subsection,description").eq("job_id", id).order("sort"),
       ])
       const nextJob = jobData as Job
-      const nextItems = (itemData || []) as Item[]
+      const allItems = (itemData || []) as Item[]
+      const nextItems = printableItems(allItems)
       const nextLines = (lineData || []) as BomLine[]
       setJob(nextJob)
       setItems(nextItems)
