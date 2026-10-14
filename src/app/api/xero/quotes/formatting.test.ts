@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
     details: null as string | null,
     contact: null as string | null,
     store: null as { name: string } | null,
+    rpmQuoteNumber: "QU-001",
     xeroStatus: "DRAFT",
 }))
 
@@ -34,7 +35,7 @@ vi.mock("@/lib/xero", () => ({
                 select: () => ({ eq: () => ({ single: async () => ({ data: {
                     id: "job-1", title: " University of Otago - Plinth ",
                     reference: "2500mm high plinth sign", details: state.details,
-                    contact_name: state.contact, xero_quote_id: state.quoteId,
+                    contact_name: state.contact, xero_quote_id: state.quoteId, xero_quote_number: state.rpmQuoteNumber,
                     status: "quoted", xero_invoice_id: null, xero_invoice_number: null,
                     clients: { name: "Brand Partners" }, stores: state.store,
                 }, error: null }) }) }),
@@ -72,6 +73,7 @@ describe.each([
         state.contact = " Devan Rowe "
         state.store = null
         state.xeroStatus = "DRAFT"
+        state.rpmQuoteNumber = "QU-001"
         vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
             let body: unknown
             if (input.startsWith("https://xero.test/Contacts?")) {
@@ -100,7 +102,10 @@ describe.each([
         const quote = JSON.parse(String(calls[0][1]?.body)).Quotes[0]
         expect(quote.Reference).toBe(title)
         expect(quote.Contact).toEqual({ ContactID: "contact-1" })
-        if (quoteId) expect(quote.QuoteID).toBe(quoteId)
+        if (quoteId) {
+            expect(quote.QuoteID).toBe(quoteId)
+            expect(quote.QuoteNumber).toBe("QU-001")
+        }
         expect(quote.LineItems.slice(1)).toEqual([
             { Description: "--" },
             { Description: "1. SIGNAGE" },
@@ -159,7 +164,7 @@ describe("sent quote revisions", () => {
         expect(response.status).toBe(200)
         expect(await response.json()).toMatchObject({ resendRequired: true })
         const call = vi.mocked(fetch).mock.calls.find(([url, init]) => url === "https://xero.test/Quotes/quote-1" && init?.method === "POST")
-        expect(JSON.parse(String(call?.[1]?.body)).Quotes[0]).toMatchObject({ QuoteID: "quote-1", Status: "SENT", Contact: { ContactID: "contact-1" } })
+        expect(JSON.parse(String(call?.[1]?.body)).Quotes[0]).toMatchObject({ QuoteID: "quote-1", QuoteNumber: "QU-001", Status: "SENT", Contact: { ContactID: "contact-1" } })
     })
 
     it("refuses an accepted quote before sending any update", async () => {

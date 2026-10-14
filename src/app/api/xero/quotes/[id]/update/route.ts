@@ -73,6 +73,36 @@ async function findContactId(clientName: string, storeName: string | undefined, 
     return created?.Contacts?.[0]?.ContactID as string | undefined
 }
 
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+    const server = await createServerClient()
+    const { data: auth } = await server.auth.getUser()
+    if (!auth.user) return NextResponse.json({ error: "Not signed in" }, { status: 401 })
+    const { id } = await context.params
+    const { data: job } = await xeroAdmin().from("costing_jobs").select("xero_quote_id,xero_quote_number").eq("id", id).single()
+    if (!job?.xero_quote_id) return NextResponse.json({ error: "Linked Xero quote not found" }, { status: 404 })
+    const xero = await getValidXero()
+    if (!xero) return NextResponse.json({ error: "Xero is not connected" }, { status: 409 })
+    try {
+        const result = await xeroJson(`${XERO_API}/Quotes/${job.xero_quote_id}`, { method: "GET" }, xero.accessToken, xero.tenantId)
+        const quote = result?.Quotes?.[0]
+        if (quote?.QuoteID !== job.xero_quote_id) return NextResponse.json({ error: "Xero returned another quote" }, { status: 502 })
+        return NextResponse.json({
+            xeroQuoteId: quote.QuoteID,
+            xeroQuoteNumber: quote.QuoteNumber,
+            rpmQuoteNumber: job.xero_quote_number,
+            status: quote.Status,
+            subtotal: quote.SubTotal,
+            lines: (quote.LineItems || []).map((line: { Description?: string; Quantity?: number; UnitAmount?: number; LineAmount?: number }) => ({
+                description: line.Description, quantity: line.Quantity, unitAmount: line.UnitAmount, amount: line.LineAmount,
+            })),
+        })
+    } catch (error) {
+        const limited = xeroErrorResponse(error)
+        if (limited) return limited
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Could not inspect Xero quote" }, { status: 500 })
+    }
+}
+
 export async function POST(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
     const server = await createServerClient()
     const { data: auth } = await server.auth.getUser()
@@ -82,7 +112,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     const admin = xeroAdmin()
     const { data: job, error: jobError } = await admin
         .from("costing_jobs")
-        .select("id,title,reference,details,contact_name,status,xero_quote_id,xero_invoice_id,xero_invoice_number,clients(name,contact_email),stores(name)")
+        .select("id,title,reference,details,contact_name,status,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,clients(name,contact_email),stores(name)")
         .eq("id", id)
         .single()
 
@@ -132,6 +162,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
             method: "POST",
             body: JSON.stringify({ Quotes: [{
                 QuoteID: job.xero_quote_id,
+                QuoteNumber: job.xero_quote_number || existing.QuoteNumber,
                 Contact: { ContactID: contactId },
                 Status: xeroStatus,
                 Date: existing.DateString || existing.Date,
@@ -144,7 +175,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
 
         const saved = updated?.Quotes?.[0]
         if (!saved?.QuoteID || saved.QuoteID !== job.xero_quote_id
-            || (existing.QuoteNumber && saved.QuoteNumber !== existing.QuoteNumber)
+            || (job.xero_quote_number && saved.QuoteNumber !== job.xero_quote_number)
             || saved.HasErrors || saved.StatusAttributeString === "ERROR"
             || String(saved.Status || "").toUpperCase() !== xeroStatus) {
             throw new Error("Xero did not confirm the quote number and status after the update. Check the quote in Xero before sending it to the client.")
