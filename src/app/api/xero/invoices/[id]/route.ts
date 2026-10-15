@@ -94,7 +94,7 @@ async function access() {
 async function jobAndLines(admin: ReturnType<typeof xeroAdmin>, id: string, includeLines = true) {
   const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
     admin.from("costing_jobs").select("id,title,reference,production_title,details,production_details,contact_name,production_contact_name,status,is_template,job_number,xero_quote_id,xero_quote_number,xero_invoice_id,xero_invoice_number,xero_invoice_import_status,clients(name),stores(name)").eq("id", id).single(),
-    admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
+    admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,round_final_sell_to_five,sort").eq("job_id", id).order("sort"),
     admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
   ])
   if (jobError || !job) throw new Error("RPM job not found.")

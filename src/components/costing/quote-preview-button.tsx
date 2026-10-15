@@ -23,7 +23,7 @@ export function QuotePreviewButton({ jobId }: { jobId: string }) {
         try {
             const [{ data: job, error: jobError }, { data: items, error: itemsError }, { data: costs, error: costsError }] = await Promise.all([
                 supabase.from("costing_jobs").select("title,details,contact_name").eq("id", jobId).single(),
-                supabase.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", jobId).order("sort"),
+                supabase.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,round_final_sell_to_five,sort").eq("job_id", jobId).order("sort"),
                 supabase.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", jobId),
             ])
             if (jobError) throw jobError

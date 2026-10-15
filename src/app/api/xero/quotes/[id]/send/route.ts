@@ -119,7 +119,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     if (job.xero_quote_id) return NextResponse.json({ error: "This quote has already been sent to Xero." }, { status: 409 })
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
-        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,round_final_sell_to_five,sort").eq("job_id", id).order("sort"),
         admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
     ])
 

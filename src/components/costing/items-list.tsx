@@ -102,7 +102,7 @@ export function ItemsList({ job }: { job: CostingJob }) {
         const calculatedSell = ls.reduce((a, l) => a + lineSell(l), 0)
         return {
             cost: ls.reduce((a, l) => a + lineCost(l), 0),
-            sell: effectiveBuildSell(calculatedSell, it.unit_price),
+            sell: effectiveBuildSell(calculatedSell, it.unit_price, it.round_final_sell_to_five),
         }
     }
 

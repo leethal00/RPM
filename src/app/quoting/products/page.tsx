@@ -93,7 +93,7 @@ export default function ProductsPage() {
             const itemLines = linesByItem.get(product.id) ?? []
             const cost = product.mode === "simple" ? Number(product.unit_cost) : itemLines.reduce((sum, line) => sum + lineCost(line), 0)
             const calculatedSell = itemLines.reduce((sum, line) => sum + lineSell(line), 0)
-            const sell = product.mode === "simple" ? Number(product.unit_price) : effectiveBuildSell(calculatedSell, product.unit_price)
+            const sell = product.mode === "simple" ? Number(product.unit_price) : effectiveBuildSell(calculatedSell, product.unit_price, product.round_final_sell_to_five)
             return { product, cost, sell, margin: sellMargin(cost, sell) }
         })
     }, [products, lines])

@@ -11,6 +11,7 @@ export type QuoteItem = {
     qty: number
     build_qty?: number | null
     unit_price?: number | null
+    round_final_sell_to_five?: boolean
 }
 
 export type QuoteCostLine = {
@@ -88,7 +89,7 @@ export function buildXeroQuoteLines(job: { title: string; details?: string | nul
                 const sell = line.unit_sell_override != null ? Number(line.unit_sell_override) : Number(line.unit_cost || 0) * (1 + Number(line.markup || 0))
                 return sum + Number(line.qty || 0) * sell
             }, 0)
-            unitAmount = effectiveBuildSell(calculated, item.unit_price)
+            unitAmount = effectiveBuildSell(calculated, item.unit_price, item.round_final_sell_to_five)
         }
         result.push({
             Description: quoteItemDescription(item),

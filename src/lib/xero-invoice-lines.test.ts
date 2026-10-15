@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest"
 import { buildXeroInvoiceLines } from "./xero-invoice-lines"
 
 describe("buildXeroInvoiceLines", () => {
+  it("uses the rounded new BOM default for Xero invoice lines", () => {
+    const lines = buildXeroInvoiceLines(
+      [{ id: "new", name: "New build", mode: "build", qty: 2, unit_price: 0, round_final_sell_to_five: true }],
+      [{ item_id: "new", qty: 1, unit_cost: 121.01, markup: 0, unit_sell_override: null }],
+      "",
+    )
+    expect(lines[0].UnitAmount).toBe(125)
+    expect(lines[0].Quantity).toBe(2)
+  })
+
   it("sends selling prices and descriptions, excluding internal BOM costs", () => {
     const lines = buildXeroInvoiceLines([
       { id: "heading", name: "Exterior", sign_code: "__RPM_SECTION_HEADING__", qty: 1 },

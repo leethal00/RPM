@@ -132,7 +132,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const [{ data: items, error: itemsError }, { data: costingLines, error: linesError }] = await Promise.all([
-        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,sort").eq("job_id", id).order("sort"),
+        admin.from("costing_items").select("id,name,size,details,delivery,sign_code,mode,qty,build_qty,unit_price,round_final_sell_to_five,sort").eq("job_id", id).order("sort"),
         admin.from("costing_lines").select("item_id,qty,unit_cost,markup,unit_sell_override").eq("job_id", id),
     ])
     if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })

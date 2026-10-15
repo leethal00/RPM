@@ -12,6 +12,7 @@ export type InvoiceItem = {
   qty: number
   build_qty?: number | null
   unit_price?: number | null
+  round_final_sell_to_five?: boolean
 }
 
 export type InvoiceCostLine = {
@@ -81,7 +82,7 @@ export function buildXeroInvoiceLines(
         return sum + Number(line.qty || 0) * sell
       }, 0)
     const unitAmount = item.mode === "build"
-      ? effectiveBuildSell(calculated, item.unit_price)
+      ? effectiveBuildSell(calculated, item.unit_price, item.round_final_sell_to_five)
       : Number(item.unit_price || 0)
     const quantity = Number(item.qty)
     if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitAmount) || unitAmount < 0) {

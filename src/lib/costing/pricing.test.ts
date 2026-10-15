@@ -23,6 +23,20 @@ describe("build item final pricing", () => {
         expect(effectiveBuildSell(92, 85)).toBe(85)
         expect(effectiveBuildSell(92, 0)).toBe(92)
     })
+
+    it("rounds the default final sell up to $5 for new BOMs without changing their calculated total", () => {
+        const calculated = bomTotals([{ qty: 1, unit_cost: 62.57, markup: 0.261, unit_sell_override: null }]).sell
+        expect(calculated).toBeCloseTo(78.90077, 5)
+        expect(effectiveBuildSell(calculated, 0, true)).toBe(80)
+        expect(effectiveBuildSell(80, 0, true)).toBe(80)
+        expect(effectiveBuildSell(120.00000000000001, 0, true)).toBe(120)
+        expect(effectiveBuildSell(121.01, 0, true)).toBe(125)
+    })
+
+    it("keeps manual final prices and existing BOM defaults unchanged", () => {
+        expect(effectiveBuildSell(121.01, 123.45, true)).toBe(123.45)
+        expect(effectiveBuildSell(121.01, 0, false)).toBe(121.01)
+    })
 })
 
 describe("BOM summary", () => {

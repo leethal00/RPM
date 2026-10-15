@@ -118,7 +118,7 @@ export default function BomPrintPage() {
     const finalUnitSell = item
         ? importedSell
             ? Number(item.xero_line_amount) / itemQty
-            : effectiveBuildSell(totals.sell / batchQty, item.unit_price)
+            : effectiveBuildSell(totals.sell / batchQty, item.unit_price, item.round_final_sell_to_five)
         : 0
     // The page reserves 210 mm for the table. Keep every line visible, including large BOMs.
     const lineHeight = Math.min(5.3, (210 - (hasDescription ? 18 : 0) - groups.length * 4 - 6) / Math.max(1, lines.length))

@@ -1,8 +1,10 @@
 // Build items keep their BOM sell separate from an optional final unit price.
 // The existing unit_price column stores the override; zero means use the BOM.
-export function effectiveBuildSell(calculatedSell: number, unitPrice: number | null | undefined): number {
+export function effectiveBuildSell(calculatedSell: number, unitPrice: number | null | undefined, roundToFive = false): number {
     const override = Number(unitPrice ?? 0)
-    return override > 0 ? override : calculatedSell
+    if (override > 0) return override
+    if (!roundToFive) return calculatedSell
+    return Math.ceil(Math.round(calculatedSell * 100) / 500) * 5
 }
 
 export function sellMargin(cost: number, sell: number): number {

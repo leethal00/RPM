@@ -704,7 +704,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
     const importedPrice = !!item.xero_imported_line && item.xero_line_amount != null && Number(item.qty) !== 0
     const finalSell = importedPrice
         ? Number(item.xero_line_amount) / Number(item.qty)
-        : effectiveBuildSell(calculatedSell, item.unit_price)
+        : effectiveBuildSell(calculatedSell, item.unit_price, item.round_final_sell_to_five)
     const finalMargin = sellMargin(cost, finalSell)
     const totalHours = totalBomHours(lines, Object.fromEntries(Object.entries(catalogueCosts).map(([id, material]) => [id, material.unit])))
     const totalWeight = lines.reduce((s, l) => s + lineWeight(l), 0)
@@ -1149,7 +1149,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                                     const raw = event.currentTarget.value.trim()
                                     if (!raw) {
                                         if (Number(item.unit_price) > 0) onFinalSellChange?.(0)
-                                        event.currentTarget.value = calculatedSell.toFixed(2)
+                                        event.currentTarget.value = effectiveBuildSell(calculatedSell, 0, item.round_final_sell_to_five).toFixed(2)
                                         return
                                     }
                                     const value = Number(raw)
@@ -1168,7 +1168,7 @@ export function CostSheet({ jobId, item, isProduct = false, onFinalSellChange }:
                         </div>
                         {Number(item.unit_price) > 0 && <button type="button" onClick={() => onFinalSellChange?.(0)}
                             className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
-                            <RotateCcw className="size-3" /> Use calculated price
+                            <RotateCcw className="size-3" /> Use default price
                         </button>}
                     </div>}
                     <Tile label={isProduct ? "Margin" : "BOM margin"} value={pct(isProduct ? finalMargin : margin)} />
