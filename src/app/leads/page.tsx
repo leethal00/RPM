@@ -287,7 +287,7 @@ export default function LeadsPage() {
     }
 
     function renderCell(key: string, item: WorkItem) {
-        if (key === "lead") return <div><div className="font-medium">{item.title}</div>{item.description && <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{item.description}</div>}</div>
+        if (key === "lead") return <button type="button" className="w-full text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); handleOpen(item) }}><div className="font-medium">{item.title}</div>{item.description && <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{item.description}</div>}</button>
         if (key === "customer") return <div><div>{customerName(item.client_id)}</div>{siteName(item.store_id) && <div className="text-[11px] text-muted-foreground">{siteName(item.store_id)}</div>}</div>
         if (key === "assigned") return <div>{assignedName(item.assigned_to)}</div>
         if (key === "priority") return <div className="capitalize">{item.priority}</div>
@@ -355,7 +355,7 @@ export default function LeadsPage() {
                                 <div className="print:hidden" />
                             </div>
                             {visibleItems.length === 0 ? <div className="px-3 py-8 text-center text-xs text-muted-foreground">No items match the selected filters.</div> : visibleItems.map((item) => (
-                                <div key={item.id} role="button" tabIndex={0} onClick={() => handleOpen(item)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleOpen(item) } }} className="grid cursor-pointer border-b text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0" style={{ gridTemplateColumns: gridTemplate }}>
+                                <div key={item.id} onClick={() => handleOpen(item)} className="grid cursor-pointer border-b text-xs transition-colors hover:bg-muted/40 last:border-b-0" style={{ gridTemplateColumns: gridTemplate }}>
                                     {order.map((key) => <div key={key} className="min-w-0 overflow-hidden px-3 py-2.5">{renderCell(key, item)}</div>)}
                                     <div className="flex items-center justify-center print:hidden">
                                         <Button type="button" variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} onClick={(event) => { event.stopPropagation(); setDeleteError(""); setDeleteTarget(item) }}>
