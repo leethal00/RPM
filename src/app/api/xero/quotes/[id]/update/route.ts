@@ -180,7 +180,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
                 QuoteID: job.xero_quote_id,
                 QuoteNumber: job.xero_quote_number || existing.QuoteNumber,
                 Contact: { ContactID: contactId },
-                Status: xeroStatus,
                 Date: existing.DateString || existing.Date,
                 ExpiryDate: existing.ExpiryDateString || existing.ExpiryDate,
                 Reference: visibleReference,

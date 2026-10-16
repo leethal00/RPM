@@ -105,6 +105,7 @@ describe.each([
         if (quoteId) {
             expect(quote.QuoteID).toBe(quoteId)
             expect(quote.QuoteNumber).toBe("QU-001")
+            expect(quote).not.toHaveProperty("Status")
         }
         expect(quote.LineItems.slice(1)).toEqual([
             { Description: "--" },
@@ -165,7 +166,9 @@ describe("sent quote revisions", () => {
         expect(response.status).toBe(200)
         expect(await response.json()).toMatchObject({ resendRequired: true })
         const call = vi.mocked(fetch).mock.calls.find(([url, init]) => url === "https://xero.test/Quotes/quote-1" && init?.method === "POST")
-        expect(JSON.parse(String(call?.[1]?.body)).Quotes[0]).toMatchObject({ QuoteID: "quote-1", QuoteNumber: "QU-001", Status: "SENT", Contact: { ContactID: "contact-1" } })
+        const submitted = JSON.parse(String(call?.[1]?.body)).Quotes[0]
+        expect(submitted).toMatchObject({ QuoteID: "quote-1", QuoteNumber: "QU-001", Contact: { ContactID: "contact-1" } })
+        expect(submitted).not.toHaveProperty("Status")
     })
 
     it("refuses an accepted quote before sending any update", async () => {
