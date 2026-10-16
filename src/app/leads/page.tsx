@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ClipboardList, Loader2, Plus, X } from "lucide-react"
+import { ClipboardList, Loader2, Plus, Trash2, X } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -119,6 +119,9 @@ export default function LeadsPage() {
     const [loadingOptions, setLoadingOptions] = useState(true)
     const [saving, setSaving] = useState(false)
     const [converting, setConverting] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<WorkItem | null>(null)
+    const [deleting, setDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState("")
     const [error, setError] = useState("")
     const [title, setTitle] = useState("")
     const [customerId, setCustomerId] = useState("")
@@ -136,8 +139,7 @@ export default function LeadsPage() {
     const [sortMode, setSortMode] = useState<SortMode>("newest")
     const { order, widths, move, setWidth } = useColumnLayout("leads-columns-v1", LEAD_LAYOUT)
 
-    async function loadData() {
-        setLoadingOptions(true)
+    const loadData = useCallback(async () => {
         const [customersResult, sitesResult, usersResult, itemsResult, authResult] = await Promise.all([
             supabase.from("clients").select("id, name").eq("active", true).order("name"),
             supabase.from("stores").select("id, name, client_id").order("name"),
@@ -153,9 +155,11 @@ export default function LeadsPage() {
         if (!itemsResult.error) setItems((itemsResult.data ?? []) as WorkItem[])
         if (!authResult.error && authResult.data.user) setCurrentUserId(authResult.data.user.id)
         setLoadingOptions(false)
-    }
+    }, [supabase])
 
-    useEffect(() => { loadData() }, [])
+    // loadData applies its results only after the Supabase requests resolve.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    useEffect(() => { void loadData() }, [loadData])
 
     const filteredSites = customerId && customerId !== "__new__" ? sites.filter((site) => site.client_id === customerId) : []
     const visibleItems = useMemo(() => {
@@ -249,6 +253,30 @@ export default function LeadsPage() {
         finally { setConverting(false) }
     }
 
+    async function handleDelete() {
+        if (!deleteTarget || deleting) return
+        setDeleting(true)
+        setDeleteError("")
+        try {
+            const { data, error: deleteFailure } = await supabase
+                .from("internal_work_items")
+                .delete()
+                .eq("id", deleteTarget.id)
+                .select("id")
+                .single()
+            if (deleteFailure || !data) {
+                setDeleteError(deleteFailure?.message || "The item could not be deleted.")
+            } else {
+                setItems((current) => current.filter((item) => item.id !== deleteTarget.id))
+                setDeleteTarget(null)
+            }
+        } catch {
+            setDeleteError("The item could not be deleted. Please try again.")
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     function renderFilter(key: string) {
         if (key === "lead") return <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}><SelectTrigger className="h-7 text-[11px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="newest">Newest first</SelectItem><SelectItem value="oldest">Oldest first</SelectItem><SelectItem value="due">Required by</SelectItem><SelectItem value="title">Title A-Z</SelectItem></SelectContent></Select>
         if (key === "customer") return <Select value={customerFilter} onValueChange={setCustomerFilter}><SelectTrigger className="h-7 text-[11px]"><SelectValue placeholder="All customers" /></SelectTrigger><SelectContent><SelectItem value="all">All customers</SelectItem><SelectItem value="__none__">No customer</SelectItem>{customers.map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select>
@@ -267,8 +295,8 @@ export default function LeadsPage() {
         return <div>{statusLabel(item.status)}</div>
     }
 
-    const gridTemplate = order.map((key) => `${widths[key] ?? LEAD_COLUMN_BY_KEY[key].width}px`).join(" ")
-    const totalWidth = order.reduce((sum, key) => sum + (widths[key] ?? LEAD_COLUMN_BY_KEY[key].width), 0)
+    const gridTemplate = [...order.map((key) => `${widths[key] ?? LEAD_COLUMN_BY_KEY[key].width}px`), "48px"].join(" ")
+    const totalWidth = order.reduce((sum, key) => sum + (widths[key] ?? LEAD_COLUMN_BY_KEY[key].width), 48)
 
     return (
         <DashboardLayout>
@@ -296,6 +324,21 @@ export default function LeadsPage() {
                             <DialogFooter className="sm:justify-between"><div>{editingItem && editingItem.status !== "converted" && <Button type="button" variant="secondary" onClick={handleCreateQuote} disabled={saving || converting}>{converting ? <><Loader2 className="mr-2 size-4 animate-spin" />Creating quote...</> : "Create Quote"}</Button>}</div><div className="flex gap-2"><Button variant="outline" disabled={saving || converting} onClick={() => setOpen(false)}>Cancel</Button><Button onClick={handleSave} disabled={saving || converting}>{saving ? "Saving..." : editingItem ? "Save changes" : "Save item"}</Button></div></DialogFooter>
                         </DialogContent>
                     </Dialog>
+                    <Dialog open={!!deleteTarget} onOpenChange={(value) => { if (!value && !deleting) { setDeleteTarget(null); setDeleteError("") } }}>
+                        <DialogContent className="sm:max-w-[420px]">
+                            <DialogHeader>
+                                <DialogTitle>Delete lead or to-do?</DialogTitle>
+                                <DialogDescription>Remove “{deleteTarget?.title}” from Leads & To Do? This cannot be undone. Any quote created from it will remain.</DialogDescription>
+                            </DialogHeader>
+                            {deleteError && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{deleteError}</div>}
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+                                <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
+                                    {deleting ? <><Loader2 className="mr-2 size-4 animate-spin" />Deleting...</> : "Delete item"}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
 
                 {items.length === 0 ? (
@@ -305,13 +348,20 @@ export default function LeadsPage() {
                         <div style={{ minWidth: totalWidth }}>
                             <div className="grid border-b bg-muted/40" style={{ gridTemplateColumns: gridTemplate }}>
                                 {order.map((key) => <LeadColumnHeader key={key} column={LEAD_COLUMN_BY_KEY[key]} width={widths[key] ?? LEAD_COLUMN_BY_KEY[key].width} onMove={move} onResize={setWidth} />)}
+                                <div className="print:hidden" aria-label="Actions" />
                             </div>
                             <div className="grid border-b bg-muted/20" style={{ gridTemplateColumns: gridTemplate }}>
                                 {order.map((key) => <div key={key} className="min-w-0 px-3 py-1.5">{renderFilter(key)}</div>)}
+                                <div className="print:hidden" />
                             </div>
                             {visibleItems.length === 0 ? <div className="px-3 py-8 text-center text-xs text-muted-foreground">No items match the selected filters.</div> : visibleItems.map((item) => (
-                                <div key={item.id} role="button" tabIndex={0} onClick={() => handleOpen(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleOpen(item) } }} className="grid cursor-pointer border-b text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0" style={{ gridTemplateColumns: gridTemplate }}>
+                                <div key={item.id} role="button" tabIndex={0} onClick={() => handleOpen(item)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleOpen(item) } }} className="grid cursor-pointer border-b text-xs transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset last:border-b-0" style={{ gridTemplateColumns: gridTemplate }}>
                                     {order.map((key) => <div key={key} className="min-w-0 overflow-hidden px-3 py-2.5">{renderCell(key, item)}</div>)}
+                                    <div className="flex items-center justify-center print:hidden">
+                                        <Button type="button" variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} onClick={(event) => { event.stopPropagation(); setDeleteError(""); setDeleteTarget(item) }}>
+                                            <Trash2 className="size-3.5" />
+                                        </Button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
