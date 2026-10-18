@@ -274,17 +274,15 @@ export default function JobCardPage() {
           .sheet, .sheet * { box-sizing: border-box; }
           .sheet {
             width: 210mm;
-            height: 297mm;
+            height: 296mm;
             min-height: 0;
             margin: 0 !important;
             padding: 6mm 10mm;
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
-            break-after: page;
-            page-break-after: always;
           }
-          .sheet:last-child { break-after: auto; page-break-after: auto; }
+          .sheet + .sheet { break-before: page; page-break-before: always; }
         }
       `}</style>
 
