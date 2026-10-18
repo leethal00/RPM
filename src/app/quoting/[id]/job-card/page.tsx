@@ -22,10 +22,11 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { paginateJobCard, type JobCardPagePlan } from "@/lib/job-card-pagination"
 import { inferDepartments } from "@/lib/job-card-departments"
-import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
+import { JobCardHeader } from "@/components/job-card-header"
 import type { CostingJob } from "@/types/database"
 
-const GREEN = PRINT_PRIMARY
+const INK = "#222222"
+const TINT = "#ffffff"
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
 const SECTION_HEADING_CODE = "__RPM_SECTION_HEADING__"
 const rows = (n: number) => Array.from({ length: n })
@@ -250,13 +251,15 @@ export default function JobCardPage() {
       contact={contact}
       phone={phone}
       qrUrl={qrUrl}
+      monochrome
     />
   )
 
   return (
     <div className="job-card-page min-h-screen bg-neutral-900/90 print:bg-white text-black">
       <style>{`
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .job-card-page .sheet img:not(.job-card-drawing) { filter: grayscale(1); }
+        @media print { .job-card-page * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
         @media print {
           @page { size: A4 portrait; margin: 0; }
           html, body {
@@ -297,7 +300,7 @@ export default function JobCardPage() {
         {header}
 
         <Bar>DEPARTMENTS <span className="font-normal">(auto-selected from BOM — adjust if needed)</span></Bar>
-        <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b9c5c1] px-[2.5mm]">
+        <div className="flex h-[9mm] items-center justify-between border border-t-0 border-[#b7b7b7] px-[2.5mm]">
           {DEPARTMENTS.map((d) => (
             <button type="button" key={d} onClick={() => toggleDepartment(d)} className="inline-flex items-center gap-[2mm] whitespace-nowrap text-[11.6px]">
               <CheckBox checked={selectedDepartments.includes(d)} />{d}
@@ -322,10 +325,10 @@ export default function JobCardPage() {
             </div>
           </Box>
           <Box title="DRAWING / SKETCH" className="min-h-[60mm]">
-            <div className="flex h-[48mm] items-center justify-center overflow-hidden border border-[#d5dfdc] text-center text-[10.5px] text-neutral-400">
+            <div className="flex h-[48mm] items-center justify-center overflow-hidden border border-[#d0d0d0] text-center text-[10.5px] text-neutral-400">
               {drawingUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={drawingUrl} alt={`Drawing of ${activeItem?.name || "product"}`} className="h-full w-full object-contain" />
+                <img src={drawingUrl} alt={`Drawing of ${activeItem?.name || "product"}`} className="job-card-drawing h-full w-full object-contain" />
               ) : "Sketch here or attach manufacture drawings"}
             </div>
           </Box>
@@ -335,7 +338,7 @@ export default function JobCardPage() {
         <Bar>TIME LOG</Bar>
         <JobGrid />
         <div className="flex h-[8mm] items-center justify-end gap-[2.5mm] pr-[38mm] text-[11.8px] font-bold">
-          <span>Total Hours:</span><span className="h-[7mm] w-[17mm] border border-[#7b9e92] bg-white" />
+          <span>Total Hours:</span><span className="h-[7mm] w-[17mm] border border-[#888888] bg-white" />
         </div>
       </>} closeout={<>
         <div className="mt-[2.5mm] grid grid-cols-[1.35fr_.86fr_.9fr] items-start gap-[2mm]">
@@ -363,12 +366,12 @@ export default function JobCardPage() {
         {header}
 
         <div className="mt-[3mm] text-center">
-          <div className="text-[22px] font-black tracking-tight" style={{ color: GREEN }}>SAFETY INFORMATION</div>
-          <div className="text-[12px] font-bold" style={{ color: GREEN }}>OUR SAFETY COMMITMENT</div>
+          <div className="text-[22px] font-black tracking-tight" style={{ color: INK }}>SAFETY INFORMATION</div>
+          <div className="text-[12px] font-bold" style={{ color: INK }}>OUR SAFETY COMMITMENT</div>
           <p className="mx-auto mt-[2.5mm] max-w-[165mm] text-[11.4px] leading-[1.42]">
             At Rodier we value the health and safety of our people, our clients and the public. We all share responsibility for a safe workplace and must work in a way that prevents harm.
           </p>
-          <div className="mt-[2.5mm] text-[12.6px] font-black tracking-[.03em]" style={{ color: GREEN }}>
+          <div className="mt-[2.5mm] text-[12.6px] font-black tracking-[.03em]" style={{ color: INK }}>
             THINK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;WORK SAFE&nbsp;&nbsp;|&nbsp;&nbsp;HOME SAFE
           </div>
         </div>
@@ -378,7 +381,7 @@ export default function JobCardPage() {
             <div className="grid grid-cols-4 gap-x-[2mm] gap-y-[4mm] pt-[2mm]">
               {ppe.map(({ label, Icon }) => (
                 <div key={label} className="flex flex-col items-center text-center">
-                  <div className="grid h-[15mm] w-[15mm] place-items-center rounded-full bg-[#0871b7] text-white">
+                  <div className="grid h-[15mm] w-[15mm] place-items-center rounded-full border border-black bg-white text-black">
                     <Icon className="h-[9mm] w-[9mm]" strokeWidth={1.8} />
                   </div>
                   <div className="mt-[1.2mm] whitespace-pre-line text-[10.2px] font-medium leading-tight">{label}</div>
@@ -403,10 +406,10 @@ export default function JobCardPage() {
         <div className="mt-[2mm]">
           <Box title="EMERGENCY INFORMATION" className="h-[47mm]">
             <div className="grid grid-cols-4 gap-[3mm] pt-[2mm]">
-              <Emergency icon="phone" color="#ef3d35" title="Emergency (Fire / Police / Ambulance)" value="111" bold />
-              <Emergency icon="assembly" color="#159157" title="Site Assembly Point" />
-              <Emergency icon="firstaid" color="#159157" title="First Aid Location" />
-              <Emergency icon="hospital" color="#ef3d35" title="Nearest Medical Centre" />
+              <Emergency icon="phone" title="Emergency (Fire / Police / Ambulance)" value="111" bold />
+              <Emergency icon="assembly" title="Site Assembly Point" />
+              <Emergency icon="firstaid" title="First Aid Location" />
+              <Emergency icon="hospital" title="Nearest Medical Centre" />
             </div>
           </Box>
         </div>
@@ -414,7 +417,7 @@ export default function JobCardPage() {
         <div className="mt-[2mm]">
           <Box title="NOTES" className="h-[39mm]">
             <div className="space-y-[5mm] pt-[1mm]">
-              {rows(5).map((_, i) => <div key={i} className="border-b border-[#c7d1ce]" />)}
+              {rows(5).map((_, i) => <div key={i} className="border-b border-[#c8c8c8]" />)}
             </div>
           </Box>
         </div>
@@ -444,72 +447,72 @@ export function ElectricalCheckSheet({ header, number, itemName, quantity }: { h
   return <>
     <Sheet className="electrical-check-sheet">
       {header}
-      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: GREEN }}>
+      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: INK }}>
         <div>
-          <h2 className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>ELECTRICAL CHECK SHEET</h2>
+          <h2 className="text-[20px] font-black leading-tight" style={{ color: INK }}>ELECTRICAL CHECK SHEET</h2>
           <p className="text-[10.5px]">Wiring record · circuit diagram</p>
         </div>
         <div className="text-right text-[10px] font-bold">1 / 2</div>
       </div>
 
-      <div className="mt-[3mm] grid grid-cols-2 gap-x-[6mm] gap-y-[2mm] border border-[#b9c5c1] p-[2.5mm] text-[11px]">
+      <div className="mt-[3mm] grid grid-cols-2 gap-x-[6mm] gap-y-[2mm] border border-[#b7b7b7] p-[2.5mm] text-[11px]">
         {(["Wired by", "Date", "Checked by", "Date", "Approved by", "Date"] as const).map((label, index) =>
-          <div key={index} className="flex h-[6mm] items-end gap-[2mm]"><span className="w-[21mm] shrink-0 font-bold">{label}:</span><span className="flex-1 border-b border-[#9eaaa6]" /></div>
+          <div key={index} className="flex h-[6mm] items-end gap-[2mm]"><span className="w-[21mm] shrink-0 font-bold">{label}:</span><span className="flex-1 border-b border-[#aaaaaa]" /></div>
         )}
       </div>
 
       <Bar>DESCRIPTION</Bar>
-      <div className="min-h-[18mm] border border-t-0 border-[#b9c5c1] p-[2mm] text-[11.5px]">
+      <div className="min-h-[18mm] border border-t-0 border-[#b7b7b7] p-[2mm] text-[11.5px]">
         <strong>{itemName}</strong><span className="ml-[3mm]">Build qty: {quantity}</span>
-        <div className="mt-[5mm] border-b border-[#c7d1ce]" />
+        <div className="mt-[5mm] border-b border-[#c8c8c8]" />
       </div>
 
       <Bar>CIRCUIT DIAGRAM / SKETCH</Bar>
-      <div className="h-[157mm] border border-t-0 border-[#b9c5c1]" style={{ backgroundImage: "linear-gradient(#e6ecea 1px, transparent 1px), linear-gradient(90deg, #e6ecea 1px, transparent 1px)", backgroundSize: "10mm 10mm" }} />
+      <div className="h-[157mm] border border-t-0 border-[#b7b7b7]" style={{ backgroundImage: "linear-gradient(#e8e8e8 1px, transparent 1px), linear-gradient(90deg, #e8e8e8 1px, transparent 1px)", backgroundSize: "10mm 10mm" }} />
       <div className="mt-[1.5mm] text-right text-[9.5px] text-neutral-600">Continue the diagram on an additional page if needed.</div>
     </Sheet>
 
     <Sheet className="electrical-check-sheet electrical-check-details">
       {header}
-      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: GREEN }}>
+      <div className="mt-[4mm] flex items-end justify-between border-b-2 pb-[1mm]" style={{ borderColor: INK }}>
         <div>
-          <h2 className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>ELECTRICAL CHECK SHEET</h2>
+          <h2 className="text-[20px] font-black leading-tight" style={{ color: INK }}>ELECTRICAL CHECK SHEET</h2>
           <p className="text-[10.5px]">Actual components · testing · checks</p>
         </div>
         <div className="text-right text-[10px] font-bold">2 / 2 · Job {number}</div>
       </div>
 
       <Bar>WIRING DETAILS</Bar>
-      <div className="grid grid-cols-2 border-x border-[#b9c5c1] text-[11px]">
+      <div className="grid grid-cols-2 border-x border-[#b7b7b7] text-[11px]">
         {[
           "Type of LEDs used", "Number of LEDs used",
           "Transformers supplied", "",
           "Fuse size and quantity", "Watts",
           "Soak tested (1 hour minimum) by", "Test voltage",
           "Photos taken by", "Uploaded (Yes / No)",
-        ].map((label, index) => <div key={index} className="flex h-[10mm] items-center gap-[1mm] border-b border-r border-[#b9c5c1] px-[2mm] last:border-r-0">
+        ].map((label, index) => <div key={index} className="flex h-[10mm] items-center gap-[1mm] border-b border-r border-[#b7b7b7] px-[2mm] last:border-r-0">
           {label && <span className="shrink-0 font-bold">{label}:</span>}
-          <span className="min-w-0 flex-1 border-b border-[#c7d1ce]" />
+          <span className="min-w-0 flex-1 border-b border-[#c8c8c8]" />
         </div>)}
       </div>
 
       <Bar>CHECKS</Bar>
       <table className="w-full table-fixed border-collapse text-[11px]">
-        <thead><tr style={{ background: PRINT_TINT }}>
-          <th className="w-[74%] border border-[#b9c5c1] px-[2mm] py-[1mm] text-left">Check</th>
-          <th className="w-[13%] border border-[#b9c5c1] px-[1mm] py-[1mm]">Yes / No</th>
-          <th className="w-[13%] border border-[#b9c5c1] px-[1mm] py-[1mm]">Checked by</th>
+        <thead><tr style={{ background: TINT }}>
+          <th className="w-[74%] border border-[#b7b7b7] px-[2mm] py-[1mm] text-left">Check</th>
+          <th className="w-[13%] border border-[#b7b7b7] px-[1mm] py-[1mm]">Yes / No</th>
+          <th className="w-[13%] border border-[#b7b7b7] px-[1mm] py-[1mm]">Checked by</th>
         </tr></thead>
         <tbody>{electricalChecks.map(([name, description]) => <tr key={name}>
-          <td className="h-[15mm] border border-[#b9c5c1] px-[2mm]"><strong>{name}:</strong> {description}</td>
-          <td className="border border-[#b9c5c1] px-[1mm] text-center text-[9.5px]"><span className="inline-flex items-center gap-[.8mm]"><CheckBox /> Yes <CheckBox /> No</span></td>
-          <td className="border border-[#b9c5c1]" />
+          <td className="h-[15mm] border border-[#b7b7b7] px-[2mm]"><strong>{name}:</strong> {description}</td>
+          <td className="border border-[#b7b7b7] px-[1mm] text-center text-[9.5px]"><span className="inline-flex items-center gap-[.8mm]"><CheckBox /> Yes <CheckBox /> No</span></td>
+          <td className="border border-[#b7b7b7]" />
         </tr>)}</tbody>
       </table>
 
       <Bar>NOTES / CORRECTIVE ACTIONS</Bar>
-      <div className="h-[25mm] border border-t-0 border-[#b9c5c1] px-[2mm] pt-[2mm]">
-        <div className="space-y-[6mm]">{rows(3).map((_, index) => <div key={index} className="border-b border-[#c7d1ce]" />)}</div>
+      <div className="h-[25mm] border border-t-0 border-[#b7b7b7] px-[2mm] pt-[2mm]">
+        <div className="space-y-[6mm]">{rows(3).map((_, index) => <div key={index} className="border-b border-[#c8c8c8]" />)}</div>
       </div>
     </Sheet>
   </>
@@ -596,7 +599,7 @@ function PaginatedJobCard({
       </section>}
       {page.showTimeLog && <section className="flow-root">{timeLog}</section>}
       {page.showCloseout && <section className="flow-root">{closeout}</section>}
-      <div className="absolute bottom-[4mm] right-[10mm] text-[10px] font-bold tracking-wide" style={{ color: GREEN }}>
+      <div className="absolute bottom-[4mm] right-[10mm] text-[10px] font-bold tracking-wide" style={{ color: INK }}>
         {index < pages.length - 1 ? "Continued on next page →" : "Safety information on next page →"}
       </div>
     </Sheet>)}
@@ -604,7 +607,7 @@ function PaginatedJobCard({
 }
 
 function ContinuationHeader({ number }: { number: string }) {
-  return <div className="flex h-[12mm] items-center justify-between border-b-2 text-[14px] font-black" style={{ color: GREEN, borderColor: GREEN }}>
+  return <div className="flex h-[12mm] items-center justify-between border-b-2 text-[14px] font-black" style={{ color: INK, borderColor: INK }}>
     <span>JOB CARD — CONTINUED</span><span className="text-[12px]">Job No. {number}</span>
   </div>
 }
@@ -619,7 +622,7 @@ function Sheet({ children, className = "" }: { children: React.ReactNode; classN
 
 function Bar({ children, noTop = false }: { children: React.ReactNode; noTop?: boolean }) {
   return (
-    <div className={`${noTop ? "" : "mt-[2.1mm]"} h-[6mm] px-[2.5mm] py-[.7mm] text-[12px] font-black text-white`} style={{ background: GREEN }}>
+    <div className={`${noTop ? "" : "mt-[2.1mm]"} h-[6mm] border-b border-black bg-white px-[2.5mm] py-[.7mm] text-[12px] font-black text-black`}>
       {children}
     </div>
   )
@@ -637,8 +640,8 @@ function Box({
   className?: string
 }) {
   return (
-    <div className={`box-border border border-[#b9c5c1] bg-white ${className}`}>
-      <div className="flex h-[6mm] items-center px-[2.5mm] text-[12px] text-white" style={{ background: GREEN }}>
+    <div className={`box-border border border-[#b7b7b7] bg-white ${className}`}>
+      <div className="flex h-[6mm] items-center border-b border-black bg-white px-[2.5mm] text-[12px] text-black">
         <span className="font-black">{title}</span>{suffix && <span className="ml-[1.2mm] font-normal">{suffix}</span>}
       </div>
       <div className="box-border p-[2mm]">{children}</div>
@@ -652,7 +655,7 @@ function SignLine({ label }: { label: string }) {
 
 function CheckBox({ checked = false }: { checked?: boolean }) {
   return (
-    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${checked ? "font-black text-white" : "border-neutral-500 bg-white"}`} style={checked ? { borderColor: GREEN, background: GREEN } : undefined}>
+    <i className={`inline-grid h-[4mm] w-[4mm] shrink-0 place-items-center border text-[9px] not-italic leading-none ${checked ? "font-black text-white" : "border-neutral-500 bg-white"}`} style={checked ? { borderColor: INK, background: INK } : undefined}>
       {checked ? "✓" : ""}
     </i>
   )
@@ -677,8 +680,8 @@ function JobGrid() {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr style={{ background: PRINT_TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
-      <tbody>{rows(8).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b9c5c1]" />)}</tr>)}</tbody>
+      <thead><tr style={{ background: TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b7b7b7] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
+      <tbody>{rows(8).map((_, r) => <tr key={r}>{headers.map((h) => <td key={h} className="h-[5.2mm] border border-[#b7b7b7]" />)}</tr>)}</tbody>
     </table>
   )
 }
@@ -689,15 +692,15 @@ function MaterialsGrid({ entries }: { entries: MaterialEntry[] }) {
   return (
     <table className="w-full table-fixed border-collapse">
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-      <thead><tr style={{ background: PRINT_TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
+      <thead><tr style={{ background: TINT }}>{headers.map((h) => <th key={h} className="h-[5.2mm] border border-[#b7b7b7] px-[1mm] text-center text-[10.3px] font-bold">{h}</th>)}</tr></thead>
       <tbody>
         {entries.map(({ key, line }) => (
           <tr key={key} data-material-row>
-            <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] break-words border border-[#b9c5c1] px-[1.5mm] text-[10.5px]">{line?.description || ""}</td>
-            <td className="h-[5.8mm] border border-[#b9c5c1]" />
-            <td className="h-[5.8mm] border border-[#b9c5c1] px-[1mm] text-center text-[10.5px]">{line ? materialMeta(line)?.unit || "" : ""}</td>
-            <td className="h-[5.8mm] border border-[#b9c5c1]" />
+            <td className="h-[5.8mm] border border-[#b7b7b7]" />
+            <td className="h-[5.8mm] break-words border border-[#b7b7b7] px-[1.5mm] text-[10.5px]">{line?.description || ""}</td>
+            <td className="h-[5.8mm] border border-[#b7b7b7]" />
+            <td className="h-[5.8mm] border border-[#b7b7b7] px-[1mm] text-center text-[10.5px]">{line ? materialMeta(line)?.unit || "" : ""}</td>
+            <td className="h-[5.8mm] border border-[#b7b7b7]" />
           </tr>
         ))}
       </tbody>
@@ -705,12 +708,12 @@ function MaterialsGrid({ entries }: { entries: MaterialEntry[] }) {
   )
 }
 
-function Emergency({ icon, color, title, value, bold = false }: { icon: "phone" | "assembly" | "firstaid" | "hospital"; color: string; title: string; value?: string; bold?: boolean }) {
-  const iconClass = "h-[7mm] w-[7mm] text-white"
+function Emergency({ icon, title, value, bold = false }: { icon: "phone" | "assembly" | "firstaid" | "hospital"; title: string; value?: string; bold?: boolean }) {
+  const iconClass = "h-[7mm] w-[7mm] text-black"
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="grid h-[11mm] w-[11mm] place-items-center rounded-full" style={{ background: color }}>
-        {icon === "phone" && <Phone className={iconClass} fill="white" />}
+      <div className="grid h-[11mm] w-[11mm] place-items-center rounded-full border border-black bg-white">
+        {icon === "phone" && <Phone className={iconClass} />}
         {icon === "assembly" && <MapPin className={iconClass} />}
         {icon === "firstaid" && <Cross className={iconClass} strokeWidth={3} />}
         {icon === "hospital" && <Hospital className={iconClass} />}

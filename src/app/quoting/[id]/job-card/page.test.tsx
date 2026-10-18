@@ -6,7 +6,7 @@ let selectedItemId: string | null = null
 let lines: { id: string; item_id: string; section: string; subsection: string; description: string; qty: number; materials: null }[] = []
 
 const items = [
-  { id: "first", name: "Front sign", sign_code: null, mode: "build", qty: 1, build_qty: 1, size: null, details: null, delivery: null, internal_notes: "Use the blue backing\nCheck the wiring", sort: 1, image_path: null },
+  { id: "first", name: "Front sign", sign_code: null, mode: "build", qty: 1, build_qty: 1, size: null, details: null, delivery: null, internal_notes: "Use the blue backing\nCheck the wiring", sort: 1, image_path: "drawings/front.png" },
   { id: "second", name: "Side sign", sign_code: null, mode: "build", qty: 1, build_qty: 1, size: null, details: null, delivery: null, internal_notes: "Keep this note private", sort: 2, image_path: null },
 ]
 
@@ -25,7 +25,7 @@ vi.mock("@/lib/supabase/client", () => ({
         }),
       }),
     }),
-    storage: { from: () => ({ getPublicUrl: () => ({ data: { publicUrl: "" } }) }) },
+    storage: { from: () => ({ getPublicUrl: () => ({ data: { publicUrl: "https://example.test/drawing.png" } }) }) },
   }),
 }))
 
@@ -61,6 +61,19 @@ describe("production job card internal BOM notes", () => {
     expect(card.getByText("Front sign")).toBeInTheDocument()
     expect(card.queryByText("Side sign")).not.toBeInTheDocument()
     expect(card.queryByText("Keep this note private", { exact: false })).not.toBeInTheDocument()
+  })
+
+  it("keeps the attached drawing in colour while rendering the job-card header in monochrome", async () => {
+    selectedItemId = "first"
+    const { container } = render(<JobCardPage />)
+    const card = await waitFor(() => {
+      const visibleCard = container.querySelector<HTMLElement>(".job-card-sheet")
+      expect(visibleCard).not.toBeNull()
+      return visibleCard!
+    })
+    expect(within(card).getByRole("img", { name: "Drawing of Front sign" })).toHaveClass("job-card-drawing")
+    expect(within(card).getByRole("img", { name: "Rodier" })).toHaveClass("grayscale")
+    expect(container.querySelector("style")?.textContent).toContain("img:not(.job-card-drawing) { filter: grayscale(1); }")
   })
 
   it("adds a printable electrical check sheet when the selected BOM includes wiring", async () => {
