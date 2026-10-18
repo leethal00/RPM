@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         if (!xero) return NextResponse.json({ error: "Xero is not connected." }, { status: 409 })
         const contacts = await allCustomerContacts(xero.accessToken, xero.tenantId)
         const clients: Array<{ id: string; name: string; contact_email: string | null }> = []
-        const links: Array<{ xero_contact_id: string; client_id: string; preferred: boolean }> = []
+        const links: Array<{ xero_contact_id: string; client_id: string; store_id: string | null; preferred: boolean }> = []
         for (let offset = 0; offset < 200000; offset += 1000) {
             const { data, error } = await admin.from("clients").select("id,name,contact_email").order("id").range(offset, offset + 999)
             if (error) throw error
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
             if ((data || []).length < 1000) break
         }
         for (let offset = 0; offset < 200000; offset += 1000) {
-            const { data, error } = await admin.from("xero_client_contacts").select("xero_contact_id,client_id,preferred").order("xero_contact_id").range(offset, offset + 999)
+            const { data, error } = await admin.from("xero_client_contacts").select("xero_contact_id,client_id,store_id,preferred").order("xero_contact_id").range(offset, offset + 999)
             if (error) throw error
             links.push(...(data || []))
             if ((data || []).length < 1000) break
@@ -79,7 +79,8 @@ export async function POST(request: Request) {
                 const { error } = await admin.from("xero_client_contacts").update({ preferred: false }).eq("client_id", client.id)
                 if (error) throw error
             }
-            const { error } = await admin.from("xero_client_contacts").upsert({ xero_contact_id: contact.id, client_id: client.id, xero_name: contact.name, email: contact.email || null, preferred: !!body.preferred, updated_at: new Date().toISOString() })
+            const previous = links.find((link) => link.xero_contact_id === contact.id)
+            const { error } = await admin.from("xero_client_contacts").upsert({ xero_contact_id: contact.id, client_id: client.id, store_id: previous?.store_id || null, xero_name: contact.name, email: contact.email || null, preferred: !!body.preferred, updated_at: new Date().toISOString() })
             if (error) throw error
             return NextResponse.json({ linked: true })
         }
@@ -113,11 +114,11 @@ export async function POST(request: Request) {
             const client = byName.get(key(contact.name))!
             const isPreferred = !preferred.has(client.id)
             if (isPreferred) preferred.add(client.id)
-            return { xero_contact_id: contact.id, client_id: client.id, xero_name: contact.name, email: contact.email || null, preferred: isPreferred, updated_at: new Date().toISOString() }
+            return { xero_contact_id: contact.id, client_id: client.id, store_id: null, xero_name: contact.name, email: contact.email || null, preferred: isPreferred, updated_at: new Date().toISOString() }
         })
         const rows = [...contacts.filter((contact) => linked.has(contact.id)).map((contact) => {
             const link = byContactId.get(contact.id)!
-            return { xero_contact_id: contact.id, client_id: link.client_id, xero_name: contact.name, email: contact.email || null, preferred: link.preferred, updated_at: new Date().toISOString() }
+            return { xero_contact_id: contact.id, client_id: link.client_id, store_id: link.store_id, xero_name: contact.name, email: contact.email || null, preferred: link.preferred, updated_at: new Date().toISOString() }
         }), ...newRows]
         for (let index = 0; index < rows.length; index += 200) {
             const { error } = await admin.from("xero_client_contacts").upsert(rows.slice(index, index + 200))

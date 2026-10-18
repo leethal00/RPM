@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
     customers: [] as Array<{ id: string; name: string }>,
     createdCustomer: null as Record<string, unknown> | null,
     linkedClientId: null as string | null,
+    linkedStoreId: null as string | null,
+    savedLink: null as Record<string, unknown> | null,
     detailLines: true,
     site: { id: "site-1", client_id: "client-1" } as { id: string; client_id: string } | null,
     sites: null as Array<{ id: string; client_id: string }> | null,
@@ -66,7 +68,8 @@ vi.mock("@/lib/xero", () => ({
                 },
             }
             if (table === "xero_client_contacts") return {
-                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.linkedClientId ? { client_id: state.linkedClientId } : null, error: null }) }) }),
+                select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: state.linkedClientId || state.linkedStoreId ? { client_id: state.linkedClientId, store_id: state.linkedStoreId, preferred: true } : null, error: null }) }) }),
+                upsert: async (payload: Record<string, unknown>) => { state.savedLink = payload; return { error: null } },
             }
             if (table === "stores") return {
                 select: () => ({ eq: (_column: string, id: string) => ({ maybeSingle: async () => ({ data: state.sites ? state.sites.find((site) => site.id === id) || null : state.site, error: null }) }) }),
@@ -93,6 +96,8 @@ describe("Xero invoice import", () => {
         state.customers = []
         state.createdCustomer = null
         state.linkedClientId = null
+        state.linkedStoreId = null
+        state.savedLink = null
         state.detailLines = true
         state.site = { id: "site-1", client_id: "client-1" }
         state.sites = null
@@ -123,6 +128,22 @@ describe("Xero invoice import", () => {
         expect(body.invoice.contactName).toBe("Brave Design")
         expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
         expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("InvoiceNumbers=INV-7564&page=1&pageSize=100&unitdp=4")
+    })
+
+    it("returns a previously linked physical site and keeps that link on import", async () => {
+        state.linkedClientId = "billing-client"
+        state.linkedStoreId = "site-1"
+        const previewResponse = await GET(new NextRequest(url))
+        expect((await previewResponse.json()).invoice).toMatchObject({
+            contactId: "contact-1", linkedClientId: "billing-client", linkedStoreId: "site-1",
+        })
+        const response = await POST(new NextRequest(url, { method: "POST", body: JSON.stringify({
+            invoiceNumber, clientId: "billing-client", storeId: "site-1", showAllSites: true,
+        }) }))
+        expect(response.status).toBe(200)
+        expect(state.savedLink).toMatchObject({
+            xero_contact_id: "contact-1", client_id: "billing-client", store_id: "site-1", preferred: true,
+        })
     })
 
     it("fetches a batch in one call, restores requested order and reports missing invoices", async () => {

@@ -45,6 +45,9 @@ type ImportPreview = {
     invoiceNumber: string
     reference: string
     contactName: string
+    contactId?: string | null
+    linkedClientId?: string | null
+    linkedStoreId?: string | null
     date: string | null
     dueDate: string | null
     status: string
@@ -94,6 +97,10 @@ const isoDate = (date: Date) => date.toISOString().slice(0, 10)
 
 function siteSearchWords(value: string) {
     return value.toLocaleLowerCase().replace(/['’]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+}
+
+function invoiceSiteKey(value: string) {
+    return siteSearchWords(value.replace(/^mcdonald(?:'|’)?s\b[\s:–—-]*/i, "")).join(" ")
 }
 
 function JobColumnHeader({
@@ -467,8 +474,18 @@ export default function ActiveJobsPage() {
             setCreatingSite(false)
             return
         }
-        setStores((current) => [...current.filter((store) => store.client_id !== selectedClient), ...((data || []) as Pick<Store, "id" | "name" | "client_id" | "address">[])])
+        const clientSites = (data || []) as Pick<Store, "id" | "name" | "client_id" | "address">[]
+        let chosenSite = clientSites.find((store) => store.id === siteId)
+        if (siteId && !chosenSite) {
+            const { data: otherSite } = await supabase.from("stores").select("id,name,client_id,address").eq("id", siteId).maybeSingle()
+            chosenSite = otherSite || undefined
+        }
+        setStores((current) => {
+            const remaining = current.filter((store) => store.client_id !== selectedClient && store.id !== chosenSite?.id)
+            return [...remaining, ...clientSites, ...(chosenSite && chosenSite.client_id !== selectedClient ? [chosenSite] : [])]
+        })
         if (siteId) {
+            if (chosenSite && chosenSite.client_id !== selectedClient) setShowAllSites(true)
             if (multipleSites) setSelectedStores((current) => Array.from(new Set([...current, siteId])))
             else setSelectedStore(siteId)
         }
@@ -510,12 +527,17 @@ export default function ActiveJobsPage() {
         setImportTitle(invoice.reference || invoice.invoiceNumber)
         setCompletionDate(invoice.date?.slice(0, 10) || "")
         const matches = clients.filter((client) => client.name.trim().toLocaleLowerCase() === invoice.contactName.trim().toLocaleLowerCase())
-        setSelectedClient(matches.length === 1 ? matches[0].id : "auto")
-        setSelectedStore("none")
+        const clientId = invoice.linkedClientId && clients.some((client) => client.id === invoice.linkedClientId)
+            ? invoice.linkedClientId : matches.length === 1 ? matches[0].id : "auto"
+        const linkedSite = stores.find((store) => store.id === invoice.linkedStoreId)
+        const nameMatches = stores.filter((store) => invoiceSiteKey(store.name) === invoiceSiteKey(invoice.contactName))
+        const matchedSite = linkedSite || (nameMatches.length === 1 ? nameMatches[0] : null)
+        setSelectedClient(clientId)
+        setSelectedStore(matchedSite?.id || "none")
         setMultipleSites(false)
         setSelectedStores([])
         setVisibleToClient(false)
-        setShowAllSites(false)
+        setShowAllSites(Boolean(matchedSite && matchedSite.client_id !== clientId))
         setSiteSearch("")
     }
 
@@ -680,6 +702,8 @@ export default function ActiveJobsPage() {
                                 key={selectedClient}
                                 initialClientId={selectedClient}
                                 initialClientName={selectedClientName}
+                                initialSiteName={preview?.contactName || ""}
+                                checkAllClientsForDuplicates
                                 lockClient
                                 onSuccess={(siteId) => { void siteCreated(siteId) }}
                                 onCancel={() => setCreatingSite(false)}
@@ -782,6 +806,7 @@ export default function ActiveJobsPage() {
                                         </select>
                                         {multipleSites && selectedStores.length === 0 && <p className="text-xs text-muted-foreground">No sites selected — manufacture only.</p>}
                                         {visibleSiteLabels.length === 0 && siteSearch.trim() && <p className="text-xs text-muted-foreground">No sites match your search.</p>}
+                                        {selectedStore === "none" && !multipleSites && <p className="text-xs text-muted-foreground">If this location is not in RPM yet, create the site once. Future invoices from this Xero customer will use the site you choose here.</p>}
                                     </div>
                                     <div className="grid min-w-0 gap-2">
                                         <Label>Complete by</Label>

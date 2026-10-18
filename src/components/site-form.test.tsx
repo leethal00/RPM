@@ -4,13 +4,14 @@ import { SiteForm } from "./site-form"
 import type { Store } from "@/types/database"
 import { formatDayHours, formatHoursShort, parseHours } from "@/lib/hours"
 
-const mocks = vi.hoisted(() => ({ insert: vi.fn(), update: vi.fn() }))
+const mocks = vi.hoisted(() => ({ insert: vi.fn(), update: vi.fn(), existingSites: [] as Array<{ id: string; name: string; address: string; client_id: string }> }))
 
 vi.mock("@/lib/supabase/client", () => ({
     createClient: () => ({
         from: (table: string) => ({
             select: () => ({
                 order: () => Promise.resolve({ data: table === "clients" ? [{ id: "11111111-1111-4111-8111-111111111111", name: "Client" }] : [] }),
+                ilike: () => Promise.resolve({ data: mocks.existingSites, error: null }),
                 eq: () => ({
                     order: () => Promise.resolve({ data: [] }),
                     then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
@@ -32,6 +33,7 @@ vi.mock("@/lib/supabase/client", () => ({
 beforeEach(() => {
     mocks.insert.mockClear()
     mocks.update.mockClear()
+    mocks.existingSites = []
 })
 afterEach(cleanup)
 
@@ -81,4 +83,14 @@ it("keeps legacy weekly hours and all-days-same display compatible", () => {
     expect(formatDayHours({ closed: true })).toBe("Closed")
     expect(formatHoursShort(JSON.stringify({ type: "daily", hours: { start: "08:00", end: "17:00" } }))).toBe("08:00–17:00")
     expect(formatHoursShort(JSON.stringify({ type: "always" }))).toBe("24 hours")
+})
+
+it("reuses a physical site owned by another customer during Xero import", async () => {
+    mocks.existingSites = [{ id: "parent-site", name: "Wanaka, 3 Parks", address: "3 Parks, Wanaka", client_id: "parent-client" }]
+    const onSuccess = vi.fn()
+    render(<SiteForm initialClientId="11111111-1111-4111-8111-111111111111" initialClientName="McDonalds Wanaka, 3 Parks" initialSiteName="McDonalds Wanaka, 3 Parks" checkAllClientsForDuplicates onSuccess={onSuccess} onCancel={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText(/Site Address/), { target: { value: "3 Parks, Wanaka" } })
+    fireEvent.submit(screen.getByRole("button", { name: "Add Site" }).closest("form")!)
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("parent-site"))
+    expect(mocks.insert).not.toHaveBeenCalledWith("stores", expect.anything())
 })

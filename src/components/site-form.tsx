@@ -31,12 +31,14 @@ interface SiteFormProps {
     site?: Store
     initialClientId?: string
     initialClientName?: string
+    initialSiteName?: string
+    checkAllClientsForDuplicates?: boolean
     lockClient?: boolean
     onSuccess: (siteId?: string) => void
     onCancel: () => void
 }
 
-export function SiteForm({ site, initialClientId, initialClientName, lockClient = false, onSuccess, onCancel }: SiteFormProps) {
+export function SiteForm({ site, initialClientId, initialClientName, initialSiteName, checkAllClientsForDuplicates = false, lockClient = false, onSuccess, onCancel }: SiteFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [regions, setRegions] = useState<Region[]>([])
@@ -51,7 +53,7 @@ export function SiteForm({ site, initialClientId, initialClientName, lockClient 
 
     // Form State
     const [formData, setFormData] = useState({
-        name: site?.name || "",
+        name: site?.name || initialSiteName || "",
         address: site?.address || "",
         region: site?.region || "",
         manager_name: site?.manager_name || "",
@@ -244,17 +246,17 @@ export function SiteForm({ site, initialClientId, initialClientName, lockClient 
 
         if (!site?.id) {
             const customerName = customers.find((customer) => customer.id === clientId)?.name || initialClientName || ""
-            const { data: existingSites, error: lookupError } = await supabase
-                .from('stores')
-                .select('id,name,address')
-                .eq('client_id', clientId)
+            const siteQuery = supabase.from('stores').select('id,name,address,client_id')
+            const { data: existingSites, error: lookupError } = checkAllClientsForDuplicates
+                ? await siteQuery.ilike('address', formData.address.trim())
+                : await siteQuery.eq('client_id', clientId)
             if (lookupError) {
                 toast.error(lookupError.message)
                 setLoading(false)
                 return
             }
-            const existing = (existingSites as Pick<Store, "id" | "name" | "address">[] | null)?.find((candidate) =>
-                normalizedSiteName(candidate.name, customerName) === normalizedSiteName(formData.name, customerName)
+            const existing = (existingSites as Pick<Store, "id" | "name" | "address" | "client_id">[] | null)?.find((candidate) =>
+                normalizedSiteName(candidate.name, customerName).replace(/^mcdonald(?:'|’)?s\s+/i, "") === normalizedSiteName(formData.name, customerName).replace(/^mcdonald(?:'|’)?s\s+/i, "")
                 && String(candidate.address || "").trim().toLocaleLowerCase() === formData.address.trim().toLocaleLowerCase()
             )
             if (existing) {

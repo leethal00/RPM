@@ -51,12 +51,20 @@ function hasImportableLines(invoice: XeroInvoice) {
     return Array.isArray(invoice.LineItems) && invoice.LineItems.length > 0
 }
 
-function preview(invoice: XeroInvoice) {
+async function preview(invoice: XeroInvoice, admin: ReturnType<typeof xeroAdmin>) {
+    const contactId = invoice.Contact?.ContactID || null
+    const { data: link, error: linkError } = contactId
+        ? await admin.from("xero_client_contacts").select("client_id,store_id").eq("xero_contact_id", contactId).maybeSingle()
+        : { data: null, error: null }
+    if (linkError) throw linkError
     return {
         invoiceId: invoice.InvoiceID || null,
         invoiceNumber: invoice.InvoiceNumber || null,
         reference: invoice.Reference || "",
         contactName: invoice.Contact?.Name || "",
+        contactId,
+        linkedClientId: link?.client_id || null,
+        linkedStoreId: link?.store_id || null,
         date: invoice.DateString || null,
         dueDate: invoice.DueDateString || null,
         status: invoice.Status || "",
@@ -96,7 +104,7 @@ export async function GET(req: NextRequest) {
             const params = new URLSearchParams({ InvoiceNumbers: numbers.join(","), page: "1", pageSize: "100", unitdp: "4" })
             const result = await xeroJson(`${XERO_API}/Invoices?${params}`, xero.accessToken, xero.tenantId)
             const rows = (result?.Invoices || []) as XeroInvoice[]
-            const invoices: ReturnType<typeof preview>[] = []
+            const invoices: Awaited<ReturnType<typeof preview>>[] = []
             const warnings: string[] = []
             for (const number of numbers) {
                 const matches = rows.filter((invoice) => invoice.InvoiceNumber === number)
@@ -104,7 +112,7 @@ export async function GET(req: NextRequest) {
                 if (existing?.some((job) => job.xero_invoice_number === number)) warnings.push(`${number} is already in RPM.`)
                 else if (!invoice) warnings.push(`${number} was not found in Xero.`)
                 else if (matches.length !== 1 || !invoice.InvoiceID || invoice.Type !== "ACCREC" || !["DRAFT", "AUTHORISED", "PAID"].includes(invoice.Status || "") || !hasImportableLines(invoice)) warnings.push(`${number} cannot be imported. Check its status and lines in Xero.`)
-                else invoices.push(preview(invoice))
+                else invoices.push(await preview(invoice, admin))
             }
             return NextResponse.json({ ok: true, invoices, warnings })
         }
@@ -130,7 +138,7 @@ export async function GET(req: NextRequest) {
         const { data: claimed } = await admin.from("costing_jobs").select("id").eq("xero_invoice_id", invoice.InvoiceID).maybeSingle()
         if (claimed) return NextResponse.json({ error: `Invoice ${invoiceNumber} is already linked to an RPM job.`, existingJobId: claimed.id }, { status: 409 })
 
-        return NextResponse.json({ ok: true, invoice: preview(invoice) })
+        return NextResponse.json({ ok: true, invoice: await preview(invoice, admin) })
     } catch (error) {
         if (error instanceof XeroRateLimitError) return rateLimitResponse(error)
         console.error("preview Xero invoice import", error)
@@ -274,6 +282,25 @@ export async function POST(req: NextRequest) {
             .update({ xero_invoice_import_status: invoice.Status })
             .eq("id", createdJobId)
         if (statusError) throw statusError
+
+        // Remember the reviewed physical site against the stable Xero contact ID.
+        // The Xero contact remains the job's billing customer even when the site
+        // belongs to a group customer such as McDonalds.
+        if (invoice.Contact?.ContactID && storeIds.length === 1) {
+            const { data: existingLink, error: linkError } = await admin.from("xero_client_contacts")
+                .select("client_id,email,preferred").eq("xero_contact_id", invoice.Contact.ContactID).maybeSingle()
+            if (linkError) throw linkError
+            const { error: saveLinkError } = await admin.from("xero_client_contacts").upsert({
+                xero_contact_id: invoice.Contact.ContactID,
+                client_id: resolvedClientId,
+                store_id: storeIds[0],
+                xero_name: invoice.Contact.Name || "Xero customer",
+                email: existingLink?.email || null,
+                preferred: existingLink?.client_id === resolvedClientId && existingLink.preferred === true,
+                updated_at: new Date().toISOString(),
+            })
+            if (saveLinkError) throw saveLinkError
+        }
 
         return NextResponse.json({ ok: true, jobId: createdJobId, invoiceNumber, invoiceStatus: invoice.Status })
     } catch (error) {

@@ -34,9 +34,9 @@ import ActiveJobsPage from "./page"
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe("Xero import site selection", () => {
-    async function openInvoice(contactName = "Coates Signco") {
+    async function openInvoice(contactName = "Coates Signco", linkedStoreId?: string) {
         const previewResponse = { ok: true, json: async () => ({ invoice: {
-            invoiceId: "xero-1", invoiceNumber: "INV-7607", reference: "Hanging Bar Replacement", contactName,
+            invoiceId: "xero-1", invoiceNumber: "INV-7607", reference: "Hanging Bar Replacement", contactName, linkedStoreId,
             date: "2026-11-30", status: "DRAFT", total: 1002.17, lines: [],
         } }) }
         const fetchMock = vi.fn().mockResolvedValue(previewResponse).mockResolvedValueOnce(previewResponse)
@@ -68,6 +68,23 @@ describe("Xero import site selection", () => {
         expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
             clientId: "coates", storeId: "mcd-site", showAllSites: true,
         })
+    })
+
+    it("selects a uniquely matching site for a site-specific Xero customer", async () => {
+        await openInvoice("McDonald's Warehouse")
+        expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("coates-site")
+        expect(screen.getByRole("checkbox", { name: "Show all sites" })).toBeChecked()
+    })
+
+    it("leaves an ambiguous site unselected for staff review", async () => {
+        await openInvoice("McDonald's Invercargill")
+        expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("none")
+    })
+
+    it("uses a saved Xero contact-to-site link before a name match", async () => {
+        await openInvoice("Coates Signco", "mcd-site-2")
+        expect(screen.getByRole("combobox", { name: "Site" })).toHaveValue("mcd-site-2")
+        expect(screen.getByRole("checkbox", { name: "Show all sites" })).toBeChecked()
     })
 
     it("clears foreign selections when the override is disabled and resets on reopening", async () => {
