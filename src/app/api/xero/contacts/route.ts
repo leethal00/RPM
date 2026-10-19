@@ -5,6 +5,7 @@ import { xeroFetch } from "@/lib/xero-requests"
 import { xeroErrorResponse } from "@/lib/xero-error-response"
 import { xeroAdmin } from "@/lib/xero"
 import { isStaffAdmin } from "@/lib/permissions"
+import { unambiguousMcDonaldsSiteLinks } from "@/lib/mcdonalds-site-match"
 
 export const dynamic = "force-dynamic"
 
@@ -104,7 +105,10 @@ export async function POST(request: Request) {
         if (newNames.size) {
             const { data: createdClients, error } = await admin.from("clients").insert(Array.from(newNames.values()).map((contact) => ({ name: contact.name, contact_email: contact.email || null, active: true }))).select("id,name,contact_email")
             if (error) throw error
-            for (const client of createdClients || []) byName.set(key(client.name), client)
+            for (const client of createdClients || []) {
+                byName.set(key(client.name), client)
+                clients.push(client)
+            }
         }
         for (const contact of review) {
             if (contact.suggestedClientName && !contact.suggestedClientId) contact.suggestedClientId = byName.get(key(contact.suggestedClientName))?.id
@@ -124,7 +128,36 @@ export async function POST(request: Request) {
             const { error } = await admin.from("xero_client_contacts").upsert(rows.slice(index, index + 200))
             if (error) throw error
         }
-        return NextResponse.json({ created: newNames.size, matched: newRows.length - newNames.size, alreadyLinked: linked.size, review })
+        // A newly synced McDonalds Xero contact may correspond to an existing
+        // physical site under the old generic customer. Reuse that site only
+        // when both names match uniquely and the contact has no other site.
+        let sitesLinked = 0
+        const genericCustomers = clients.filter((client) => /^mc\s*donald['’]?s?$/i.test(client.name.trim()))
+        if (genericCustomers.length === 1) {
+            const relevantClientIds = clients.filter((client) => /^mc\s*donald/i.test(client.name)).map((client) => client.id)
+            const { data: sites, error: sitesError } = await admin.from("stores")
+                .select("id,name,client_id").in("client_id", relevantClientIds)
+            if (sitesError) throw sitesError
+            const plans = unambiguousMcDonaldsSiteLinks(genericCustomers[0].id, clients, sites || [], rows)
+            for (const plan of plans) {
+                const { data: savedLink, error: linkError } = await admin.from("xero_client_contacts")
+                    .update({ store_id: plan.siteId, updated_at: new Date().toISOString() })
+                    .eq("xero_contact_id", plan.contactId).is("store_id", null).select("xero_contact_id")
+                if (linkError) throw linkError
+                if (!savedLink?.length) continue
+                const { data: movedSite, error: moveError } = await admin.from("stores")
+                    .update({ client_id: plan.customerId })
+                    .eq("id", plan.siteId).eq("client_id", genericCustomers[0].id).select("id")
+                if (moveError || !movedSite?.length) {
+                    await admin.from("xero_client_contacts").update({ store_id: null })
+                        .eq("xero_contact_id", plan.contactId).eq("store_id", plan.siteId)
+                    if (moveError) throw moveError
+                    continue
+                }
+                sitesLinked++
+            }
+        }
+        return NextResponse.json({ created: newNames.size, matched: newRows.length - newNames.size, alreadyLinked: linked.size, sitesLinked, review })
     } catch (error) {
         return xeroErrorResponse(error) || NextResponse.json({ error: error instanceof Error ? error.message : "Could not sync Xero customers." }, { status: 500 })
     }
