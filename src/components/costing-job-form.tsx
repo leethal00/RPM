@@ -46,6 +46,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     })
 
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
+    const [clientSearch, setClientSearch] = useState("")
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
     const [linkedStoreIds, setLinkedStoreIds] = useState<string[]>([])
     const [teamMembers, setTeamMembers] = useState<string[]>([])
@@ -119,6 +120,9 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
 
     const hasClient = formData.client_id !== "none"
     const selectedClientName = clients.find((client) => client.id === formData.client_id)?.name || ""
+    const visibleClients = clients.filter((client) =>
+        client.id === formData.client_id || client.name.toLocaleLowerCase().includes(clientSearch.trim().toLocaleLowerCase())
+    )
     const clientStores = hasClient
         ? sortSitesByDisplayName(stores.filter((s) => s.client_id === formData.client_id || linkedStoreIds.includes(s.id)), selectedClientName)
         : []
@@ -276,11 +280,20 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                 <Button type="button" size="sm" variant="ghost" className="shrink-0 px-2" onClick={() => setAddingClient(false)}>×</Button>
                             </div>
                         ) : (
+                            <>
+                            <Input
+                                aria-label="Search clients"
+                                placeholder="Search clients…"
+                                value={clientSearch}
+                                onChange={(event) => setClientSearch(event.target.value)}
+                                disabled={fetching}
+                            />
                             <Select
                                 value={formData.client_id}
                                 onValueChange={(v) => {
                                     if (v === "__new__") { setAddingClient(true); return }
                                     setLinkedStoreIds([])
+                                    setClientSearch("")
                                     setFormData((f) => {
                                         const keep = v === f.client_id
                                         return { ...f, client_id: v, store_id: keep ? f.store_id : "none" }
@@ -294,11 +307,13 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                 <SelectContent>
                                     <SelectItem value="none">No client (ad-hoc)</SelectItem>
                                     <SelectItem value="__new__" className="text-primary">+ New client…</SelectItem>
-                                    {clients.map((c) => (
+                                    {visibleClients.map((c) => (
                                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                     ))}
+                                    {visibleClients.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No matching clients.</div>}
                                 </SelectContent>
                             </Select>
+                            </>
                         )}
                     </div>
                     <div className="grid gap-2">

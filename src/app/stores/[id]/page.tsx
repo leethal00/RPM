@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, Plus, PackagePlus } from "lucide-react"
 import Link from "next/link"
 import type { Store, Asset, AssetType, Job, Project, AssetPhoto } from "@/types/database"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 type AssetRow = Asset & {
     asset_types: Pick<AssetType, 'label'> | null
@@ -40,6 +41,8 @@ type ProjectRow = Project & { jobs: Pick<Job, 'id' | 'status' | 'budget_impact'>
 export default function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
     const supabase = useMemo(() => createClient(), [])
+    const { role, clientId } = useCustomerFilter()
+    const assignedSiteHQ = role === "client_hq" && clientId === null
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
 
@@ -108,6 +111,14 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
             </DashboardLayout>
         )
+    }
+
+    if (assignedSiteHQ) {
+        return <DashboardLayout><div className="flex flex-col gap-6 py-6">
+            <Button variant="ghost" size="sm" asChild className="self-start"><Link href="/stores">← Back to sites</Link></Button>
+            <StoreHeader store={store} assets={assets ?? null} />
+            <SitePhotoGallery storeId={id} />
+        </div></DashboardLayout>
     }
 
     return (

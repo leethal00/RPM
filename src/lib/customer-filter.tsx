@@ -63,7 +63,7 @@ export function CustomerFilterProvider({
 
             const { data: profile } = await supabase
                 .from("users")
-                .select("role, client_id")
+                .select("role, client_id, store_ids")
                 .eq("id", user.id)
                 .single()
 
@@ -72,9 +72,11 @@ export function CustomerFilterProvider({
 
             setRole(userRole)
 
-            // Client users are always locked to their own customer.
+            // HQ users with an explicit site portfolio see those sites through
+            // RLS, even when the sites have different billing customers.
             if (userRole && !ADMIN_ROLES.includes(userRole)) {
-                setClientIdState(profile?.client_id ?? null)
+                setClientIdState(userRole === "client_hq" && profile?.store_ids?.length
+                    ? null : profile?.client_id ?? null)
                 setInitialised(true)
                 return
             }
