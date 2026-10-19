@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
 import type { Asset, Job, Store } from "@/types/database"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { customerSiteFilter, linkedCustomerSiteIds } from "@/lib/linked-customer-sites"
 
 const StoreMap = dynamic(() => import("@/components/store-map"), { ssr: false, loading: () => <div className="h-full w-full bg-muted animate-pulse" /> })
 
@@ -17,10 +18,13 @@ export default function MapPage() {
   const supabase = useMemo(() => createClient(), [])
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const { clientId } = useCustomerFilter()
-  const { data: stores = [], isLoading: loading } = useSupabaseQuery<Store[]>(`map-stores-health-${clientId ?? "all"}`, async () => {
+  const { clientId, isAdmin } = useCustomerFilter()
+  const { data: stores = [], isLoading: loading } = useSupabaseQuery<Store[]>(`map-stores-health-${clientId ?? "all"}-${isAdmin}`, async () => {
     let storeQuery = supabase.from("stores").select(STORE_COLS)
-    if (clientId) storeQuery = storeQuery.eq("client_id", clientId)
+    if (clientId) {
+      const linkedSiteIds = isAdmin ? await linkedCustomerSiteIds(clientId) : []
+      storeQuery = storeQuery.or(customerSiteFilter(clientId, linkedSiteIds))
+    }
     const { data: storeData, error: storeError } = await storeQuery
     if (storeError) return { data: null, error: storeError }
     const baseStores = (storeData ?? []) as Store[]

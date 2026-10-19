@@ -18,6 +18,7 @@ import { Loader2 } from "lucide-react"
 import type { Client, Store, CostingJob } from "@/types/database"
 import { costingJobSchema, getValidationErrors } from "@/lib/validations"
 import { siteDisplayName, sortSitesByDisplayName } from "@/lib/site-name"
+import { linkedCustomerSiteIds } from "@/lib/linked-customer-sites"
 import { SiteForm } from "@/components/site-form"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -46,6 +47,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
 
     const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([])
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
+    const [linkedStoreIds, setLinkedStoreIds] = useState<string[]>([])
     const [teamMembers, setTeamMembers] = useState<string[]>([])
     const [fetching, setFetching] = useState(true)
     const [addingClient, setAddingClient] = useState(false)
@@ -60,7 +62,8 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         const { data, error } = await supabase.from("clients").insert({ name }).select("id, name").single()
         if (error) return toast.error(error.message)
         setClients((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
-        setFormData((f) => ({ ...f, client_id: data.id }))
+        setLinkedStoreIds([])
+        setFormData((f) => ({ ...f, client_id: data.id, store_id: "none" }))
         setAddingClient(false); setNewClientName("")
     }
 
@@ -68,7 +71,10 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         const { data, error } = await supabase.from("stores").select("id, name, client_id").eq("client_id", formData.client_id).order("name")
         if (error) return toast.error(error.message)
         setStores((current) => [...current.filter((store) => store.client_id !== formData.client_id), ...(data || [])])
-        if (siteId) setFormData((current) => ({ ...current, store_id: siteId }))
+        if (siteId) {
+            if (!(data || []).some((store: Pick<Store, "id">) => store.id === siteId)) setLinkedStoreIds((current) => Array.from(new Set([...current, siteId])))
+            setFormData((current) => ({ ...current, store_id: siteId }))
+        }
         setAddingStore(false)
     }
 
@@ -96,10 +102,25 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         fetchRefs()
     }, [supabase, job])
 
+    useEffect(() => {
+        const clientId = formData.client_id
+        if (clientId === "none") return
+        let active = true
+        void linkedCustomerSiteIds(clientId).then((siteIds) => {
+            if (!active) return
+            setLinkedStoreIds((current) => Array.from(new Set([...siteIds, ...current])))
+            if (!job && jobLocation === "site" && siteIds.length === 1) {
+                setFormData((current) => current.client_id === clientId && current.store_id === "none"
+                    ? { ...current, store_id: siteIds[0] } : current)
+            }
+        })
+        return () => { active = false }
+    }, [formData.client_id, job, jobLocation])
+
     const hasClient = formData.client_id !== "none"
     const selectedClientName = clients.find((client) => client.id === formData.client_id)?.name || ""
     const clientStores = hasClient
-        ? sortSitesByDisplayName(stores.filter((s) => s.client_id === formData.client_id), selectedClientName)
+        ? sortSitesByDisplayName(stores.filter((s) => s.client_id === formData.client_id || linkedStoreIds.includes(s.id)), selectedClientName)
         : []
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -259,8 +280,9 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                 value={formData.client_id}
                                 onValueChange={(v) => {
                                     if (v === "__new__") { setAddingClient(true); return }
+                                    setLinkedStoreIds([])
                                     setFormData((f) => {
-                                        const keep = stores.some((s) => s.id === f.store_id && s.client_id === v)
+                                        const keep = v === f.client_id
                                         return { ...f, client_id: v, store_id: keep ? f.store_id : "none" }
                                     })
                                 }}
@@ -296,7 +318,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                         <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
                                     ) : (
                                         clientStores.map((s) => (
-                                            <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, selectedClientName)}</SelectItem>
+                                            <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, selectedClientName)}{s.client_id !== formData.client_id ? ` · ${clients.find((client) => client.id === s.client_id)?.name || "Linked site"}` : ""}</SelectItem>
                                         ))
                                     )}
                                 </SelectContent>
@@ -341,7 +363,7 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         <Dialog open={addingStore} onOpenChange={setAddingStore}>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader><DialogTitle>Create client site</DialogTitle><DialogDescription>Add the real site and address so it can appear on the Sites map.</DialogDescription></DialogHeader>
-                {hasClient && <SiteForm initialClientId={formData.client_id} initialClientName={clients.find((client) => client.id === formData.client_id)?.name} lockClient onSuccess={(siteId) => { void siteCreated(siteId) }} onCancel={() => setAddingStore(false)} />}
+                {hasClient && <SiteForm initialClientId={formData.client_id} initialClientName={clients.find((client) => client.id === formData.client_id)?.name} checkAllClientsForDuplicates lockClient onSuccess={(siteId) => { void siteCreated(siteId) }} onCancel={() => setAddingStore(false)} />}
             </DialogContent>
         </Dialog>
     </>)

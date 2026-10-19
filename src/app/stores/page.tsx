@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation"
 import type { Store, Asset, Job, Vendor, ClientBrand } from "@/types/database"
 import { BrandChips, brandsFromStore } from "@/components/brand-chip"
 import { useCustomerFilter } from "@/lib/customer-filter"
+import { customerSiteFilter, linkedCustomerSiteIds } from "@/lib/linked-customer-sites"
 import { CustomerFilterDropdown } from "@/components/customer-filter-dropdown"
 import { PageShell } from "@/components/page-shell"
 import { PageHeader } from "@/components/page-header"
@@ -75,13 +76,14 @@ export default function StoresListPage() {
     const [filterUnverified, setFilterUnverified] = useState(false)
     const [filterApproximate, setFilterApproximate] = useState(false)
 
-    const { clientId } = useCustomerFilter()
+    const { clientId, isAdmin } = useCustomerFilter()
 
-    const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${filterApproximate}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}`
+    const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${filterApproximate}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}-${isAdmin}`
 
     const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
         storesKey,
         async () => {
+            const linkedSiteIds = clientId && isAdmin ? await linkedCustomerSiteIds(clientId) : []
             let query = supabase
                 .from('stores')
                 .select(`
@@ -113,7 +115,7 @@ export default function StoresListPage() {
             }
 
             if (clientId) {
-                query = query.eq("client_id", clientId)
+                query = query.or(customerSiteFilter(clientId, linkedSiteIds))
             }
 
             if (filterUnverified) {
@@ -133,11 +135,13 @@ export default function StoresListPage() {
             const { data: storesData, error: storesError, count } = await query
 
             if (storesError) {
-                const fallback = supabase
+                let fallback = supabase
                     .from('stores')
                     .select('*', { count: "exact" })
                     .order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
                     .range(from, to)
+
+                if (clientId) fallback = fallback.or(customerSiteFilter(clientId, linkedSiteIds))
 
                 const { data: simpleData, count: simpleCount } = await fallback
                 return { data: { items: simpleData || [], count: simpleCount ?? 0 }, error: null }
