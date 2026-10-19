@@ -76,6 +76,24 @@ describe("production job card internal BOM notes", () => {
     expect(container.querySelector("style")?.textContent).toContain("img:not(.job-card-drawing) { filter: grayscale(1); }")
   })
 
+  it("fits a sheet again immediately before printing when its content grows", async () => {
+    const { container } = render(<JobCardPage />)
+    const sheet = await waitFor(() => {
+      const safety = container.querySelector<HTMLElement>(".safety-sheet")
+      expect(safety).not.toBeNull()
+      return safety!
+    })
+    const content = sheet.querySelector<HTMLElement>(".sheet-content")!
+    Object.defineProperty(sheet, "clientHeight", { configurable: true, value: 1122 })
+    Object.defineProperty(content, "scrollHeight", { configurable: true, value: 1200 })
+
+    window.dispatchEvent(new Event("beforeprint"))
+
+    const scale = Number(content.style.getPropertyValue("--job-card-fit"))
+    expect(scale).toBeGreaterThan(0.9)
+    expect(scale).toBeLessThan(1)
+  })
+
   it("adds a printable electrical check sheet when the selected BOM includes wiring", async () => {
     selectedItemId = "first"
     lines = [{ id: "led", item_id: "first", section: "Electrical", subsection: "LED", description: "LED modules", qty: 20, materials: null }]

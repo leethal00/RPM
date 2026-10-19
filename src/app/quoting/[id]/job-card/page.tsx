@@ -279,6 +279,7 @@ export default function JobCardPage() {
             margin: 0 !important;
             padding: 6mm 10mm;
             box-shadow: none !important;
+            overflow: hidden;
             break-inside: avoid;
             page-break-inside: avoid;
           }
@@ -555,10 +556,10 @@ function PaginatedJobCard({
         return
       }
       const sheetStyle = getComputedStyle(sheet)
-      // Leave space for the printed continuation cue and a small rounding allowance.
-      const availableHeight = sheetHeight
-        - parseFloat(sheetStyle.paddingTop) - parseFloat(sheetStyle.paddingBottom)
-        - 10 * 96 / 25.4
+      // Allow a small per-page fit adjustment before moving an entire section
+      // to a continuation sheet. The cue still has its own space at the bottom.
+      const innerHeight = sheetHeight - parseFloat(sheetStyle.paddingTop) - parseFloat(sheetStyle.paddingBottom)
+      const availableHeight = (innerHeight - 6 * 96 / 25.4) / 0.95
       setPages(paginateJobCard({
         availableHeight,
         introHeight: introSection.getBoundingClientRect().height,
@@ -611,9 +612,45 @@ function ContinuationHeader({ number }: { number: string }) {
 }
 
 function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  const sheetRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current
+    const content = sheet?.querySelector<HTMLElement>(".sheet-content")
+    if (!sheet || !content || sheet.closest(".job-card-measure")) return
+
+    const fit = () => {
+      const style = getComputedStyle(sheet)
+      const innerHeight = sheet.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      if (innerHeight <= 0) return
+      // The print sheet is 1 mm shorter than the screen preview. Leave another
+      // 2 mm for browser rounding and the printer's page boundary.
+      const targetHeight = innerHeight - 3 * 96 / 25.4
+      const scale = Math.min(1, targetHeight / Math.max(content.scrollHeight, innerHeight))
+      content.style.setProperty("--job-card-fit", scale.toFixed(4))
+    }
+
+    fit()
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit)
+    observer?.observe(content)
+    window.addEventListener("resize", fit)
+    window.addEventListener("beforeprint", fit)
+    document.fonts?.ready.then(fit)
+    const images = Array.from(content.querySelectorAll("img"))
+    images.forEach((image) => image.addEventListener("load", fit))
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener("resize", fit)
+      window.removeEventListener("beforeprint", fit)
+      images.forEach((image) => image.removeEventListener("load", fit))
+    }
+  }, [children])
+
   return (
-    <div className={`sheet relative box-border mx-auto my-6 h-[297mm] w-[210mm] bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
-      {children}
+    <div ref={sheetRef} className={`sheet relative box-border mx-auto my-6 h-[297mm] w-[210mm] overflow-hidden bg-white px-[10mm] py-[6mm] text-[11.8px] leading-[1.28] shadow-2xl ${className}`}>
+      <div className="sheet-content relative min-h-full origin-top-left" style={{ transform: "scale(var(--job-card-fit, 1))" }}>
+        {children}
+      </div>
     </div>
   )
 }
