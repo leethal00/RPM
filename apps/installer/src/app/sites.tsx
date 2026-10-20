@@ -32,7 +32,7 @@ export default function Sites() {
     {error ? <ErrorText message={error} /> : null}
     <SectionLabel>{term ? 'Search results' : 'All sites'} · {sites.length}</SectionLabel>
     {sites.map(site => <Card key={site.id}>
-      <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.1 }}>{site.client_name.toUpperCase()}</Text>
+      <Text style={{ color: colors.forest, fontSize: 18, lineHeight: 24, fontWeight: '800' }}>{site.client_name}</Text>
       <Text style={[styles.heading, { marginTop: 6 }]}>{site.name}</Text>
       <Text style={styles.muted}>{site.address || 'No address saved'}</Text>
       {site.manager_name ? <Text style={[styles.muted, { marginTop: 9 }]}>Contact  ·  {site.manager_name}{site.manager_phone ? `  ·  ${site.manager_phone}` : ''}</Text> : null}
