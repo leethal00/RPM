@@ -44,6 +44,8 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
     const { role, clientId } = useCustomerFilter()
     const assignedSiteHQ = role === "client_hq" && clientId === null
     const [assetDialogOpen, setAssetDialogOpen] = useState(false)
+    const [assetFormBusy, setAssetFormBusy] = useState(false)
+    const [assetPhotoRefreshKey, setAssetPhotoRefreshKey] = useState(0)
     const [editSiteDialogOpen, setEditSiteDialogOpen] = useState(false)
 
     const { data: storeData, isLoading: storeLoading, mutate: mutateStore } = useSupabaseQuery(
@@ -168,21 +170,23 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                         </TabsList>
 
                         <div className="flex items-center gap-2 pb-2">
-                            <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
+                            <Dialog open={assetDialogOpen} onOpenChange={open => { if (!assetFormBusy) setAssetDialogOpen(open) }}>
                                 <DialogTrigger asChild>
                                     <Button variant="outline" size="sm" className="gap-1.5">
                                         <PackagePlus className="size-3.5" />
                                         Add asset
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent className="sm:max-w-[500px]">
+                                <DialogContent className="sm:max-w-[500px] max-h-[90dvh] overflow-y-auto" showCloseButton={!assetFormBusy}>
                                     <DialogHeader>
                                         <DialogTitle>Add New Asset</DialogTitle>
                                     </DialogHeader>
                                     <AssetForm
                                         storeId={id}
+                                        onBusyChange={setAssetFormBusy}
                                         onSuccess={() => {
                                             setAssetDialogOpen(false)
+                                            setAssetPhotoRefreshKey(key => key + 1)
                                             fetchData()
                                         }}
                                         onCancel={() => setAssetDialogOpen(false)}
@@ -252,7 +256,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
                     </TabsContent>
                 </Tabs>
 
-                <SitePhotoGallery storeId={id} />
+                <SitePhotoGallery storeId={id} assetPhotoRefreshKey={assetPhotoRefreshKey} />
             </div>
         </DashboardLayout>
     )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,22 +15,78 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, Camera } from "lucide-react"
+import { Loader2, Camera, X } from "lucide-react"
 import { AssetPhotoGallery } from "./asset-photo-gallery"
 import type { AssetType, Asset } from "@/types/database"
 import { assetSchema, getValidationErrors } from "@/lib/validations"
+import { ensureRenderable, isHeic } from "@/lib/image-prep"
+import { uploadPendingAssetPhoto } from "@/lib/asset-photo-upload"
 
 interface AssetFormProps {
     storeId: string
     asset?: Asset
     onSuccess: () => void
     onCancel: () => void
+    onBusyChange?: (busy: boolean) => void
 }
 
-export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProps) {
+export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }: AssetFormProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
+    const [pendingPhotos, setPendingPhotos] = useState<{ id: string; file: File; url: string; error?: string }[]>([])
+    const [preparing, setPreparing] = useState(false)
+    const [internalOnly, setInternalOnly] = useState(false)
+    const [createdAssetId, setCreatedAssetId] = useState<string | null>(null)
+    const [saveError, setSaveError] = useState("")
+    const busy = useRef(false)
+    const previewUrls = useRef(new Set<string>())
+    const hasThumbnail = useRef(false)
+    const mounted = useRef(true)
+
+    useEffect(() => {
+        mounted.current = true
+        const urls = previewUrls.current
+        return () => {
+            mounted.current = false
+            urls.forEach(url => URL.revokeObjectURL(url))
+            urls.clear()
+        }
+    }, [])
+
+    const queuePhotos = async (files: File[]) => {
+        if (busy.current) return
+        busy.current = true
+        setPreparing(true)
+        onBusyChange?.(true)
+        try {
+            for (const raw of files) {
+                if ((!raw.type.startsWith("image/") && !isHeic(raw)) || raw.size === 0) {
+                    toast.error(`${raw.name}: please select a non-empty image file`)
+                    continue
+                }
+                try {
+                    const file = await ensureRenderable(raw)
+                    if (!mounted.current) return
+                    const url = URL.createObjectURL(file)
+                    previewUrls.current.add(url)
+                    setPendingPhotos(current => [...current, { id: crypto.randomUUID(), file, url }])
+                } catch {
+                    toast.error(`${raw.name}: could not prepare photo. Please choose another image.`)
+                }
+            }
+        } finally {
+            busy.current = false
+            setPreparing(false)
+            onBusyChange?.(false)
+        }
+    }
+
+    const removePhoto = (id: string, url: string) => {
+        URL.revokeObjectURL(url)
+        previewUrls.current.delete(url)
+        setPendingPhotos(current => current.filter(photo => photo.id !== id))
+    }
 
     const [plannedMaintenance, setPlannedMaintenance] = useState(
         asset
@@ -163,81 +219,108 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (busy.current) return
+        busy.current = true
         setLoading(true)
+        onBusyChange?.(true)
+        setSaveError("")
+        try {
 
-        const dataToValidate = {
-            ...formData,
-            pm_interval_months: plannedMaintenance
-                ? formData.pm_interval_months
-                : null,
-            next_service_date: plannedMaintenance
-                ? formData.next_service_date
-                : "",
-            last_service_date: plannedMaintenance
-                ? formData.last_service_date
-                : "",
-        }
+            const dataToValidate = {
+                ...formData,
+                pm_interval_months: plannedMaintenance
+                    ? formData.pm_interval_months
+                    : null,
+                next_service_date: plannedMaintenance
+                    ? formData.next_service_date
+                    : "",
+                last_service_date: plannedMaintenance
+                    ? formData.last_service_date
+                    : "",
+            }
 
-        const result = assetSchema.safeParse(dataToValidate)
+            const result = assetSchema.safeParse(dataToValidate)
 
-        if (!result.success) {
-            const errors = getValidationErrors(result)
-            errors.forEach((msg) => toast.error(msg))
+            if (!result.success) {
+                const errors = getValidationErrors(result)
+                errors.forEach((msg) => toast.error(msg))
+                return
+            }
+
+            const payload: Record<string, unknown> = {
+                store_id: storeId,
+                asset_group: formData.asset_group,
+                asset_type_id: formData.asset_type_id,
+                install_date: formData.install_date || null,
+                status: formData.status,
+                asset_details: formData.asset_details,
+                asset_dimensions: formData.asset_dimensions,
+
+                last_service_date: plannedMaintenance
+                    ? formData.last_service_date || null
+                    : null,
+
+                next_service_date: plannedMaintenance
+                    ? formData.next_service_date || null
+                    : null,
+
+                pm_interval_months: plannedMaintenance
+                    ? formData.pm_interval_months
+                    : null,
+            }
+
+            let savedId = asset?.id || createdAssetId
+            if (asset?.id) {
+                const { error: updateError } = await supabase
+                    .from("assets")
+                    .update(payload)
+                    .eq("id", asset.id)
+
+                if (updateError) throw updateError
+            } else if (!savedId) {
+                const { data, error: insertError } = await supabase
+                    .from("assets")
+                    .insert(payload)
+                    .select("id")
+                    .single()
+                if (insertError) throw insertError
+                savedId = data.id
+                setCreatedAssetId(savedId)
+            }
+
+            let failed = false
+            if (!asset && savedId) {
+                for (const photo of pendingPhotos) {
+                    try {
+                        await uploadPendingAssetPhoto(supabase, savedId, photo.file, internalOnly, !hasThumbnail.current)
+                        hasThumbnail.current = true
+                        removePhoto(photo.id, photo.url)
+                    } catch (error) {
+                        failed = true
+                        const message = error instanceof Error ? error.message : (error as { message?: string })?.message || "Upload failed"
+                        setPendingPhotos(current => current.map(item => item.id === photo.id ? { ...item, error: message } : item))
+                    }
+                }
+            }
+            if (failed) {
+                setSaveError("Asset created. Some photos could not be saved. Retry saving to upload the remaining photos, or remove them and finish. Your asset will not be created again.")
+            } else {
+                toast.success(
+                    asset?.id
+                        ? "Asset updated successfully"
+                        : "Asset added successfully"
+                )
+                onSuccess()
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : (error as { message?: string })?.message || "Could not save asset. Please try again."
+            setSaveError(message)
+            toast.error(message)
+        } finally {
+            busy.current = false
             setLoading(false)
-            return
+            onBusyChange?.(false)
         }
-
-        const payload: Record<string, unknown> = {
-            store_id: storeId,
-            asset_group: formData.asset_group,
-            asset_type_id: formData.asset_type_id,
-            install_date: formData.install_date || null,
-            status: formData.status,
-            asset_details: formData.asset_details,
-            asset_dimensions: formData.asset_dimensions,
-
-            last_service_date: plannedMaintenance
-                ? formData.last_service_date || null
-                : null,
-
-            next_service_date: plannedMaintenance
-                ? formData.next_service_date || null
-                : null,
-
-            pm_interval_months: plannedMaintenance
-                ? formData.pm_interval_months
-                : null,
-        }
-
-        let error
-
-        if (asset?.id) {
-            const { error: updateError } = await supabase
-                .from("assets")
-                .update(payload)
-                .eq("id", asset.id)
-
-            error = updateError
-        } else {
-            const { error: insertError } = await supabase
-                .from("assets")
-                .insert(payload)
-
-            error = insertError
-        }
-
-        if (error) {
-            toast.error(error.message)
-        } else {
-            toast.success(
-                asset?.id
-                    ? "Asset updated successfully"
-                    : "Asset added successfully"
-            )
-            onSuccess()
-        }
-
-        setLoading(false)
     }
 
     return (
@@ -245,7 +328,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
             onSubmit={handleSubmit}
             className="space-y-6 py-4 font-primary"
         >
-            <div className="space-y-4">
+            <fieldset disabled={loading || preparing || !!createdAssetId} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label
@@ -501,33 +584,48 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                     />
                 </div>
 
+            </fieldset>
                 {asset?.id ? (
                     <div className="pt-6 border-t">
                         <AssetPhotoGallery assetId={asset.id} />
                     </div>
                 ) : (
-                    <div className="px-4 py-3 bg-muted/40 rounded-md border border-dashed border-border">
-                        <p className="text-xs text-muted-foreground flex items-center gap-2">
-                            <Camera className="size-3.5" />
-                            Photos can be attached once the asset is
-                            created.
-                        </p>
+                    <div className="space-y-3 rounded-md border border-dashed p-4"
+                        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = loading || preparing ? "none" : "copy" }}
+                        onDrop={e => { e.preventDefault(); void queuePhotos(Array.from(e.dataTransfer.files)) }}>
+                        <Label htmlFor="new-asset-photos" className="flex items-center gap-2"><Camera className="size-3.5" />Asset photos (optional)</Label>
+                        <p className="text-xs text-muted-foreground">Drop photos here or select files. Photos upload when you save the asset.</p>
+                        <Input id="new-asset-photos" type="file" accept="image/*,.heic,.heif" multiple disabled={loading || preparing}
+                            onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; void queuePhotos(files) }} />
+                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={internalOnly} disabled={loading || preparing} onChange={e => setInternalOnly(e.target.checked)} />Service-team only</label>
+                        {preparing && <p role="status" className="text-xs">Preparing photo previews…</p>}
+                        <div className="grid grid-cols-3 gap-2">
+                            {pendingPhotos.map(photo => <div key={photo.id} className="relative rounded-md border p-1">
+                                {/* Local blob URLs are released on removal and unmount. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={photo.url} alt={photo.file.name} className="aspect-square w-full rounded object-cover" />
+                                <p className="truncate text-xs" title={photo.file.name}>{photo.file.name}</p>
+                                <Button type="button" variant="secondary" size="icon" className="absolute right-1 top-1 size-7" aria-label={`Remove ${photo.file.name}`} disabled={loading || preparing} onClick={() => removePhoto(photo.id, photo.url)}><X className="size-4" /></Button>
+                                {photo.error && <p role="alert" className="text-xs text-destructive">{photo.error}</p>}
+                            </div>)}
+                        </div>
                     </div>
                 )}
-            </div>
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
 
             <div className="flex justify-end gap-3 pt-2">
                 <Button
                     type="button"
                     variant="outline"
-                    onClick={onCancel}
+                    onClick={createdAssetId ? onSuccess : onCancel}
+                    disabled={loading || preparing}
                 >
-                    Cancel
+                    {createdAssetId ? "Close (asset already created)" : "Cancel"}
                 </Button>
 
                 <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || preparing}
                     className="min-w-[100px]"
                 >
                     {loading ? (
@@ -535,6 +633,8 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel }: AssetFormProp
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Saving...
                         </>
+                    ) : createdAssetId ? (
+                        "Finish saving"
                     ) : asset?.id ? (
                         "Save Changes"
                     ) : (

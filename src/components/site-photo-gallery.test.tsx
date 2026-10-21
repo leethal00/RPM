@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 const mocks = vi.hoisted(() => ({
-    role: "rodier_admin", photos: [] as object[], albums: [] as object[], installers: [] as object[],
+    role: "rodier_admin", photos: [] as object[], albums: [] as object[], installers: [] as object[], assets: [] as object[],
     upload: vi.fn(), insert: vi.fn(), update: vi.fn(), remove: vi.fn(), download: vi.fn(),
     zipFile: vi.fn(), zipGenerate: vi.fn(),
 }))
@@ -29,7 +29,7 @@ vi.mock("@/lib/supabase/client", () => ({
                 select: () => query,
                 eq: () => query,
                 is: () => query,
-                order: async () => ({ data: table === "site_photos" ? mocks.photos : table === "site_photo_albums" ? mocks.albums : mocks.installers, error: null }),
+                order: async () => ({ data: table === "site_photos" ? mocks.photos : table === "site_photo_albums" ? mocks.albums : table === "asset_photos" ? mocks.assets : mocks.installers, error: null }),
                 single: async () => ({ data: { role: mocks.role }, error: null }),
                 insert: (row: object) => mocks.insert(table, row),
                 update: (patch: object) => ({ eq: async () => mocks.update(table, patch) }),
@@ -51,6 +51,7 @@ describe("site photo galleries", () => {
         mocks.download.mockResolvedValue({ data: new Blob(["photo"], { type: "image/jpeg" }), error: null })
         mocks.zipGenerate.mockResolvedValue(new Blob(["archive"], { type: "application/zip" }))
         mocks.role = "rodier_admin"
+        mocks.assets = []
         mocks.photos = [
             { id: "internal-1", store_id: "site-1", album_id: null, url: "/internal.jpg", caption: "Workshop photo", internal_only: true, is_primary: false, created_at: "2026-09-24T00:00:00Z" },
             { id: "client-1", store_id: "site-1", album_id: null, url: "/client.jpg", caption: "Finished photo", internal_only: false, is_primary: false },
@@ -60,6 +61,23 @@ describe("site photo galleries", () => {
             { id: "album-client", store_id: "site-1", name: "Completion", audience: "client" },
         ]
         mocks.installers = [{ id: "installer-1", store_id: "site-1", storage_path: "job/user/one.jpg", caption: "Site visit", category: "Site Survey", captured_at: "2026-09-24T00:00:00Z", album_id: null, users: { name: "Installer" } }]
+    })
+
+    it("includes asset photos by default and lets the user turn them off", async () => {
+        mocks.assets = [{ id: "asset-photo-1", asset_id: "asset-1", caption: "Asset detail", url: "/asset.jpg", internal_only: true, assets: { asset_types: { label: "Sign" } } }]
+        render(<SitePhotoGallery storeId="site-1" />)
+        expect(await screen.findByRole("img", { name: "Asset detail" })).toBeInTheDocument()
+        expect(screen.getByRole("switch")).toBeChecked()
+        fireEvent.click(screen.getByRole("switch"))
+        expect(screen.queryByRole("img", { name: "Asset detail" })).not.toBeInTheDocument()
+    })
+
+    it("refreshes asset photos after the add-asset form finishes saving", async () => {
+        const view = render(<SitePhotoGallery storeId="site-1" assetPhotoRefreshKey={0} />)
+        await screen.findByText("Site visit")
+        mocks.assets = [{ id: "new-photo", asset_id: "new-asset", caption: "New asset detail", url: "/new-asset.jpg", internal_only: true, assets: {} }]
+        view.rerender(<SitePhotoGallery storeId="site-1" assetPhotoRefreshKey={1} />)
+        expect(await screen.findByRole("img", { name: "New asset detail" })).toBeInTheDocument()
     })
 
     it("shows installer and other staff photos together, with albums scoped to Internal", async () => {

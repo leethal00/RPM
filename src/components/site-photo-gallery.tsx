@@ -44,6 +44,7 @@ import { ensureRenderable, isHeic } from "@/lib/image-prep"
 
 interface SitePhotoGalleryProps {
     storeId: string
+    assetPhotoRefreshKey?: number
 }
 
 type AssetPhotoEnriched = AssetPhoto & {
@@ -108,6 +109,7 @@ type DisplaySitePhoto = SitePhoto & { previewUrl?: string | null }
 
 export function SitePhotoGallery({
     storeId,
+    assetPhotoRefreshKey = 0,
 }: SitePhotoGalleryProps) {
     const supabase = useMemo(() => createClient(), [])
 
@@ -127,7 +129,7 @@ export function SitePhotoGallery({
     const [isDragging, setIsDragging] = useState(false)
 
     const [includeAssetPhotos, setIncludeAssetPhotos] =
-        useState(false)
+        useState(true)
 
     const [selectedAlbumId, setSelectedAlbumId] =
         useState<string>(GENERAL_ALBUM)
@@ -316,16 +318,13 @@ export function SitePhotoGallery({
     }, [storeId])
 
     useEffect(() => {
-        if (
-            includeAssetPhotos &&
-            assetPhotos.length === 0
-        ) {
+        if (includeAssetPhotos) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             fetchAssetPhotos()
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [includeAssetPhotos])
+    }, [includeAssetPhotos, storeId, assetPhotoRefreshKey])
 
     const createAlbum = async () => {
         const name = newAlbumName.trim()
