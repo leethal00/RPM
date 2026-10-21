@@ -1,6 +1,7 @@
 export type UserRole = 'super_admin' | 'rodier_admin' | 'mobile_admin' | 'technician' | 'client_hq' | 'client_store' | 'department_operator' | 'installer'
 export type StoreStatus = 'active' | 'inactive' | 'maintenance'
 export type JobType = 'fault' | 'maintenance' | 'project'
+export interface AssetHistoryEntry { id: string; asset_id: string; occurred_on: string; title: string; notes: string; created_by: string | null; created_at: string }
 export type JobStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type CostingStatus = 'quote' | 'quoted' | 'approved' | 'in_progress' | 'complete' | 'invoiced' | 'cancelled'

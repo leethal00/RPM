@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Calendar, Settings, FileText, Activity, Trash2, Edit } from "lucide-react"
 import Link from "next/link"
-import { JobTimeline } from "@/components/job-timeline"
+import { AssetHistory } from "@/components/asset-history"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MaintenanceScheduleList } from "@/components/maintenance-schedule-list"
@@ -290,10 +290,7 @@ export default function AssetDetailPage({
                     </TabsContent>
 
                     <TabsContent value="history" className="mt-6">
-                        <div className="mt-4">
-                            <h3 className="text-lg font-bold mb-6 italic">Service Log & Asset History</h3>
-                            <JobTimeline jobs={jobs} />
-                        </div>
+                        <AssetHistory key={assetId} assetId={assetId} jobs={jobs} />
                     </TabsContent>
                 </Tabs>
             </div>
