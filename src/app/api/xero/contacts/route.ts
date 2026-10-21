@@ -134,13 +134,19 @@ export async function POST(request: Request) {
         // physical site under the old generic customer. Reuse that site only
         // when both names match uniquely and the contact has no other site.
         let sitesLinked = 0
-        const genericCustomers = clients.filter((client) => /^mc\s*donald['’]?s?$/i.test(client.name.trim()))
-        if (genericCustomers.length === 1) {
+        const genericCustomers = clients.filter((client) =>
+            client.name.toLocaleLowerCase("en-NZ").replace(/[^a-z]/g, "") === "mcdonalds")
+        if (genericCustomers.length) {
             const relevantClientIds = clients.filter((client) => /^mc\s*donald/i.test(client.name)).map((client) => client.id)
             const { data: sites, error: sitesError } = await admin.from("stores")
                 .select("id,name,client_id").in("client_id", relevantClientIds)
             if (sitesError) throw sitesError
-            const plans = unambiguousMcDonaldsSiteLinks(genericCustomers[0].id, clients, sites || [], rows)
+            const genericWithSites = genericCustomers.filter((client) =>
+                (sites || []).some((site) => site.client_id === client.id))
+            if (genericWithSites.length > 1) throw new Error("The RPM McDonalds group customer could not be identified uniquely.")
+            if (genericWithSites.length === 0) return NextResponse.json({ created: newNames.size, matched: newRows.length - newNames.size, alreadyLinked: linked.size, sitesLinked, review })
+            const genericId = genericWithSites[0].id
+            const plans = unambiguousMcDonaldsSiteLinks(genericId, clients, sites || [], rows)
             for (const plan of plans) {
                 const { data: savedLink, error: linkError } = await admin.from("xero_client_contacts")
                     .update({ store_id: plan.siteId, updated_at: new Date().toISOString() })
@@ -149,7 +155,7 @@ export async function POST(request: Request) {
                 if (!savedLink?.length) continue
                 const { data: movedSite, error: moveError } = await admin.from("stores")
                     .update({ client_id: plan.customerId })
-                    .eq("id", plan.siteId).eq("client_id", genericCustomers[0].id).select("id")
+                    .eq("id", plan.siteId).eq("client_id", genericId).select("id")
                 if (moveError || !movedSite?.length) {
                     await admin.from("xero_client_contacts").update({ store_id: null })
                         .eq("xero_contact_id", plan.contactId).eq("store_id", plan.siteId)

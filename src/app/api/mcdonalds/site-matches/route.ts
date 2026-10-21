@@ -23,10 +23,6 @@ export async function GET() {
     const { data: customers, error: customersError } = await admin.from("clients")
         .select("id,name").ilike("name", "%donald%")
     if (customersError) return NextResponse.json({ error: "Could not load customers." }, { status: 500 })
-    const generic = (customers || []).filter((customer) =>
-        customer.name.toLocaleLowerCase("en-NZ").replace(/[^a-z]/g, "") === "mcdonalds")
-    if (generic.length !== 1) return NextResponse.json({ error: "The generic McDonalds customer could not be identified uniquely." }, { status: 409 })
-
     const ids = (customers || []).map((customer) => customer.id)
     const [ownedResult, linksResult, reviewsResult, skipsResult] = await Promise.all([
         admin.from("stores").select("id,name,address,client_id,updated_at").in("client_id", ids).order("name"),
@@ -37,6 +33,15 @@ export async function GET() {
     if (ownedResult.error || linksResult.error || reviewsResult.error || skipsResult.error) {
         return NextResponse.json({ error: "Could not load site matches." }, { status: 500 })
     }
+    const genericCandidates = (customers || []).filter((customer) =>
+        customer.name.toLocaleLowerCase("en-NZ").replace(/[^a-z]/g, "") === "mcdonalds")
+    const genericWithSites = genericCandidates.filter((customer) =>
+        (ownedResult.data || []).some((site) => site.client_id === customer.id))
+    const originalGeneric = genericCandidates.filter((customer) => customer.name === "Mcdonalds")
+    if (genericWithSites.length > 1 || (genericWithSites.length === 0 && originalGeneric.length !== 1)) {
+        return NextResponse.json({ error: "The RPM McDonalds group customer could not be identified uniquely." }, { status: 409 })
+    }
+    const generic = genericWithSites[0] || originalGeneric[0]
     const owned = new Set((ownedResult.data || []).map((site) => site.client_id))
     const skipped = new Set((skipsResult.data || []).map((decision) => decision.client_id))
     const ownedSiteNames = new Map((ownedResult.data || []).map((site) => [site.client_id, site.name]))
@@ -47,7 +52,8 @@ export async function GET() {
         linksByCustomer.set(link.client_id, [...(linksByCustomer.get(link.client_id) || []), link])
     }
     const xeroCustomers = (customers || []).filter((customer) =>
-        customer.id !== generic[0].id && /^mc\s*donald/i.test(customer.name) &&
+        customer.id !== generic.id && /^mc\s*donald/i.test(customer.name) &&
+        customer.name.toLocaleLowerCase("en-NZ").replace(/[^a-z]/g, "") !== "mcdonalds" &&
         (linksByCustomer.get(customer.id) || []).length > 0
     ).map((customer) => {
         const links = linksByCustomer.get(customer.id) || []
@@ -67,9 +73,9 @@ export async function GET() {
         address: site.address,
         customerId: site.client_id,
         customerName: customerNames.get(site.client_id) || "Unknown customer",
-        needsMatch: site.client_id === generic[0].id,
+        needsMatch: site.client_id === generic.id,
         xeroNames: (linksByCustomer.get(site.client_id) || [])
-            .filter((link) => link.store_id === site.id || (link.store_id === null && site.client_id !== generic[0].id))
+            .filter((link) => link.store_id === site.id || (link.store_id === null && site.client_id !== generic.id))
             .map((link) => link.xero_name),
         reviewStatus: reviews.get(site.id) && new Date(reviews.get(site.id)!.updated_at).getTime() >= new Date(site.updated_at).getTime()
             ? reviews.get(site.id)!.review_status : "pending",
