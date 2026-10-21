@@ -22,4 +22,3 @@ export function sortSitesByDisplayName<T extends { name: string }>(sites: T[], c
         siteDisplayName(b.name, customerName),
     ))
 }
-
