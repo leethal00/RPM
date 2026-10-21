@@ -7,6 +7,7 @@ import { ArrowLeft, Printer } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { JobCardHeader, PRINT_PRIMARY, PRINT_TINT } from "@/components/job-card-header"
 import { jobSites, type LinkedJobSite } from "@/lib/costing/job-sites"
+import { simpleJobSummaryDescription } from "@/lib/job-summary-description"
 
 const GREEN = PRINT_PRIMARY
 const DEPARTMENTS = ["Main", "CNC", "Metal", "Fab", "Electrical", "Vinyl", "Install"]
@@ -33,6 +34,8 @@ type Job = {
   costing_job_sites?: LinkedJobSite[]
   id: string
   title: string
+  details?: string | null
+  production_details?: string | null
   job_number: string | null
   xero_invoice_number: string | null
   created_at: string
@@ -112,6 +115,7 @@ export default function JobSummaryPage() {
   const supabase = useMemo(() => createClient(), [])
   const [job, setJob] = useState<Job | null>(null)
   const [items, setItems] = useState<Item[]>([])
+  const [summaryDescription, setSummaryDescription] = useState("")
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -128,6 +132,7 @@ export default function JobSummaryPage() {
       const nextLines = (lineData || []) as BomLine[]
       setJob(nextJob)
       setItems(nextItems)
+      setSummaryDescription(simpleJobSummaryDescription(nextJob, allItems))
       setSelectedDepartments(inferDepartments(nextJob.title || "", nextItems.map((item) => item.details || "").join(" "), nextLines))
       setLoading(false)
     })()
@@ -220,6 +225,12 @@ export default function JobSummaryPage() {
 
         <div className="mt-[4mm]">
           <div className="h-[7mm] px-[2.5mm] py-[1.2mm] text-[12px] font-black text-white" style={{ background: GREEN }}>JOB SUMMARY / PROJECT ITEMS</div>
+          {summaryDescription && (
+            <div className="border border-b-0 border-[#b9c5c1] px-[2.5mm] py-[2mm]">
+              <div className="mb-[1mm] text-[10.5px] font-bold" style={{ color: GREEN }}>JOB DESCRIPTION</div>
+              <div className="whitespace-pre-wrap break-words">{summaryDescription}</div>
+            </div>
+          )}
           <table className="w-full table-fixed border-collapse">
             <colgroup>
               <col style={{ width: "15%" }} />
