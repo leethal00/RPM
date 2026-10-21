@@ -301,6 +301,7 @@ export function SitePhotoGallery({
         setSelectedPhotoKeys([])
         setOpenPhotoKey(null)
         setLoading(true)
+        setAssetPhotos([])
 
         fetchPhotos()
         fetchAlbums()
@@ -325,6 +326,17 @@ export function SitePhotoGallery({
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [includeAssetPhotos, storeId, assetPhotoRefreshKey])
+
+    useEffect(() => {
+        if (includeAssetPhotos && audience === "internal" && assetPhotos.length > 0 &&
+            !assetPhotos.some((photo) => photo.internal_only) &&
+            !photos.some((photo) => photo.internal_only) && installerPhotos.length === 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAudience("client")
+        }
+        // Only choose the audience when asset photos are loaded or the toggle changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [includeAssetPhotos, assetPhotos])
 
     const createAlbum = async () => {
         const name = newAlbumName.trim()
@@ -1050,7 +1062,7 @@ export function SitePhotoGallery({
 
     const generalCount = galleryPhotos.filter(
         (photo) => !photo.album_id
-    ).length + galleryInstallerPhotos.filter((photo) => !photo.album_id).length
+    ).length + galleryInstallerPhotos.filter((photo) => !photo.album_id).length + visibleAssetPhotos.length
 
     const selectedAlbumLabel =
         selectedAlbum?.name ?? "General"
@@ -1162,7 +1174,7 @@ export function SitePhotoGallery({
                                 checked={
                                     includeAssetPhotos
                                 }
-                                onCheckedChange={(checked) => { setIncludeAssetPhotos(checked); setSelectedPhotoKeys([]); setOpenPhotoKey(null) }}
+                                onCheckedChange={(checked) => { setIncludeAssetPhotos(checked); if (checked) setSelectedAlbumId(GENERAL_ALBUM); setSelectedPhotoKeys([]); setOpenPhotoKey(null) }}
                             />
 
                             <span className="text-muted-foreground">
@@ -1222,11 +1234,11 @@ export function SitePhotoGallery({
             <div className="flex flex-wrap gap-2" role="group" aria-label="Photo gallery visibility">
                 {isStaff && <Button type="button" size="sm" variant={audience === "internal" ? "default" : "outline"}
                     onClick={() => changeAudience("internal")}>
-                    <Lock className="mr-1.5 size-3.5" /> Internal ({photos.filter((p) => p.internal_only).length + installerPhotos.length})
+                    <Lock className="mr-1.5 size-3.5" /> Internal ({photos.filter((p) => p.internal_only).length + installerPhotos.length + (includeAssetPhotos ? assetPhotos.filter((p) => p.internal_only).length : 0)})
                 </Button>}
                 <Button type="button" size="sm" variant={audience === "client" ? "default" : "outline"}
                     onClick={() => changeAudience("client")}>
-                    <LockOpen className="mr-1.5 size-3.5" /> Client viewable ({photos.filter((p) => !p.internal_only).length})
+                    <LockOpen className="mr-1.5 size-3.5" /> Client viewable ({photos.filter((p) => !p.internal_only).length + (includeAssetPhotos ? assetPhotos.filter((p) => !p.internal_only).length : 0)})
                 </Button>
             </div>
 
