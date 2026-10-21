@@ -442,7 +442,7 @@ const electricalChecks = [
   ["Job number", "Noted inside the sign"],
 ] as const
 
-export function ElectricalCheckSheet({ header, number, itemName, quantity }: { header: React.ReactNode; number: string; itemName: string; quantity: string }) {
+function ElectricalCheckSheet({ header, number, itemName, quantity }: { header: React.ReactNode; number: string; itemName: string; quantity: string }) {
   return <>
     <Sheet className="electrical-check-sheet">
       {header}
