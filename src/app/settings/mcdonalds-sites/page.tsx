@@ -13,7 +13,7 @@ import { useCustomerFilter } from "@/lib/customer-filter"
 import { mcdonaldsSiteKey } from "@/lib/mcdonalds-site-match"
 import { Building2, Loader2 } from "lucide-react"
 
-type ReviewStatus = "pending" | "verified" | "xero_issue"
+type ReviewStatus = "pending" | "verified" | "xero_issue" | "skipped"
 type Site = {
     id: string; name: string; address: string | null; customerName: string;
     needsMatch: boolean; xeroNames: string[]; reviewStatus: ReviewStatus; reviewNote: string
@@ -49,11 +49,12 @@ export default function McDonaldsSiteMatchesPage() {
     const [selectedCustomerId, setSelectedCustomerId] = useState("")
     const [siteSearch, setSiteSearch] = useState("")
     const [customerSearch, setCustomerSearch] = useState("")
-    const [reviewFilter, setReviewFilter] = useState<"all" | "pending" | "xero_issue" | "verified">("all")
+    const [tab, setTab] = useState<"review" | "confirmed" | "skipped" | "xero">("review")
     const [reviewNoteDraft, setReviewNoteDraft] = useState<{ siteId: string; value: string } | null>(null)
     const [reviewingId, setReviewingId] = useState("")
     const [xeroSearch, setXeroSearch] = useState("")
     const [showSkipped, setShowSkipped] = useState(false)
+    const [selectedXeroId, setSelectedXeroId] = useState("")
     const [creatingClientId, setCreatingClientId] = useState("")
     const [newSiteName, setNewSiteName] = useState("")
     const [newSiteAddress, setNewSiteAddress] = useState("")
@@ -83,13 +84,14 @@ export default function McDonaldsSiteMatchesPage() {
         }).finally(() => setLoading(false))
     }, [initialised, isAdmin, applyResult])
 
-    const selectedSite = data?.sites.find((site) => site.id === selectedSiteId)
-    const selectedCustomer = data?.customers.find((customer) => customer.id === selectedCustomerId)
-    const reviewNote = reviewNoteDraft && reviewNoteDraft.siteId === selectedSite?.id ? reviewNoteDraft.value : selectedSite?.reviewNote || ""
     const visibleSites = useMemo(() => (data?.sites || []).filter((site) =>
         `${site.name} ${site.address || ""} ${site.customerName} ${site.xeroNames.join(" ")}`.toLowerCase()
             .includes(siteSearch.trim().toLowerCase()) &&
-        (reviewFilter === "all" || site.reviewStatus === reviewFilter)), [data, siteSearch, reviewFilter])
+        (tab === "review" ? site.reviewStatus === "pending" || site.reviewStatus === "xero_issue"
+            : tab === "confirmed" ? site.reviewStatus === "verified" : site.reviewStatus === "skipped")), [data, siteSearch, tab])
+    const selectedSite = visibleSites.find((site) => site.id === selectedSiteId) || visibleSites[0]
+    const selectedCustomer = data?.customers.find((customer) => customer.id === selectedCustomerId)
+    const reviewNote = reviewNoteDraft && reviewNoteDraft.siteId === selectedSite?.id ? reviewNoteDraft.value : selectedSite?.reviewNote || ""
     const visibleCustomers = useMemo(() => {
         const search = customerSearch.trim().toLowerCase()
         return (data?.customers || []).filter((customer) =>
@@ -101,6 +103,7 @@ export default function McDonaldsSiteMatchesPage() {
     const unlinkedCustomers = (data?.customers || []).filter((customer) => !customer.linkedSiteName)
     const visibleUnlinkedCustomers = unlinkedCustomers.filter((customer) => customer.skipped === showSkipped &&
         `${customer.name} ${customer.xeroName}`.toLowerCase().includes(xeroSearch.trim().toLowerCase()))
+    const selectedXero = visibleUnlinkedCustomers.find((customer) => customer.id === selectedXeroId) || visibleUnlinkedCustomers[0]
 
     async function changeSkip(customer: Customer, skipped: boolean) {
         setBusyClientId(customer.id)
@@ -134,7 +137,10 @@ export default function McDonaldsSiteMatchesPage() {
             setNewSiteName("")
             setNewSiteAddress("")
             await load()
-            if (result.siteId) setSelectedSiteId(result.siteId)
+            if (result.siteId) {
+                setSelectedSiteId(result.siteId)
+                setTab("review")
+            }
         } catch (cause) {
             toast.error(cause instanceof Error ? cause.message : "Could not create this site.")
         } finally {
@@ -155,8 +161,9 @@ export default function McDonaldsSiteMatchesPage() {
             setData((current) => current && ({ ...current, sites: current.sites.map((entry) =>
                 entry.id === site.id ? { ...entry, reviewStatus, reviewNote: note.trim() } : entry) }))
             setReviewNoteDraft(null)
-            toast.success(reviewStatus === "verified" ? `${site.name} checked` :
-                reviewStatus === "xero_issue" ? `${site.name} flagged for Xero cleanup` : `${site.name} marked unchecked`)
+            toast.success(reviewStatus === "verified" ? `${site.name} confirmed` :
+                reviewStatus === "xero_issue" ? `${site.name} flagged for Xero cleanup` :
+                    reviewStatus === "skipped" ? `${site.name} skipped` : `${site.name} returned to review`)
         } catch (cause) {
             toast.error(cause instanceof Error ? cause.message : "Could not save review.")
         } finally {
@@ -188,116 +195,89 @@ export default function McDonaldsSiteMatchesPage() {
 
     return <DashboardLayout><PageShell>
         <div className="mb-4"><Button variant="ghost" size="sm" asChild><Link href="/settings/customers">← Customer Settings</Link></Button></div>
-        <PageHeader icon={Building2} title="Review McDonalds sites" description="Check every site against its Xero customer. Match missing customers and flag Xero records that need cleanup." />
+        <PageHeader icon={Building2} title="Review McDonalds sites" description="Check each RPM site against its Xero customer, then confirm it." />
         {!initialised || (isAdmin && loading && !data) ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading sites…</p>
-            : !isAdmin ? <p>Only Rodier administrators can match sites.</p>
+            : !isAdmin ? <p>Only Rodier administrators can review sites.</p>
                 : error ? <p className="text-destructive">{error} <Button variant="outline" onClick={() => void load()}>Retry</Button></p>
                     : <div className="space-y-4">
-                        <p className="text-sm text-muted-foreground">{data?.sites.filter((site) => site.reviewStatus === "verified").length || 0} of {data?.sites.length || 0} checked · {data?.sites.filter((site) => site.needsMatch).length || 0} still need a customer · {data?.sites.filter((site) => site.reviewStatus === "xero_issue").length || 0} need Xero cleanup.</p>
-                        <section className="rounded-lg border p-4 space-y-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div><h2 className="font-semibold">Xero customers without an RPM site</h2>
-                                    <p className="text-sm text-muted-foreground">Create a site when you need one, or skip contacts for places you do not expect to work at.</p></div>
-                                <div className="flex gap-2 text-sm">
-                                    <Button size="sm" variant={showSkipped ? "outline" : "default"} onClick={() => setShowSkipped(false)}>To decide ({unlinkedCustomers.filter((customer) => !customer.skipped).length})</Button>
-                                    <Button size="sm" variant={showSkipped ? "default" : "outline"} onClick={() => setShowSkipped(true)}>Skipped ({unlinkedCustomers.filter((customer) => customer.skipped).length})</Button>
+                        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Site review lists">
+                            <Button role="tab" aria-selected={tab === "review"} variant={tab === "review" ? "default" : "outline"} onClick={() => setTab("review")}>To review ({data?.sites.filter((site) => site.reviewStatus === "pending" || site.reviewStatus === "xero_issue").length || 0})</Button>
+                            <Button role="tab" aria-selected={tab === "confirmed"} variant={tab === "confirmed" ? "default" : "outline"} onClick={() => setTab("confirmed")}>Confirmed ({data?.sites.filter((site) => site.reviewStatus === "verified").length || 0})</Button>
+                            <Button role="tab" aria-selected={tab === "skipped"} variant={tab === "skipped" ? "default" : "outline"} onClick={() => setTab("skipped")}>Skipped sites ({data?.sites.filter((site) => site.reviewStatus === "skipped").length || 0})</Button>
+                            <Button role="tab" aria-selected={tab === "xero"} variant={tab === "xero" ? "default" : "outline"} onClick={() => setTab("xero")}>Xero contacts without a site ({unlinkedCustomers.filter((customer) => !customer.skipped).length})</Button>
+                        </div>
+                        {tab === "xero" ? <div className="grid gap-5 lg:grid-cols-[minmax(260px,1fr)_minmax(380px,2fr)]">
+                            <section className="rounded-lg border p-4 space-y-3">
+                                <h2 className="font-semibold">Xero contacts without an RPM site</h2>
+                                <p className="text-sm text-muted-foreground">Create an RPM site only for a location you need. You can skip the rest.</p>
+                                <div className="flex gap-2"><Button size="sm" variant={showSkipped ? "outline" : "default"} onClick={() => setShowSkipped(false)}>To decide</Button><Button size="sm" variant={showSkipped ? "default" : "outline"} onClick={() => setShowSkipped(true)}>Skipped ({unlinkedCustomers.filter((customer) => customer.skipped).length})</Button></div>
+                                <Input aria-label="Search Xero contacts" placeholder="Search Xero contacts…" value={xeroSearch} onChange={(event) => setXeroSearch(event.target.value)} />
+                                <div className="max-h-[65vh] overflow-y-auto space-y-1">
+                                    {visibleUnlinkedCustomers.map((customer) => <button type="button" key={customer.id} onClick={() => { setSelectedXeroId(customer.id); setCreatingClientId("") }} className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${selectedXero?.id === customer.id ? "bg-muted" : ""}`}>
+                                        <span className="block font-medium">{customer.name}</span><span className="block truncate text-xs text-muted-foreground">{customer.xeroName}</span>
+                                    </button>)}
+                                    {!visibleUnlinkedCustomers.length && <p className="text-sm text-muted-foreground">No contacts in this list.</p>}
                                 </div>
-                            </div>
-                            <Input aria-label="Search Xero customers without a site" placeholder="Search Xero customers…" value={xeroSearch} onChange={(event) => setXeroSearch(event.target.value)} />
-                            <div className="max-h-72 overflow-y-auto divide-y rounded-md border">
-                                {visibleUnlinkedCustomers.map((customer) => <div key={customer.id} className="p-3 space-y-2">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="text-sm"><strong>{customer.name}</strong>
-                                            {customer.xeroName !== customer.name && <span className="block text-xs text-muted-foreground">Xero: {customer.xeroName}</span>}
-                                            {!customer.available && !customer.skipped && <span className="block text-xs text-amber-700">Check the Xero contact links before creating a site</span>}
+                            </section>
+                            <section className="rounded-lg border p-4 space-y-4">
+                                {selectedXero ? <><div><h2 className="text-lg font-semibold">{selectedXero.name}</h2><p className="text-sm text-muted-foreground">Xero: {selectedXero.xeroName}</p></div>
+                                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">No RPM site is linked to this Xero contact. Check whether this is a location you will work at.</div>
+                                    {!selectedXero.available && !selectedXero.skipped && <p className="text-sm text-amber-700">This contact has another Xero link to review before a site can be created.</p>}
+                                    {selectedXero.skipped ? <Button variant="outline" disabled={!!busyClientId} onClick={() => void changeSkip(selectedXero, false)}>Return to decision list</Button>
+                                        : <div className="flex flex-wrap gap-2">
+                                            <Button disabled={!!busyClientId || !selectedXero.available} onClick={() => { setCreatingClientId(selectedXero.id); setNewSiteName(selectedXero.name.replace(/^mc\s*donald['’]?s?\s*/i, "").trim() || selectedXero.name); setNewSiteAddress("") }}>Create RPM site</Button>
+                                            <Button variant="outline" disabled={!!busyClientId} onClick={() => void changeSkip(selectedXero, true)}>Skip this contact</Button>
+                                        </div>}
+                                    {creatingClientId === selectedXero.id && <form className="space-y-3 rounded-md bg-muted p-3" onSubmit={(event) => { event.preventDefault(); void createSite(selectedXero) }}>
+                                        <div><label htmlFor="new-site-name" className="text-sm font-medium">RPM site name</label><Input id="new-site-name" value={newSiteName} onChange={(event) => setNewSiteName(event.target.value)} required minLength={2} maxLength={200} /></div>
+                                        <div><label htmlFor="new-site-address" className="text-sm font-medium">Full street address</label><Input id="new-site-address" value={newSiteAddress} onChange={(event) => setNewSiteAddress(event.target.value)} required minLength={5} maxLength={500} placeholder="Street, town, postcode" /></div>
+                                        <div className="flex gap-2"><Button type="submit" disabled={!!busyClientId}>Save site and link Xero</Button><Button type="button" variant="ghost" onClick={() => setCreatingClientId("")}>Cancel</Button></div>
+                                        <p className="text-xs text-muted-foreground">After saving, open the site to verify its map location.</p>
+                                    </form>}</> : <p className="text-sm text-muted-foreground">Select a Xero contact on the left.</p>}
+                            </section>
+                        </div> : <div className="grid gap-5 lg:grid-cols-[minmax(260px,1fr)_minmax(380px,2fr)]">
+                            <section className="rounded-lg border p-4 space-y-3">
+                                <h2 className="font-semibold">RPM McDonalds sites</h2>
+                                <Input aria-label="Search RPM sites" placeholder="Search RPM sites…" value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} />
+                                <div className="max-h-[65vh] overflow-y-auto space-y-1">
+                                    {visibleSites.map((site) => <button type="button" key={site.id} onClick={() => { setSelectedSiteId(site.id); setSelectedCustomerId(""); setCustomerSearch(""); setReviewNoteDraft(null) }} className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${selectedSite?.id === site.id ? "bg-muted" : ""}`}>
+                                        <span className="block font-medium">{site.name}</span>
+                                        <span className="block truncate text-xs text-muted-foreground">{site.xeroNames.length ? `Xero: ${site.xeroNames.join("; ")}` : "No Xero match"}</span>
+                                        {site.reviewStatus === "xero_issue" && <span className="block text-xs text-amber-700">Needs Xero cleanup</span>}
+                                    </button>)}
+                                    {!visibleSites.length && <p className="text-sm text-muted-foreground">No sites in this list.</p>}
+                                </div>
+                            </section>
+                            <section className="rounded-lg border p-4 space-y-4">
+                                {selectedSite ? <>
+                                    <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">{selectedSite.name}</h2><p className="text-sm text-muted-foreground">{selectedSite.address || "No address recorded"}</p></div><Button variant="outline" size="sm" asChild><Link href={`/stores/${selectedSite.id}`}>Open site</Link></Button></div>
+                                    {selectedSite.needsMatch || !selectedSite.xeroNames.length
+                                        ? <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Needs checking:</strong> {selectedSite.needsMatch ? "This RPM site is still under the generic McDonalds customer. Choose its Xero contact below." : "This RPM customer has no linked Xero contact. Check or choose a contact below."}</div>
+                                        : <div className="rounded-md border p-3 text-sm space-y-1"><p><strong>RPM customer:</strong> {selectedSite.customerName}</p><p><strong>Matched Xero contact:</strong> {selectedSite.xeroNames.join("; ")}</p></div>}
+                                    {tab === "review" && <>
+                                        <div className="space-y-2"><label htmlFor="customer-search" className="text-sm font-medium">Choose a different Xero contact</label>
+                                            <Input id="customer-search" placeholder="Search Xero names…" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} />
+                                            <div className="max-h-52 overflow-y-auto divide-y rounded-md border">
+                                                {visibleCustomers.map((customer) => <button type="button" key={customer.id} disabled={!selectedSite.needsMatch || !customer.available} onClick={() => setSelectedCustomerId(customer.id)} className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50 ${customer.id === selectedCustomerId ? "bg-muted font-semibold" : ""}`}>{customer.name}<span className="block text-xs font-normal text-muted-foreground">{customer.linkedSiteName ? `Already linked to ${customer.linkedSiteName}` : customer.skipped ? "Skipped" : customer.available ? "Available" : "Needs Xero review"}</span></button>)}
+                                                {!visibleCustomers.length && <p className="p-3 text-sm text-muted-foreground">No Xero contacts match.</p>}
+                                            </div>
+                                            {selectedSite.needsMatch && <Button variant="outline" disabled={!selectedCustomer?.available || saving} onClick={() => void save()}>{saving && <Loader2 className="size-4 animate-spin" />} Save selected match</Button>}
+                                            <p className="text-xs text-muted-foreground">Changing a site customer does not change existing job billing.</p>
                                         </div>
-                                        <div className="flex gap-2">
-                                            {customer.skipped ? <Button size="sm" variant="outline" disabled={!!busyClientId} onClick={() => void changeSkip(customer, false)}>Undo skip</Button>
-                                                : <><Button size="sm" variant="outline" disabled={!!busyClientId || !customer.available} onClick={() => {
-                                                    setCreatingClientId(customer.id)
-                                                    setNewSiteName(customer.name.replace(/^mc\s*donald['’]?s?\s*/i, "").trim() || customer.name)
-                                                    setNewSiteAddress("")
-                                                }}>Create site</Button>
-                                                    <Button size="sm" variant="ghost" disabled={!!busyClientId} onClick={() => void changeSkip(customer, true)}>Skip</Button></>}
+                                        <div className="space-y-2 border-t pt-4"><label htmlFor="review-note" className="text-sm font-medium">Review note</label>
+                                            <Textarea id="review-note" value={reviewNote} onChange={(event) => setReviewNoteDraft({ siteId: selectedSite.id, value: event.target.value })} maxLength={1000} placeholder="Record any Xero duplicates or reasons to skip." />
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button disabled={!!reviewingId || selectedSite.needsMatch || !selectedSite.xeroNames.length} onClick={() => void saveReview(selectedSite, "verified", reviewNote)}>Confirm match</Button>
+                                                <Button variant="outline" disabled={!!reviewingId || !reviewNote.trim()} onClick={() => void saveReview(selectedSite, "xero_issue", reviewNote)}>Needs Xero cleanup</Button>
+                                                <Button variant="outline" disabled={!!reviewingId} onClick={() => void saveReview(selectedSite, "skipped", reviewNote)}>Skip this RPM site</Button>
+                                                {reviewNote !== selectedSite.reviewNote && <Button variant="ghost" disabled={!!reviewingId} onClick={() => void saveReview(selectedSite, selectedSite.reviewStatus, reviewNote)}>Save note</Button>}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {creatingClientId === customer.id && <form className="grid gap-2 rounded-md bg-muted p-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); void createSite(customer) }}>
-                                        <div><label htmlFor="new-site-name" className="text-xs font-medium">RPM site name</label><Input id="new-site-name" value={newSiteName} onChange={(event) => setNewSiteName(event.target.value)} required minLength={2} maxLength={200} /></div>
-                                        <div><label htmlFor="new-site-address" className="text-xs font-medium">Full street address</label><Input id="new-site-address" value={newSiteAddress} onChange={(event) => setNewSiteAddress(event.target.value)} required minLength={5} maxLength={500} placeholder="Street, town, postcode" /></div>
-                                        <div className="flex gap-2 sm:col-span-2"><Button size="sm" type="submit" disabled={!!busyClientId}>Save site and link Xero</Button><Button size="sm" type="button" variant="ghost" onClick={() => setCreatingClientId("")}>Cancel</Button></div>
-                                        <p className="text-xs text-muted-foreground sm:col-span-2">After saving, open the site to verify its map location.</p>
-                                    </form>}
-                                </div>)}
-                                {visibleUnlinkedCustomers.length === 0 && <p className="p-3 text-sm text-muted-foreground">{showSkipped ? "No skipped contacts match." : "No Xero contacts waiting for a decision."}</p>}
-                            </div>
-                        </section>
-                        {data?.sites.length === 0 ? <div className="rounded-lg border p-8 text-center">No McDonalds sites found.</div>
-                            : <div className="grid gap-5 lg:grid-cols-[minmax(230px,1fr)_minmax(350px,2fr)]">
-                                <section className="rounded-lg border p-4 space-y-3">
-                                    <h2 className="font-semibold">All McDonalds sites</h2>
-                                    <Input aria-label="Search sites" placeholder="Search site or customer…" value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} />
-                                    <select aria-label="Filter review status" value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value as typeof reviewFilter)} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-                                        <option value="all">All sites</option><option value="pending">Unchecked</option>
-                                        <option value="xero_issue">Needs Xero cleanup</option><option value="verified">Checked and correct</option>
-                                    </select>
-                                    <div className="max-h-[65vh] overflow-y-auto space-y-1">
-                                        {visibleSites.map((site) => <div key={site.id} className={`flex items-start gap-2 rounded-md px-2 py-2 hover:bg-muted ${site.id === selectedSiteId ? "bg-muted" : ""}`}>
-                                            <input type="checkbox" aria-label={`Checked and correct: ${site.name}`} checked={site.reviewStatus === "verified"}
-                                                disabled={reviewingId === site.id || site.needsMatch}
-                                                onChange={(event) => void saveReview(site, event.target.checked ? "verified" : "pending", site.id === selectedSiteId ? reviewNote : site.reviewNote)}
-                                                className="mt-1 size-4 shrink-0 accent-primary" />
-                                            <button type="button" onClick={() => {
-                                                setSelectedSiteId(site.id); setSelectedCustomerId(""); setCustomerSearch(""); setReviewNoteDraft(null)
-                                            }} className="min-w-0 flex-1 text-left text-sm">
-                                                <span className="block font-medium">{site.name}</span>
-                                                <span className="block truncate text-xs text-muted-foreground">{site.customerName}{site.needsMatch ? " · Needs customer" : ""}</span>
-                                                {site.reviewStatus === "xero_issue" && <span className="block text-xs text-amber-700">Needs Xero cleanup</span>}
-                                            </button>
-                                        </div>)}
-                                        {visibleSites.length === 0 && <p className="p-3 text-sm text-muted-foreground">No sites match this filter.</p>}
-                                    </div>
-                                </section>
-                                <section className="rounded-lg border p-4 space-y-4">
-                                    <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">{selectedSite?.name}</h2><p className="text-sm text-muted-foreground">{selectedSite?.address || "No address recorded"}</p></div>
-                                        {selectedSite && <Button variant="outline" size="sm" asChild><Link href={`/stores/${selectedSite.id}`}>Open site</Link></Button>}</div>
-                                    <div className="rounded-md border p-3 text-sm space-y-1">
-                                        <p><strong>RPM customer:</strong> {selectedSite?.customerName}</p>
-                                        <p><strong>Xero contact:</strong> {selectedSite?.xeroNames.length ? selectedSite.xeroNames.join("; ") : "None linked"}</p>
-                                        <p><strong>Match:</strong> {selectedSite?.needsMatch ? "Needs a customer" : "Linked"}</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label htmlFor="review-note" className="text-sm font-medium">Review note / Xero cleanup details</label>
-                                        <Textarea id="review-note" value={reviewNote} onChange={(event) => selectedSite && setReviewNoteDraft({ siteId: selectedSite.id, value: event.target.value })} maxLength={1000}
-                                            placeholder="e.g. Two Xero contacts for this restaurant; merge in Xero before confirming." />
-                                        <div className="flex flex-wrap gap-2">
-                                            <Button variant="outline" disabled={!selectedSite || !!reviewingId || !reviewNote.trim()} onClick={() => selectedSite && void saveReview(selectedSite, "xero_issue", reviewNote)}>Save as needing Xero cleanup</Button>
-                                            {selectedSite && reviewNote !== selectedSite.reviewNote && <Button variant="ghost" disabled={!!reviewingId || (selectedSite.reviewStatus === "xero_issue" && !reviewNote.trim())} onClick={() => void saveReview(selectedSite, selectedSite.reviewStatus, reviewNote)}>Save note</Button>}
-                                            {selectedSite?.reviewStatus === "xero_issue" && <Button variant="ghost" disabled={!!reviewingId} onClick={() => selectedSite && void saveReview(selectedSite, "pending", reviewNote)}>Return to unchecked</Button>}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">Tick the box beside a site only after checking its RPM site and Xero contact. Xero cleanup notes remain here while you sort contacts in Xero.</p>
-                                    </div>
-                                    <div className="space-y-2 border-t pt-4">
-                                        <label htmlFor="customer-search" className="text-sm font-medium">Search McDonalds Xero contacts</label>
-                                        <Input id="customer-search" placeholder="Search customer names…" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} />
-                                        <p className="text-xs text-muted-foreground">Search all Xero versions here. Contacts already linked to a site are shown for comparison but cannot be matched again.</p>
-                                        <div className="max-h-80 overflow-y-auto rounded-md border divide-y">
-                                            {visibleCustomers.map((customer) => <button type="button" key={customer.id}
-                                                onClick={() => setSelectedCustomerId(selectedSite?.needsMatch && customer.available ? customer.id : "")}
-                                                className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${customer.id === selectedCustomerId ? "bg-muted font-semibold" : ""}`}>
-                                                {customer.name}
-                                                {customer.xeroName !== customer.name && <span className="block text-xs font-normal text-muted-foreground">Xero: {customer.xeroName}</span>}
-                                                <span className="block text-xs font-normal text-muted-foreground">{customer.linkedSiteName ? `Already linked to ${customer.linkedSiteName}` : customer.skipped ? "Skipped" : customer.available ? "Available to match or create" : "Needs Xero contact review"}</span>
-                                            </button>)}
-                                            {visibleCustomers.length === 0 && <p className="p-3 text-sm text-muted-foreground">No Xero customer matches this search.</p>}
-                                        </div>
-                                    {selectedSite?.needsMatch && selectedCustomer && <div className="rounded-md bg-muted p-3 text-sm">Link <strong>{selectedSite.name}</strong> to <strong>{selectedCustomer.name}</strong></div>}
-                                    {selectedSite?.needsMatch && <Button disabled={!selectedCustomer?.available || saving} onClick={() => void save()}>
-                                        {saving && <Loader2 className="size-4 animate-spin" />} Save this match
-                                    </Button>}
-                                    {selectedSite?.needsMatch && <p className="text-xs text-muted-foreground">Matching changes this site’s customer and links the Xero contact. Existing job billing stays as it was.</p>}
-                                    </div>
-                                </section>
-                            </div>}
+                                    </>}
+                                    {tab !== "review" && <><p className="text-sm text-muted-foreground">{selectedSite.reviewNote || (tab === "confirmed" ? "Match confirmed." : "Site skipped.")}</p><Button variant="outline" disabled={!!reviewingId} onClick={() => void saveReview(selectedSite, "pending", selectedSite.reviewNote)}>Return to review</Button></>}
+                                </> : <p className="text-sm text-muted-foreground">Select an RPM site on the left.</p>}
+                            </section>
+                        </div>}
                     </div>}
     </PageShell></DashboardLayout>
 }

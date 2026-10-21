@@ -104,7 +104,7 @@ export async function PATCH(request: Request) {
         siteId?: string; reviewStatus?: string; note?: string
     }
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuid.test(body.siteId || "") || !["pending", "verified", "xero_issue"].includes(body.reviewStatus || "") ||
+    if (!uuid.test(body.siteId || "") || !["pending", "verified", "xero_issue", "skipped"].includes(body.reviewStatus || "") ||
         typeof body.note !== "string" || body.note.length > 1000 ||
         (body.reviewStatus === "xero_issue" && !body.note.trim())) {
         return NextResponse.json({ error: "Choose a review status and add a note for Xero issues." }, { status: 400 })
@@ -118,6 +118,16 @@ export async function PATCH(request: Request) {
         .select("name").eq("id", site.client_id).single()
     if (customerError || !customer || !/donald/i.test(customer.name)) {
         return NextResponse.json({ error: "This is not a McDonalds site." }, { status: 400 })
+    }
+    if (body.reviewStatus === "verified") {
+        if (customer.name.toLowerCase().replace(/[^a-z]/g, "") === "mcdonalds") {
+            return NextResponse.json({ error: "Select this site's Xero customer before confirming." }, { status: 409 })
+        }
+        const { data: links, error: linksError } = await admin.from("xero_client_contacts")
+            .select("client_id").eq("client_id", site.client_id).limit(1)
+        if (linksError || !links?.length) {
+            return NextResponse.json({ error: "This customer has no linked Xero contact to confirm." }, { status: 409 })
+        }
     }
     const { error } = await admin.from("mcdonalds_site_reviews").upsert({
         site_id: body.siteId!, review_status: body.reviewStatus!, note: body.note.trim(),
