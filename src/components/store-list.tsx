@@ -16,6 +16,7 @@ interface StoreListProps {
     selectedStoreId?: string
     searchTerm: string
     onSearchChange: (value: string) => void
+    onCustomerChange?: () => void
 }
 
 export function StoreList({
@@ -25,6 +26,7 @@ export function StoreList({
     selectedStoreId,
     searchTerm,
     onSearchChange,
+    onCustomerChange,
 }: StoreListProps) {
     const attentionStores = (attentionSourceStores ?? stores)
         .map((store) => {
@@ -68,6 +70,8 @@ export function StoreList({
                 <CustomerFilterDropdown
                     variant="inline"
                     className="w-full bg-card"
+                    searchable
+                    onCustomerChange={() => { onSearchChange(""); onCustomerChange?.() }}
                 />
 
                 {attentionStores.length > 0 && (

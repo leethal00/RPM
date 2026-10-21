@@ -42,16 +42,17 @@ export default function MapPage() {
     return { data: baseStores.map(store => ({ ...store, assets: assetsByStore.get(store.id) ?? [], jobs: jobsByStore.get(store.id) ?? [] })) as Store[], error: null }
   })
 
-  const center: [number, number] = selectedStore?.lat != null && selectedStore?.lng != null ? [selectedStore.lat, selectedStore.lng] : [-40.9006, 174.886]
-  const zoom = selectedStore ? 14 : 5.5
+  const activeSelectedStore = selectedStore && stores.some(store => store.id === selectedStore.id) ? selectedStore : null
+  const center: [number, number] = activeSelectedStore?.lat != null && activeSelectedStore?.lng != null ? [activeSelectedStore.lat, activeSelectedStore.lng] : [-40.9006, 174.886]
+  const zoom = activeSelectedStore ? 14 : 5.5
   const filteredStores = stores.filter(store => store.name.toLowerCase().includes(searchTerm.toLowerCase()) || store.address?.toLowerCase().includes(searchTerm.toLowerCase()))
 
   return <DashboardLayout>
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[420px] w-full max-w-full gap-0 overflow-hidden rounded-xl border bg-background shadow-sm sm:h-[calc(100dvh-8rem)]">
       <div className="relative min-w-0 flex-1 overflow-hidden">
-        {loading ? <div className="h-full w-full bg-muted animate-pulse" /> : <><StoreMap stores={filteredStores} center={center} zoom={zoom} />{selectedStore && <button onClick={() => setSelectedStore(null)} className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-gray-50">Clear Selection</button>}</>}
+        {loading ? <div className="h-full w-full bg-muted animate-pulse" /> : <><StoreMap stores={filteredStores} center={center} zoom={zoom} />{activeSelectedStore && <button onClick={() => setSelectedStore(null)} className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2 rounded-md border bg-white px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-gray-50">Clear Selection</button>}</>}
       </div>
-      <div className="hidden h-full w-96 shrink-0 border-l lg:block"><StoreList stores={filteredStores} attentionSourceStores={stores} onStoreClick={setSelectedStore} selectedStoreId={selectedStore?.id} searchTerm={searchTerm} onSearchChange={setSearchTerm} /></div>
+      <div className="hidden h-full w-96 shrink-0 border-l lg:block"><StoreList stores={filteredStores} attentionSourceStores={stores} onStoreClick={setSelectedStore} selectedStoreId={activeSelectedStore?.id} searchTerm={searchTerm} onSearchChange={setSearchTerm} onCustomerChange={() => setSelectedStore(null)} /></div>
     </div>
   </DashboardLayout>
 }
