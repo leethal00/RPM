@@ -18,7 +18,7 @@ type Site = {
     id: string; name: string; address: string | null; customerName: string;
     needsMatch: boolean; xeroNames: string[]; reviewStatus: ReviewStatus; reviewNote: string
 }
-type Customer = { id: string; name: string; xeroName: string; available: boolean; linkedSiteName: string | null }
+type Customer = { id: string; name: string; xeroName: string; available: boolean; skipped: boolean; linkedSiteName: string | null }
 type MatchData = { sites: Site[]; customers: Customer[] }
 
 async function requestMatches(): Promise<MatchData> {
@@ -52,6 +52,12 @@ export default function McDonaldsSiteMatchesPage() {
     const [reviewFilter, setReviewFilter] = useState<"all" | "pending" | "xero_issue" | "verified">("all")
     const [reviewNoteDraft, setReviewNoteDraft] = useState<{ siteId: string; value: string } | null>(null)
     const [reviewingId, setReviewingId] = useState("")
+    const [xeroSearch, setXeroSearch] = useState("")
+    const [showSkipped, setShowSkipped] = useState(false)
+    const [creatingClientId, setCreatingClientId] = useState("")
+    const [newSiteName, setNewSiteName] = useState("")
+    const [newSiteAddress, setNewSiteAddress] = useState("")
+    const [busyClientId, setBusyClientId] = useState("")
 
     const applyResult = useCallback((result: MatchData) => {
         setData(result)
@@ -92,6 +98,49 @@ export default function McDonaldsSiteMatchesPage() {
                 || a.name.localeCompare(b.name, "en-NZ"))
             .slice(0, search ? 40 : 12)
     }, [data, customerSearch, selectedSite?.name])
+    const unlinkedCustomers = (data?.customers || []).filter((customer) => !customer.linkedSiteName)
+    const visibleUnlinkedCustomers = unlinkedCustomers.filter((customer) => customer.skipped === showSkipped &&
+        `${customer.name} ${customer.xeroName}`.toLowerCase().includes(xeroSearch.trim().toLowerCase()))
+
+    async function changeSkip(customer: Customer, skipped: boolean) {
+        setBusyClientId(customer.id)
+        try {
+            const response = await fetch("/api/mcdonalds/site-creation", {
+                method: "PATCH", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: customer.id, skipped }),
+            })
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || "Could not save this choice.")
+            toast.success(skipped ? `${customer.name} skipped` : `${customer.name} returned to the list`)
+            await load()
+        } catch (cause) {
+            toast.error(cause instanceof Error ? cause.message : "Could not save this choice.")
+        } finally {
+            setBusyClientId("")
+        }
+    }
+
+    async function createSite(customer: Customer) {
+        setBusyClientId(customer.id)
+        try {
+            const response = await fetch("/api/mcdonalds/site-creation", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: customer.id, siteName: newSiteName, address: newSiteAddress }),
+            })
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || "Could not create this site.")
+            toast.success(`${newSiteName.trim()} created and linked to ${customer.name}`)
+            setCreatingClientId("")
+            setNewSiteName("")
+            setNewSiteAddress("")
+            await load()
+            if (result.siteId) setSelectedSiteId(result.siteId)
+        } catch (cause) {
+            toast.error(cause instanceof Error ? cause.message : "Could not create this site.")
+        } finally {
+            setBusyClientId("")
+        }
+    }
 
     async function saveReview(site: Site, reviewStatus: ReviewStatus, note: string) {
         setReviewingId(site.id)
@@ -145,6 +194,43 @@ export default function McDonaldsSiteMatchesPage() {
                 : error ? <p className="text-destructive">{error} <Button variant="outline" onClick={() => void load()}>Retry</Button></p>
                     : <div className="space-y-4">
                         <p className="text-sm text-muted-foreground">{data?.sites.filter((site) => site.reviewStatus === "verified").length || 0} of {data?.sites.length || 0} checked · {data?.sites.filter((site) => site.needsMatch).length || 0} still need a customer · {data?.sites.filter((site) => site.reviewStatus === "xero_issue").length || 0} need Xero cleanup.</p>
+                        <section className="rounded-lg border p-4 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div><h2 className="font-semibold">Xero customers without an RPM site</h2>
+                                    <p className="text-sm text-muted-foreground">Create a site when you need one, or skip contacts for places you do not expect to work at.</p></div>
+                                <div className="flex gap-2 text-sm">
+                                    <Button size="sm" variant={showSkipped ? "outline" : "default"} onClick={() => setShowSkipped(false)}>To decide ({unlinkedCustomers.filter((customer) => !customer.skipped).length})</Button>
+                                    <Button size="sm" variant={showSkipped ? "default" : "outline"} onClick={() => setShowSkipped(true)}>Skipped ({unlinkedCustomers.filter((customer) => customer.skipped).length})</Button>
+                                </div>
+                            </div>
+                            <Input aria-label="Search Xero customers without a site" placeholder="Search Xero customers…" value={xeroSearch} onChange={(event) => setXeroSearch(event.target.value)} />
+                            <div className="max-h-72 overflow-y-auto divide-y rounded-md border">
+                                {visibleUnlinkedCustomers.map((customer) => <div key={customer.id} className="p-3 space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="text-sm"><strong>{customer.name}</strong>
+                                            {customer.xeroName !== customer.name && <span className="block text-xs text-muted-foreground">Xero: {customer.xeroName}</span>}
+                                            {!customer.available && !customer.skipped && <span className="block text-xs text-amber-700">Check the Xero contact links before creating a site</span>}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {customer.skipped ? <Button size="sm" variant="outline" disabled={!!busyClientId} onClick={() => void changeSkip(customer, false)}>Undo skip</Button>
+                                                : <><Button size="sm" variant="outline" disabled={!!busyClientId || !customer.available} onClick={() => {
+                                                    setCreatingClientId(customer.id)
+                                                    setNewSiteName(customer.name.replace(/^mc\s*donald['’]?s?\s*/i, "").trim() || customer.name)
+                                                    setNewSiteAddress("")
+                                                }}>Create site</Button>
+                                                    <Button size="sm" variant="ghost" disabled={!!busyClientId} onClick={() => void changeSkip(customer, true)}>Skip</Button></>}
+                                        </div>
+                                    </div>
+                                    {creatingClientId === customer.id && <form className="grid gap-2 rounded-md bg-muted p-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); void createSite(customer) }}>
+                                        <div><label htmlFor="new-site-name" className="text-xs font-medium">RPM site name</label><Input id="new-site-name" value={newSiteName} onChange={(event) => setNewSiteName(event.target.value)} required minLength={2} maxLength={200} /></div>
+                                        <div><label htmlFor="new-site-address" className="text-xs font-medium">Full street address</label><Input id="new-site-address" value={newSiteAddress} onChange={(event) => setNewSiteAddress(event.target.value)} required minLength={5} maxLength={500} placeholder="Street, town, postcode" /></div>
+                                        <div className="flex gap-2 sm:col-span-2"><Button size="sm" type="submit" disabled={!!busyClientId}>Save site and link Xero</Button><Button size="sm" type="button" variant="ghost" onClick={() => setCreatingClientId("")}>Cancel</Button></div>
+                                        <p className="text-xs text-muted-foreground sm:col-span-2">After saving, open the site to verify its map location.</p>
+                                    </form>}
+                                </div>)}
+                                {visibleUnlinkedCustomers.length === 0 && <p className="p-3 text-sm text-muted-foreground">{showSkipped ? "No skipped contacts match." : "No Xero contacts waiting for a decision."}</p>}
+                            </div>
+                        </section>
                         {data?.sites.length === 0 ? <div className="rounded-lg border p-8 text-center">No McDonalds sites found.</div>
                             : <div className="grid gap-5 lg:grid-cols-[minmax(230px,1fr)_minmax(350px,2fr)]">
                                 <section className="rounded-lg border p-4 space-y-3">
@@ -172,7 +258,8 @@ export default function McDonaldsSiteMatchesPage() {
                                     </div>
                                 </section>
                                 <section className="rounded-lg border p-4 space-y-4">
-                                    <div><h2 className="text-lg font-semibold">{selectedSite?.name}</h2><p className="text-sm text-muted-foreground">{selectedSite?.address || "No address recorded"}</p></div>
+                                    <div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">{selectedSite?.name}</h2><p className="text-sm text-muted-foreground">{selectedSite?.address || "No address recorded"}</p></div>
+                                        {selectedSite && <Button variant="outline" size="sm" asChild><Link href={`/stores/${selectedSite.id}`}>Open site</Link></Button>}</div>
                                     <div className="rounded-md border p-3 text-sm space-y-1">
                                         <p><strong>RPM customer:</strong> {selectedSite?.customerName}</p>
                                         <p><strong>Xero contact:</strong> {selectedSite?.xeroNames.length ? selectedSite.xeroNames.join("; ") : "None linked"}</p>
@@ -199,7 +286,7 @@ export default function McDonaldsSiteMatchesPage() {
                                                 className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${customer.id === selectedCustomerId ? "bg-muted font-semibold" : ""}`}>
                                                 {customer.name}
                                                 {customer.xeroName !== customer.name && <span className="block text-xs font-normal text-muted-foreground">Xero: {customer.xeroName}</span>}
-                                                <span className="block text-xs font-normal text-muted-foreground">{customer.linkedSiteName ? `Already linked to ${customer.linkedSiteName}` : customer.available ? "Available to match" : "Needs Xero contact review"}</span>
+                                                <span className="block text-xs font-normal text-muted-foreground">{customer.linkedSiteName ? `Already linked to ${customer.linkedSiteName}` : customer.skipped ? "Skipped" : customer.available ? "Available to match or create" : "Needs Xero contact review"}</span>
                                             </button>)}
                                             {visibleCustomers.length === 0 && <p className="p-3 text-sm text-muted-foreground">No Xero customer matches this search.</p>}
                                         </div>

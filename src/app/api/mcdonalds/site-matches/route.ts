@@ -28,15 +28,17 @@ export async function GET() {
     if (generic.length !== 1) return NextResponse.json({ error: "The generic McDonalds customer could not be identified uniquely." }, { status: 409 })
 
     const ids = (customers || []).map((customer) => customer.id)
-    const [ownedResult, linksResult, reviewsResult] = await Promise.all([
+    const [ownedResult, linksResult, reviewsResult, skipsResult] = await Promise.all([
         admin.from("stores").select("id,name,address,client_id,updated_at").in("client_id", ids).order("name"),
         admin.from("xero_client_contacts").select("client_id,store_id,xero_name").in("client_id", ids),
         admin.from("mcdonalds_site_reviews").select("site_id,review_status,note,updated_at"),
+        admin.from("mcdonalds_xero_site_skips").select("client_id"),
     ])
-    if (ownedResult.error || linksResult.error || reviewsResult.error) {
+    if (ownedResult.error || linksResult.error || reviewsResult.error || skipsResult.error) {
         return NextResponse.json({ error: "Could not load site matches." }, { status: 500 })
     }
     const owned = new Set((ownedResult.data || []).map((site) => site.client_id))
+    const skipped = new Set((skipsResult.data || []).map((decision) => decision.client_id))
     const ownedSiteNames = new Map((ownedResult.data || []).map((site) => [site.client_id, site.name]))
     const customerNames = new Map((customers || []).map((customer) => [customer.id, customer.name]))
     const reviews = new Map((reviewsResult.data || []).map((review) => [review.site_id, review]))
@@ -54,7 +56,8 @@ export async function GET() {
             name: customer.name,
             xeroName: links.map((link) => link.xero_name).join("; "),
             linkedSiteName: ownedSiteNames.get(customer.id) || null,
-            available: !owned.has(customer.id) && links.length === 1 && links[0].store_id === null,
+            skipped: skipped.has(customer.id),
+            available: !owned.has(customer.id) && !skipped.has(customer.id) && links.length === 1 && links[0].store_id === null,
         }
     }).sort((a, b) => a.name.localeCompare(b.name, "en-NZ"))
 
