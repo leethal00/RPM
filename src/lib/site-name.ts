@@ -7,6 +7,13 @@ export function normalizedSiteName(name: string, customerName: string): string {
     return siteDisplayName(name, customerName).trim().replace(/\s+/g, " ").toLocaleLowerCase()
 }
 
+export function nameForCustomerSite(name: string, customerName: string): string {
+    const trimmed = name.trim()
+    if (!/^mcdonald(?:'|’)?s(?:\b|$)/i.test(customerName.trim())) return trimmed
+    const siteName = trimmed.replace(/^mcdonald(?:'|’)?s(?:\b|$)[\s:–—-]*/i, "").trim()
+    return siteName ? `McDonalds ${siteName}` : "McDonalds"
+}
+
 const siteNameCollator = new Intl.Collator("en-NZ", { sensitivity: "base", numeric: true })
 
 export function sortSitesByDisplayName<T extends { name: string }>(sites: T[], customerName: string): T[] {
@@ -15,3 +22,4 @@ export function sortSitesByDisplayName<T extends { name: string }>(sites: T[], c
         siteDisplayName(b.name, customerName),
     ))
 }
+

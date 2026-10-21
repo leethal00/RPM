@@ -18,7 +18,7 @@ import {
 import type { Region, Client, Store, ClientBrand } from "@/types/database"
 import { siteSchema, getValidationErrors } from "@/lib/validations"
 import { BrandChip, brandsFromStore } from "@/components/brand-chip"
-import { normalizedSiteName } from "@/lib/site-name"
+import { nameForCustomerSite, normalizedSiteName } from "@/lib/site-name"
 import { DAYS_OF_WEEK, isClosedDay, parseHours, type DayHours } from "@/lib/hours"
 
 interface GeocodeSuggestion {
@@ -237,6 +237,7 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
 
         const payload = {
             ...formData,
+            name: nameForCustomerSite(formData.name, customers.find((customer) => customer.id === clientId)?.name || initialClientName || ""),
             client_id: clientId,
             hours_of_operation: JSON.stringify(hoursData),
         }
@@ -632,3 +633,4 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
         </form>
     )
 }
+
