@@ -21,7 +21,9 @@ async function allCustomerContacts(accessToken: string, tenantId: string): Promi
         const body = await response.json()
         if (!response.ok) throw new Error(body?.Message || "Could not load Xero contacts.")
         const batch = (body?.Contacts || []) as Array<{ ContactID: string; Name: string; IsCustomer?: boolean; EmailAddress?: string; FirstName?: string; LastName?: string; Phones?: unknown[]; Addresses?: unknown[]; ContactPersons?: unknown[] }>
-        contacts.push(...batch.filter((c) => c.IsCustomer).map((c) => ({
+        // A site contact can have quotes in Xero without being flagged IsCustomer.
+        // Keep all McDonalds locations available for the site reconciliation page.
+        contacts.push(...batch.filter((c) => c.IsCustomer || /^mc\s*donald/i.test(c.Name)).map((c) => ({
             id: c.ContactID, name: c.Name, email: c.EmailAddress || "", firstName: c.FirstName || "", lastName: c.LastName || "",
             phones: c.Phones || [], addresses: c.Addresses || [], people: c.ContactPersons || []
         })))

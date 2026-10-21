@@ -59,6 +59,7 @@ export default function McDonaldsSiteMatchesPage() {
     const [newSiteName, setNewSiteName] = useState("")
     const [newSiteAddress, setNewSiteAddress] = useState("")
     const [busyClientId, setBusyClientId] = useState("")
+    const [refreshingXero, setRefreshingXero] = useState(false)
 
     const applyResult = useCallback((result: MatchData) => {
         setData(result)
@@ -120,6 +121,21 @@ export default function McDonaldsSiteMatchesPage() {
             toast.error(cause instanceof Error ? cause.message : "Could not save this choice.")
         } finally {
             setBusyClientId("")
+        }
+    }
+
+    async function refreshXero() {
+        setRefreshingXero(true)
+        try {
+            const response = await fetch("/api/xero/contacts", { method: "POST" })
+            const result = await response.json()
+            if (!response.ok) throw new Error(result.error || "Could not refresh Xero contacts.")
+            await load()
+            toast.success("Xero contacts refreshed. Check the site match again.")
+        } catch (cause) {
+            toast.error(cause instanceof Error ? cause.message : "Could not refresh Xero contacts.")
+        } finally {
+            setRefreshingXero(false)
         }
     }
 
@@ -200,6 +216,7 @@ export default function McDonaldsSiteMatchesPage() {
             : !isAdmin ? <p>Only Rodier administrators can review sites.</p>
                 : error ? <p className="text-destructive">{error} <Button variant="outline" onClick={() => void load()}>Retry</Button></p>
                     : <div className="space-y-4">
+                        <div className="flex justify-end"><Button variant="outline" disabled={refreshingXero} onClick={() => void refreshXero()}>{refreshingXero && <Loader2 className="size-4 animate-spin" />} Refresh Xero contacts</Button></div>
                         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Site review lists">
                             <Button role="tab" aria-selected={tab === "review"} variant={tab === "review" ? "default" : "outline"} onClick={() => setTab("review")}>To review ({data?.sites.filter((site) => site.reviewStatus === "pending" || site.reviewStatus === "xero_issue").length || 0})</Button>
                             <Button role="tab" aria-selected={tab === "confirmed"} variant={tab === "confirmed" ? "default" : "outline"} onClick={() => setTab("confirmed")}>Confirmed ({data?.sites.filter((site) => site.reviewStatus === "verified").length || 0})</Button>
