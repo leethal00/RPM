@@ -21,6 +21,7 @@ import type { AssetType, Asset } from "@/types/database"
 import { assetSchema, getValidationErrors } from "@/lib/validations"
 import { ensureRenderable, isHeic } from "@/lib/image-prep"
 import { uploadPendingAssetPhoto } from "@/lib/asset-photo-upload"
+import { useCustomerFilter } from "@/lib/customer-filter"
 
 interface AssetFormProps {
     storeId: string
@@ -32,8 +33,13 @@ interface AssetFormProps {
 
 export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }: AssetFormProps) {
     const supabase = createClient()
+    const { isAdmin } = useCustomerFilter()
     const [loading, setLoading] = useState(false)
     const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
+    const [addingType, setAddingType] = useState(false)
+    const [newTypeName, setNewTypeName] = useState("")
+    const [typeSaving, setTypeSaving] = useState(false)
+    const [typeError, setTypeError] = useState("")
     const [pendingPhotos, setPendingPhotos] = useState<{ id: string; file: File; url: string; error?: string }[]>([])
     const [preparing, setPreparing] = useState(false)
     const [internalOnly, setInternalOnly] = useState(false)
@@ -119,6 +125,48 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
 
         fetchAssetTypes()
     }, [supabase])
+
+    const createAssetType = async () => {
+        if (!isAdmin || busy.current) return
+        const label = newTypeName.trim()
+        if (!label) {
+            setTypeError("Enter an asset type name.")
+            return
+        }
+        const existing = assetTypes.find(type => type.label.trim().toLowerCase() === label.toLowerCase())
+        if (existing) {
+            setFormData(current => ({ ...current, asset_type_id: existing.id }))
+            setAddingType(false)
+            setNewTypeName("")
+            setTypeError("")
+            toast.success("Existing asset type selected")
+            return
+        }
+        busy.current = true
+        setTypeSaving(true)
+        setTypeError("")
+        onBusyChange?.(true)
+        try {
+            const { data, error } = await supabase.from("asset_types")
+                .insert({ label, icon_name: "Package" })
+                .select("*")
+                .single()
+            if (error) throw error
+            if (!data) throw new Error("Could not create asset type. Please try again.")
+            setAssetTypes(current => [...current, data as AssetType].sort((a, b) => a.label.localeCompare(b.label)))
+            setFormData(current => ({ ...current, asset_type_id: data.id }))
+            setAddingType(false)
+            setNewTypeName("")
+            toast.success("Asset type created and selected")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : (error as { message?: string })?.message || "Could not create asset type. Please try again."
+            setTypeError(message)
+        } finally {
+            busy.current = false
+            setTypeSaving(false)
+            onBusyChange?.(false)
+        }
+    }
 
     // Helper to calculate next service date using the selected PM interval,
     // rounded to the start of the relevant quarter.
@@ -219,7 +267,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (busy.current) return
+        if (busy.current || addingType) return
         busy.current = true
         setLoading(true)
         onBusyChange?.(true)
@@ -328,7 +376,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
             onSubmit={handleSubmit}
             className="space-y-6 py-4 font-primary"
         >
-            <fieldset disabled={loading || preparing || !!createdAssetId} className="space-y-4">
+            <fieldset disabled={loading || preparing || typeSaving || !!createdAssetId} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label
@@ -372,18 +420,25 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
 
                         <Select
                             value={formData.asset_type_id}
-                            onValueChange={(v) =>
-                                setFormData({
-                                    ...formData,
-                                    asset_type_id: v,
-                                })
-                            }
+                            onValueChange={(v) => {
+                                if (v === "__create_asset_type__") {
+                                    if (isAdmin) {
+                                        setAddingType(true)
+                                        setTypeError("")
+                                    }
+                                } else {
+                                    setFormData(current => ({ ...current, asset_type_id: v }))
+                                    setAddingType(false)
+                                    setTypeError("")
+                                }
+                            }}
                         >
                             <SelectTrigger id="asset_type_id">
                                 <SelectValue placeholder="Select type" />
                             </SelectTrigger>
 
                             <SelectContent>
+                                {isAdmin && <SelectItem value="__create_asset_type__">+ Create new asset type…</SelectItem>}
                                 {assetTypes.map((type) => (
                                     <SelectItem
                                         key={type.id}
@@ -396,6 +451,20 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                         </Select>
                     </div>
                 </div>
+
+                {addingType && isAdmin && <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                    <Label htmlFor="new-asset-type-name">New asset type name</Label>
+                    <Input id="new-asset-type-name" placeholder="e.g. Digital menu board" value={newTypeName}
+                        autoFocus aria-invalid={!!typeError} aria-describedby={typeError ? "asset-type-error" : undefined}
+                        onChange={e => { setNewTypeName(e.target.value); setTypeError("") }}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void createAssetType() } }} />
+                    <p className="text-xs text-muted-foreground">This type will be available for assets at all sites.</p>
+                    {typeError && <p id="asset-type-error" role="alert" className="text-sm text-destructive">{typeError}</p>}
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" disabled={typeSaving} onClick={() => { setAddingType(false); setNewTypeName(""); setTypeError("") }}>Cancel new type</Button>
+                        <Button type="button" disabled={typeSaving} onClick={() => void createAssetType()}>{typeSaving ? "Creating type…" : "Create type"}</Button>
+                    </div>
+                </div>}
 
                 <div className="grid gap-2">
                     <Label
@@ -591,13 +660,13 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                     </div>
                 ) : (
                     <div className="space-y-3 rounded-md border border-dashed p-4"
-                        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = loading || preparing ? "none" : "copy" }}
+                        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = loading || preparing || typeSaving ? "none" : "copy" }}
                         onDrop={e => { e.preventDefault(); void queuePhotos(Array.from(e.dataTransfer.files)) }}>
                         <Label htmlFor="new-asset-photos" className="flex items-center gap-2"><Camera className="size-3.5" />Asset photos (optional)</Label>
                         <p className="text-xs text-muted-foreground">Drop photos here or select files. Photos upload when you save the asset.</p>
-                        <Input id="new-asset-photos" type="file" accept="image/*,.heic,.heif" multiple disabled={loading || preparing}
+                        <Input id="new-asset-photos" type="file" accept="image/*,.heic,.heif" multiple disabled={loading || preparing || typeSaving}
                             onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ""; void queuePhotos(files) }} />
-                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={internalOnly} disabled={loading || preparing} onChange={e => setInternalOnly(e.target.checked)} />Service-team only</label>
+                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={internalOnly} disabled={loading || preparing || typeSaving} onChange={e => setInternalOnly(e.target.checked)} />Service-team only</label>
                         {preparing && <p role="status" className="text-xs">Preparing photo previews…</p>}
                         <div className="grid grid-cols-3 gap-2">
                             {pendingPhotos.map(photo => <div key={photo.id} className="relative rounded-md border p-1">
@@ -605,7 +674,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={photo.url} alt={photo.file.name} className="aspect-square w-full rounded object-cover" />
                                 <p className="truncate text-xs" title={photo.file.name}>{photo.file.name}</p>
-                                <Button type="button" variant="secondary" size="icon" className="absolute right-1 top-1 size-7" aria-label={`Remove ${photo.file.name}`} disabled={loading || preparing} onClick={() => removePhoto(photo.id, photo.url)}><X className="size-4" /></Button>
+                                <Button type="button" variant="secondary" size="icon" className="absolute right-1 top-1 size-7" aria-label={`Remove ${photo.file.name}`} disabled={loading || preparing || typeSaving} onClick={() => removePhoto(photo.id, photo.url)}><X className="size-4" /></Button>
                                 {photo.error && <p role="alert" className="text-xs text-destructive">{photo.error}</p>}
                             </div>)}
                         </div>
@@ -618,14 +687,14 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                     type="button"
                     variant="outline"
                     onClick={createdAssetId ? onSuccess : onCancel}
-                    disabled={loading || preparing}
+                    disabled={loading || preparing || typeSaving}
                 >
                     {createdAssetId ? "Close (asset already created)" : "Cancel"}
                 </Button>
 
                 <Button
                     type="submit"
-                    disabled={loading || preparing}
+                    disabled={loading || preparing || typeSaving || addingType}
                     className="min-w-[100px]"
                 >
                     {loading ? (

@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import type { Asset } from "@/types/database"
 
 const mocks = vi.hoisted(() => ({
+    isAdmin: true, insertType: vi.fn(),
     insertAsset: vi.fn(), updateAsset: vi.fn(), insertPhoto: vi.fn(),
     upload: vi.fn(), remove: vi.fn(), prepare: vi.fn(), error: vi.fn(),
     success: vi.fn(), gallery: vi.fn(),
@@ -16,7 +17,10 @@ const bucket = {
 const client = {
     storage: { from: (name: string) => { expect(name).toBe("asset-photos"); return bucket } },
     from: (table: string) => {
-        if (table === "asset_types") return { select: () => ({ order: async () => ({ data: [{ id: typeId, label: "Sign" }] }) }) }
+        if (table === "asset_types") return {
+            select: () => ({ order: async () => ({ data: [{ id: typeId, label: "Sign" }] }) }),
+            insert: (payload: unknown) => ({ select: () => ({ single: () => mocks.insertType(payload) }) }),
+        }
         if (table === "asset_photos") return { insert: mocks.insertPhoto }
         return {
             insert: (payload: unknown) => ({ select: () => ({ single: () => mocks.insertAsset(payload) }) }),
@@ -25,6 +29,7 @@ const client = {
     },
 }
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => client }))
+vi.mock("@/lib/customer-filter", () => ({ useCustomerFilter: () => ({ isAdmin: mocks.isAdmin }) }))
 vi.mock("@/lib/image-prep", () => ({ ensureRenderable: mocks.prepare, isHeic: (file: File) => /\.heic$/i.test(file.name) }))
 vi.mock("sonner", () => ({ toast: { error: mocks.error, success: mocks.success } }))
 vi.mock("./asset-photo-gallery", () => ({ AssetPhotoGallery: ({ assetId }: { assetId: string }) => { mocks.gallery(assetId); return <div>Existing gallery</div> } }))
@@ -55,6 +60,8 @@ async function selectPhotos(...names: string[]) {
 describe("new asset photos", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.isAdmin = true
+        mocks.insertType.mockResolvedValue({ data: { id: "31f56c1a-444b-4dd7-a6ef-7142ac844602", label: "Digital menu board", icon_name: "Package" }, error: null })
         vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
         mocks.insertAsset.mockResolvedValue({ data: { id: "new-asset" }, error: null })
         mocks.updateAsset.mockResolvedValue({ error: null })
@@ -181,6 +188,62 @@ describe("new asset photos", () => {
         await waitFor(() => expect(view.success).toHaveBeenCalledOnce())
         expect(mocks.insertAsset).toHaveBeenCalledOnce()
         expect(mocks.upload).toHaveBeenCalledOnce()
+    })
+
+    it("creates and selects a new type without losing asset details or queued photos", async () => {
+        const view = show()
+        await valid()
+        fireEvent.change(screen.getByLabelText("Asset Dimensions"), { target: { value: "2400 x 600" } })
+        await selectPhotos("one.jpg")
+        fireEvent.change(screen.getByRole("combobox", { name: "Type" }), { target: { value: "__create_asset_type__" } })
+        fireEvent.change(screen.getByLabelText("New asset type name"), { target: { value: "  Digital menu board  " } })
+        fireEvent.keyDown(screen.getByLabelText("New asset type name"), { key: "Enter" })
+        await waitFor(() => expect(screen.queryByLabelText("New asset type name")).not.toBeInTheDocument())
+        expect(mocks.insertType).toHaveBeenCalledWith({ label: "Digital menu board", icon_name: "Package" })
+        expect(screen.getByRole("combobox", { name: "Type" })).toHaveValue("31f56c1a-444b-4dd7-a6ef-7142ac844602")
+        expect(screen.getByLabelText("Asset Dimensions")).toHaveValue("2400 x 600")
+        expect(screen.getByAltText("one.jpg")).toBeInTheDocument()
+        expect(mocks.insertAsset).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("button", { name: "Add Asset" }))
+        await waitFor(() => expect(view.success).toHaveBeenCalledOnce())
+        expect(mocks.insertAsset).toHaveBeenCalledWith(expect.objectContaining({ asset_type_id: "31f56c1a-444b-4dd7-a6ef-7142ac844602" }))
+    })
+
+    it("rejects blank type names, selects an existing duplicate, and supports cancelling", async () => {
+        show()
+        await valid()
+        fireEvent.change(screen.getByRole("combobox", { name: "Type" }), { target: { value: "__create_asset_type__" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create type" }))
+        expect(screen.getByRole("alert")).toHaveTextContent("Enter an asset type name")
+        fireEvent.change(screen.getByLabelText("New asset type name"), { target: { value: " sIgN " } })
+        fireEvent.click(screen.getByRole("button", { name: "Create type" }))
+        expect(mocks.insertType).not.toHaveBeenCalled()
+        expect(screen.getByRole("combobox", { name: "Type" })).toHaveValue(typeId)
+        fireEvent.change(screen.getByRole("combobox", { name: "Type" }), { target: { value: "__create_asset_type__" } })
+        fireEvent.click(screen.getByRole("button", { name: "Cancel new type" }))
+        expect(screen.queryByLabelText("New asset type name")).not.toBeInTheDocument()
+        expect(screen.getByRole("combobox", { name: "Type" })).toHaveValue(typeId)
+    })
+
+    it("retains the new name on a permission failure and allows retrying", async () => {
+        show()
+        await valid()
+        fireEvent.change(screen.getByRole("combobox", { name: "Type" }), { target: { value: "__create_asset_type__" } })
+        fireEvent.change(screen.getByLabelText("New asset type name"), { target: { value: "Digital menu board" } })
+        mocks.insertType.mockResolvedValueOnce({ data: null, error: { message: "Permission denied" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create type" }))
+        expect(await screen.findByRole("alert")).toHaveTextContent("Permission denied")
+        expect(screen.getByLabelText("New asset type name")).toHaveValue("Digital menu board")
+        fireEvent.click(screen.getByRole("button", { name: "Create type" }))
+        await waitFor(() => expect(screen.queryByLabelText("New asset type name")).not.toBeInTheDocument())
+        expect(mocks.insertType).toHaveBeenCalledTimes(2)
+    })
+
+    it("hides type creation from non-admin users", async () => {
+        mocks.isAdmin = false
+        show()
+        await valid()
+        expect(screen.queryByRole("option", { name: /Create new asset type/ })).not.toBeInTheDocument()
     })
 
     it("retains the existing gallery and update path for old assets", async () => {
