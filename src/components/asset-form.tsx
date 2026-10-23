@@ -108,6 +108,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
         status: asset?.status || "active",
         asset_details: asset?.asset_details || "",
         asset_dimensions: asset?.asset_dimensions || "",
+        quantity: String(asset?.quantity ?? 1),
         last_service_date: asset?.last_service_date || "",
         next_service_date: asset?.next_service_date || "",
         pm_interval_months: asset?.pm_interval_months ?? (asset ? null : 18),
@@ -276,6 +277,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
 
             const dataToValidate = {
                 ...formData,
+                quantity: formData.quantity.trim() ? Number(formData.quantity) : NaN,
                 pm_interval_months: plannedMaintenance
                     ? formData.pm_interval_months
                     : null,
@@ -303,6 +305,7 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                 status: formData.status,
                 asset_details: formData.asset_details,
                 asset_dimensions: formData.asset_dimensions,
+                quantity: result.data.quantity,
 
                 last_service_date: plannedMaintenance
                     ? formData.last_service_date || null
@@ -465,6 +468,12 @@ export function AssetForm({ storeId, asset, onSuccess, onCancel, onBusyChange }:
                         <Button type="button" disabled={typeSaving} onClick={() => void createAssetType()}>{typeSaving ? "Creating type…" : "Create type"}</Button>
                     </div>
                 </div>}
+
+                <div className="grid gap-2">
+                    <Label htmlFor="asset_quantity" className="text-xs font-medium text-muted-foreground">Quantity *</Label>
+                    <Input id="asset_quantity" type="number" min={1} max={2147483647} step={1} required
+                        value={formData.quantity} onChange={e => setFormData(current => ({ ...current, quantity: e.target.value }))} />
+                </div>
 
                 <div className="grid gap-2">
                     <Label

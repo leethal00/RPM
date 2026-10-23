@@ -18,6 +18,7 @@ export const siteSchema = z.object({
 })
 
 export const assetSchema = z.object({
+  quantity: z.number().int("Quantity must be a whole number").min(1, "Quantity must be at least 1").max(2147483647, "Quantity is too large").default(1),
   asset_type_id: z.string().uuid("Please select an asset type"),
   asset_group: z.enum(["external", "internal"]),
   install_date: z.string().refine((val) => !val || !isNaN(Date.parse(val)), "Invalid date").optional().or(z.literal("")),

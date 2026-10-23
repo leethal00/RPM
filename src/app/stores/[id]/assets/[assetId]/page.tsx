@@ -212,6 +212,10 @@ export default function AssetDetailPage({
                                             <p className="text-sm">{asset.asset_dimensions || "Not recorded"}</p>
                                         </div>
                                         <div className="space-y-1 col-span-2">
+                                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Quantity</p>
+                                            <p className="text-sm">{asset.quantity ?? 1}</p>
+                                        </div>
+                                        <div className="space-y-1 col-span-2">
                                             <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Asset Details (Free Format)</p>
                                             <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
                                                 <FileText className="size-4 text-primary mt-0.5" />

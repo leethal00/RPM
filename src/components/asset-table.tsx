@@ -19,7 +19,7 @@ interface AssetTableProps {
     storeId: string
 }
 
-type SortKey = "photo" | "type" | "status" | "dimensions" | "nextService"
+type SortKey = "photo" | "type" | "quantity" | "status" | "dimensions" | "nextService"
 type SortDirection = "asc" | "desc"
 
 export function AssetTable({ assets, storeId }: AssetTableProps) {
@@ -73,6 +73,8 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                 const aValue = `${a.asset_types?.label || ""} ${a.asset_group || ""}`.trim()
                 const bValue = `${b.asset_types?.label || ""} ${b.asset_group || ""}`.trim()
                 comparison = aValue.localeCompare(bValue, undefined, { sensitivity: "base" })
+            } else if (sortKey === "quantity") {
+                comparison = (a.quantity ?? 1) - (b.quantity ?? 1)
             } else if (sortKey === "status") {
                 comparison = getStatus(a).rank - getStatus(b).rank
             } else if (sortKey === "dimensions") {
@@ -87,7 +89,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
         })
     }, [assets, sortDirection, sortKey])
 
-    const SortHeader = ({ column, label, className = "" }: { column: SortKey; label: string; className?: string }) => {
+    const renderSortHeader = (column: SortKey, label: string, className = "") => {
         const active = sortKey === column
         const Icon = !active ? ArrowUpDown : sortDirection === "asc" ? ArrowUp : ArrowDown
         return (
@@ -108,18 +110,19 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
             <Table>
                 <TableHeader>
                     <TableRow className="border-b border-border/60 hover:bg-transparent">
-                        <TableHead className="h-10 text-xs font-medium w-[92px]"><SortHeader column="photo" label="Photo" /></TableHead>
-                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="type" label="Type / group" /></TableHead>
-                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="status" label="Status" /></TableHead>
-                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="dimensions" label="Dimensions" /></TableHead>
-                        <TableHead className="h-10 text-xs font-medium"><SortHeader column="nextService" label="Next service" /></TableHead>
+                        <TableHead className="h-10 text-xs font-medium w-[92px]">{renderSortHeader("photo", "Photo")}</TableHead>
+                        <TableHead className="h-10 text-xs font-medium">{renderSortHeader("type", "Type / group")}</TableHead>
+                        <TableHead className="h-10 text-xs font-medium w-[70px]">{renderSortHeader("quantity", "Qty")}</TableHead>
+                        <TableHead className="h-10 text-xs font-medium">{renderSortHeader("status", "Status")}</TableHead>
+                        <TableHead className="h-10 text-xs font-medium">{renderSortHeader("dimensions", "Dimensions")}</TableHead>
+                        <TableHead className="h-10 text-xs font-medium">{renderSortHeader("nextService", "Next service")}</TableHead>
                         <TableHead className="h-10 text-xs font-medium text-muted-foreground text-right w-[80px]"></TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {assets.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
+                            <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
                                 No assets found for this site.
                             </TableCell>
                         </TableRow>
@@ -160,6 +163,7 @@ export function AssetTable({ assets, storeId }: AssetTableProps) {
                                             )}
                                         </div>
                                     </TableCell>
+                                    <TableCell className="py-3 tabular-nums">{asset.quantity ?? 1}</TableCell>
                                     <TableCell className="py-3">
                                         <div className={`flex items-center gap-1.5 text-sm ${status.tone}`}>
                                             <span className={`size-1.5 rounded-full ${status.dot}`} />
