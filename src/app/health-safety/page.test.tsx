@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import HealthSafetyPage from "./page"
 
-const state = vi.hoisted(() => ({ records: [] as Record<string, unknown>[], writes: [] as Record<string, unknown>[] }))
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }))
+const state = vi.hoisted(() => ({ params: "", records: [] as Record<string, unknown>[], writes: [] as Record<string, unknown>[] }))
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(state.params) }))
 vi.mock("@/components/dashboard-layout", () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock("@/components/health-safety/incident-register", () => ({ IncidentRegister: () => null }))
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
   },
 }) }))
 
-beforeEach(() => { state.records = []; state.writes = [] })
+beforeEach(() => { state.params = ""; state.records = []; state.writes = [] })
 afterEach(cleanup)
 
 async function startDraft() {
@@ -32,6 +32,34 @@ async function startDraft() {
 }
 
 describe("SWMS TBC workflow", () => {
+  it("opens a linked draft directly and does not reset unsaved edits after a refresh", async () => {
+    state.params = "job=job-1&record=record"
+    state.records = [{ id: "record", kind: "swms", title: "Linked installation", job_id: "job-1", site: "Wanaka", status: "draft", work_date: "2026-11-02", body: { controls: "Existing controls" }, revision: 1 }]
+    render(<HealthSafetyPage />)
+    expect(await screen.findByLabelText("Title")).toHaveValue("Linked installation")
+    expect(screen.getByLabelText("Overall controls")).toHaveValue("Existing controls")
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Edited installation" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+    await waitFor(() => expect(state.writes).toHaveLength(1))
+    expect(state.writes[0].title).toBe("Edited installation")
+    expect(screen.getByLabelText("Title")).toHaveValue("Edited installation")
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0, ctrlKey: false })
+    fireEvent.click(await screen.findByRole("button", { name: "New SWMS/TA" }))
+    expect(screen.getByLabelText("Title")).toHaveValue("")
+  })
+
+  it("opens completed links read-only and rejects a record belonging to a different job", async () => {
+    state.params = "job=job-1&record=record"
+    state.records = [{ id: "record", kind: "swms", title: "Completed installation", job_id: "job-1", site: "Wanaka", status: "completed", completed_at: "2026-10-30T02:00:00Z", work_date: "2026-11-02", body: {}, revision: 1 }]
+    const view = render(<HealthSafetyPage />)
+    expect(await screen.findByLabelText("Title")).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument()
+    view.unmount()
+    state.params = "job=other-job&record=record"
+    render(<HealthSafetyPage />)
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be found or you do not have access")
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument()
+  })
   it("edits multiline hazards and controls and previews unsaved changes without writing records", async () => {
     await startDraft()
     fireEvent.click(screen.getByRole("button", { name: "Add step" }))

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ShieldCheck } from "lucide-react"
@@ -47,12 +47,15 @@ export default function HealthSafetyPage() {
   const db = useMemo(() => createClient(), [])
   const params = useSearchParams()
   const jobFromUrl = params.get("job") || ""
+  const recordFromUrl = params.get("record") || ""
+  const openedFromUrl = useRef("")
   const [tab, setTab] = useState(params.get("tab") === "incidents" ? "incidents" : "overview")
   const [clockDate] = useState(today)
   const [soonDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
   const [userId, setUserId] = useState("")
   const [role, setRole] = useState("")
   const [records, setRecords] = useState<RecordRow[]>([])
+  const [recordsLoaded, setRecordsLoaded] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [attendees, setAttendees] = useState<Attendee[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -64,6 +67,7 @@ export default function HealthSafetyPage() {
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [revisionSource, setRevisionSource] = useState<RecordRow | null>(null)
   const [kind, setKind] = useState<Kind>("swms")
   const [title, setTitle] = useState("")
   const [site, setSite] = useState("")
@@ -108,6 +112,7 @@ export default function HealthSafetyPage() {
     const firstError = results.slice(0, 6).find(r => r.error)?.error
     setError(firstError?.message || "")
     setRecords((results[0].data || []) as RecordRow[])
+    setRecordsLoaded(true)
     setTemplates((results[1].data || []) as Template[])
     setAttendees((results[2].data || []) as Attendee[])
     setAttachments((results[3].data || []) as Attachment[])
@@ -153,13 +158,23 @@ export default function HealthSafetyPage() {
     setSelected(null); setKind(newKind); setTitle(""); setSite(""); setDate(today()); setJobId(jobFromUrl)
     setBody(blank); setTemplateId(""); setTemplateEditId(""); setPeople(""); setRevisionSource(null); setTab("form")
   }
-  function openRecord(row: RecordRow) {
+  const openRecord = useCallback((row: RecordRow) => {
     setRevisionSource(null)
     setSelected(row.id); setKind(row.kind); setTitle(row.title); setSite(row.site || ""); setDate(row.work_date)
     setJobId(row.job_id || ""); setBody({ ...blank, ...row.body }); setTemplateId(row.template_id || "")
     setTemplateEditId("")
     setPeople(attendees.filter(a => a.record_id === row.id).map(a => a.name).join("\n")); setTab("form")
-  }
+  }, [attendees])
+  useEffect(() => {
+    const requestKey = `${jobFromUrl}:${recordFromUrl}`
+    if (!recordFromUrl || openedFromUrl.current === requestKey) return
+    const record = records.find(row => row.id === recordFromUrl && (!jobFromUrl || row.job_id === jobFromUrl))
+    if (!record) return
+    openedFromUrl.current = requestKey
+    // Open the requested record once; later refreshes must not overwrite edits.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    openRecord(record)
+  }, [recordFromUrl, jobFromUrl, records, openRecord])
   function applyTemplate(template: Template) {
     newRecord(template.kind); setTitle(template.title); setBody(reusableBody(template.kind, template.body)); setTemplateId(template.id)
   }
@@ -222,7 +237,6 @@ export default function HealthSafetyPage() {
     // The next save creates a fresh record; preserve the link in a separate state.
     setRevisionSource(original)
   }
-  const [revisionSource, setRevisionSource] = useState<RecordRow | null>(null)
   async function uploadEvidence(file: File) {
     if (!current || !canManage || current.status !== "draft") return
     const path = `records/${current.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`
@@ -289,6 +303,7 @@ export default function HealthSafetyPage() {
   return <DashboardLayout><PageShell width="full" className="px-4 xl:px-6 py-4">
     <PageHeader icon={ShieldCheck} kicker="Job & Project Management" title="Health & Safety" description="Toolbox talks, SWMS/TAs, incident reports, training and the company policy in one internal register." />
     {error && <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}. The H&S database migration may still need to be applied.</div>}
+    {recordFromUrl && recordsLoaded && !records.some(row => row.id === recordFromUrl && (!jobFromUrl || row.job_id === jobFromUrl)) && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm">This H&amp;S record could not be found or you do not have access to it.</p>}
     {jobFromUrl && <div className="text-sm">Showing H&S records for this job. <Link className="underline" href="/health-safety">Show all</Link></div>}
     <Tabs value={tab} onValueChange={setTab} className="mt-3">
       <TabsList className="h-auto flex-wrap"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="records">History</TabsTrigger><TabsTrigger value="incidents">Incidents</TabsTrigger><TabsTrigger value="templates">Templates</TabsTrigger><TabsTrigger value="training">Training matrix</TabsTrigger><TabsTrigger value="policy">Policy</TabsTrigger>{tab === "form" && <TabsTrigger value="form">Record</TabsTrigger>}</TabsList>
