@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import HealthSafetyPage from "./page"
 
@@ -32,6 +32,47 @@ async function startDraft() {
 }
 
 describe("SWMS TBC workflow", () => {
+  it("edits multiline hazards and controls and previews unsaved changes without writing records", async () => {
+    await startDraft()
+    fireEvent.click(screen.getByRole("button", { name: "Add step" }))
+    const hazard = screen.getByLabelText("Potential hazards")
+    const control = screen.getByLabelText("Hazard controls")
+    expect(hazard.tagName).toBe("TEXTAREA")
+    expect(control.tagName).toBe("TEXTAREA")
+    fireEvent.change(hazard, { target: { value: "Pedestrians and vehicles\nMedical event while working at height" } })
+    fireEvent.change(control, { target: { value: "Sign in as required\nLiaise with the site contact before starting" } })
+    const frame = screen.getByTitle("SWMS/TA document preview") as HTMLIFrameElement
+    fireEvent.load(frame)
+    const preview = within(frame.contentDocument!.body)
+    expect(await preview.findByRole("cell", { name: /Pedestrians and vehicles\s+Medical event/ })).toBeInTheDocument()
+    expect(preview.getByRole("cell", { name: /Sign in as required\s+Liaise with the site contact/ })).toBeInTheDocument()
+    expect(preview.getAllByRole("heading", { name: "Survey" })).toHaveLength(2)
+    fireEvent.change(control, { target: { value: "Updated control before saving" } })
+    expect(preview.getByRole("cell", { name: "Updated control before saving" })).toBeInTheDocument()
+    expect(state.writes).toHaveLength(0)
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+    await waitFor(() => expect(state.writes).toHaveLength(1))
+    expect(state.writes[0].body).toMatchObject({ steps: [expect.objectContaining({ hazard: "Pedestrians and vehicles\nMedical event while working at height", control: "Updated control before saving" })] })
+  })
+
+  it("keeps completed step fields locked and shows their existing text in the preview", async () => {
+    state.records = [{ id: "record", kind: "swms", title: "Locked survey", site: "Albany", status: "completed", completed_at: "2026-10-04T18:00:00Z", work_date: "2026-10-04", body: { steps: [{ task: "Install", hazard: "Existing long hazard", risk: "3", control: "Existing long control", responsible: "Lead" }] }, revision: 1 }]
+    render(<HealthSafetyPage />)
+    fireEvent.click(await screen.findByRole("button", { name: /Locked survey.*SWMS\/TA/ }))
+    expect(screen.getByLabelText("Potential hazards")).toBeDisabled()
+    expect(screen.getByLabelText("Hazard controls")).toHaveValue("Existing long control")
+    expect(screen.getByLabelText("Hazard controls")).toBeDisabled()
+    const frame = screen.getByTitle("SWMS/TA document preview") as HTMLIFrameElement
+    fireEvent.load(frame)
+    expect(within(frame.contentDocument!.body).getByRole("cell", { name: "Existing long control" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument()
+  })
+
+  it("does not show a SWMS preview for a toolbox meeting", async () => {
+    render(<HealthSafetyPage />)
+    fireEvent.click(await screen.findByRole("button", { name: "New toolbox meeting" }))
+    expect(screen.queryByTitle("SWMS/TA document preview")).not.toBeInTheDocument()
+  })
   it("saves an undated draft with TBC and a valid internal sorting date", async () => {
     await startDraft()
     fireEvent.change(screen.getByLabelText("Date"), { target: { value: "" } })

@@ -16,6 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
 import { hasWorkDate, isWorkDateTbc } from "@/lib/hs-work-date"
 import { IncidentRegister } from "@/components/health-safety/incident-register"
+import { ExpandingTextarea } from "@/components/health-safety/expanding-textarea"
+import { SwmsLivePreview } from "@/components/health-safety/swms-live-preview"
 
 type Kind = "toolbox" | "swms"
 type WorkStep = { task: string; hazard: string; risk: string; control: string; responsible: string }
@@ -89,6 +91,7 @@ export default function HealthSafetyPage() {
   const canManage = role === "super_admin" || role === "rodier_admin"
   const current = records.find(r => r.id === selected)
   const latestPolicy = policies[0]
+  const previewJob = jobs.find(job => job.id === jobId)
 
   const refresh = useCallback(async () => {
     const results = await Promise.all([
@@ -164,7 +167,7 @@ export default function HealthSafetyPage() {
     newRecord(template.kind); setTitle(template.title); setBody({ ...blank, ...template.body, date_tbc: false }); setTemplateEditId(template.id)
   }
   function field(key: TextField, label: string, hint?: string) {
-    return <div className="space-y-1.5"><Label htmlFor={`hs-${key}`}>{label}</Label><Textarea id={`hs-${key}`} value={body[key]} onChange={e => setBody({ ...body, [key]: e.target.value })} placeholder={hint} disabled={!canManage || current?.status === "completed"} className="min-h-24" /></div>
+    return <div className="space-y-1.5"><Label htmlFor={`hs-${key}`}>{label}</Label><ExpandingTextarea id={`hs-${key}`} value={body[key]} onChange={e => setBody({ ...body, [key]: e.target.value })} placeholder={hint} disabled={!canManage || current?.status === "completed"} className="min-h-24" /></div>
   }
   function setStep(index: number, key: keyof WorkStep, value: string) {
     setBody(old => ({ ...old, steps: old.steps.map((step, i) => i === index ? { ...step, [key]: value } : step) }))
@@ -299,7 +302,9 @@ export default function HealthSafetyPage() {
         <div className="flex flex-wrap gap-2"><Input aria-label="Search H&S records" placeholder="Search title, site, job or scope" value={search} onChange={e => setSearch(e.target.value)} className="max-w-xs"/><select aria-label="Record type" className="rounded-md border bg-background px-2 text-sm" value={filterKind} onChange={e => setFilterKind(e.target.value)}><option value="all">All types</option><option value="toolbox">Toolbox</option><option value="swms">SWMS/TA</option></select><select aria-label="Record status" className="rounded-md border bg-background px-2 text-sm" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="completed">Completed</option></select>{canManage && <Button onClick={() => newRecord("swms")}>New record</Button>}</div>
         <div className="rounded-lg border">{filtered.map(r => <button key={r.id} className="flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-3 text-left text-sm last:border-0 hover:bg-muted/40" onClick={() => openRecord(r)}><span><strong>{r.title}</strong><span className="ml-2 text-muted-foreground">{r.kind === "swms" ? "SWMS/TA" : "Toolbox"} · {r.site || "No site"}{r.job_reference ? ` · ${r.job_reference}` : ""}</span></span><span>{isWorkDateTbc(r) ? "TBC" : niceDate(r.work_date)} · {r.status} · rev {r.revision}</span></button>)}{filtered.length === 0 && <p className="p-5 text-sm text-muted-foreground">No matching records.</p>}</div>
       </TabsContent>
-      <TabsContent value="form" className="max-w-4xl space-y-5">
+      <TabsContent value="form" className="space-y-5">
+        <div className={kind === "swms" ? "grid items-start gap-6 xl:grid-cols-2" : "max-w-4xl"}>
+        <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center gap-2"><h2 className="mr-auto text-xl font-semibold">{current?.status === "completed" ? "Completed record" : selected ? "Edit draft" : "New record"}</h2>{current?.kind === "swms" && <Button variant="outline" asChild><Link href={"/health-safety/print?id=" + current.id} target="_blank" rel="noopener noreferrer">Print SWMS/TA</Link></Button>}{current?.status === "completed" && canManage && <><Button variant="outline" onClick={makeRevision}>Create correction revision</Button>{current.kind === "swms" && <Button variant="outline" onClick={() => void saveTemplate(current)}>Save as template</Button>}</>}</div>
         {current?.status === "completed" && <p className="rounded-md bg-muted p-3 text-sm">Locked on {new Date(current.completed_at!).toLocaleString("en-NZ")}. Corrections create a linked revision; this version stays in history.</p>}
         <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div><div className="space-y-1"><Label htmlFor="hs-date">Date</Label><div className="flex items-center gap-3"><Input id="hs-date" type="date" value={kind === "swms" && body.date_tbc ? "" : date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage || (kind === "swms" && body.date_tbc === true)}/>{kind === "swms" && <Label htmlFor="hs-date-tbc" className="flex shrink-0 items-center gap-2"><input id="hs-date-tbc" type="checkbox" checked={body.date_tbc === true} onChange={e => setBody({ ...body, date_tbc: e.target.checked })} disabled={current?.status === "completed" || !canManage}/>TBC</Label>}</div></div></div>
@@ -320,7 +325,7 @@ export default function HealthSafetyPage() {
           <div className="grid gap-3 sm:grid-cols-2">{field("permits", "Work permits and approvals")}{field("ppe", "PPE required")}{field("plant", "Plant and equipment")}{field("signage", "Barriers and H&S signage")}{field("approvals", "Engineering certificates / approvals")}{field("checks", "Equipment and maintenance checks")}</div>
           {field("hazards", "Overall site hazards and risks")}{field("controls", "Overall controls")}
           <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 2 · Safe work steps</h3>{canManage && current?.status !== "completed" && <Button size="sm" variant="outline" onClick={() => setBody({ ...body, steps: [...(body.steps || []), { task: "", hazard: "", risk: "", control: "", responsible: "" }] })}>Add step</Button>}</div>
-            {(body.steps || []).map((step, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-2"><div className="sm:col-span-2 font-medium">Step {index + 1}</div>{([['task','Procedure / job step'],['hazard','Potential hazards'],['risk','Risk level 1–5'],['control','Hazard controls'],['responsible','Person responsible']] as [keyof WorkStep, string][]).map(([key, label]) => <div key={key} className="space-y-1"><Label>{label}</Label><Input value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} /></div>)}{canManage && current?.status !== "completed" && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setBody({ ...body, steps: body.steps.filter((_, i) => i !== index) })}>Remove step</Button>}</div>)}
+            {(body.steps || []).map((step, index) => <div key={index} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2"><div className="sm:col-span-2 font-medium">Step {index + 1}</div>{([['task','Procedure / job step'],['hazard','Potential hazards'],['risk','Risk level 1–5'],['control','Hazard controls'],['responsible','Person responsible']] as [keyof WorkStep, string][]).map(([key, label]) => <div key={key} className={`space-y-1 ${key !== "risk" && key !== "responsible" ? "sm:col-span-2" : ""}`}><Label htmlFor={`hs-step-${index}-${key}`}>{label}</Label>{key === "risk" ? <Input id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} /> : <ExpandingTextarea id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} />}</div>)}{canManage && current?.status !== "completed" && <Button size="sm" variant="ghost" className="text-destructive sm:col-span-2 sm:justify-self-end" onClick={() => setBody({ ...body, steps: body.steps.filter((_, i) => i !== index) })}>Remove step</Button>}</div>)}
           </div>
           <h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 3 · Qualifications and team sign-off</h3>
           {field("qualifications", "Qualifications, training and duties required")}
@@ -332,6 +337,17 @@ export default function HealthSafetyPage() {
         {selected && <div className="space-y-2"><h3 className="font-medium">Attachments and photos</h3>{attachments.filter(a => a.record_id === selected).map(a => <button key={a.id} className="block text-sm text-primary underline" onClick={() => void openFile(a.storage_path)}>{a.file_name}</button>)}{canManage && current?.status === "draft" && <Input aria-label="Attach evidence" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadEvidence(file) }}/>}</div>}
         {canManage && current?.status !== "completed" && <div className="flex flex-wrap gap-2">{!templateEditId && <><Button disabled={busy} onClick={() => void saveRecord(false)}>Save draft</Button><Button disabled={busy} variant="outline" onClick={() => void saveRecord(true)}>Complete and lock</Button></>}{kind === "swms" && <Button disabled={busy} variant={templateEditId ? "default" : "ghost"} onClick={() => void saveTemplate()}>{templateEditId ? "Save new template version" : "Save template"}</Button>}</div>}
         {current?.revision_of && <button className="text-sm text-primary underline" onClick={() => { const prior = records.find(r => r.id === current.revision_of); if (prior) openRecord(prior) }}>View previous revision</button>}
+        </div>
+        {kind === "swms" && <SwmsLivePreview record={{
+          id: current?.id || "unsaved", title, status: current?.status || "draft", site, work_date: date, body,
+          job_reference: previewJob ? `${previewJob.job_number || ""} ${previewJob.title}`.trim() : current?.job_id === jobId ? current.job_reference : null,
+          revision: current?.revision || (revisionSource ? revisionSource.revision + 1 : 1),
+          template_version: templates.find(template => template.id === templateId)?.version || current?.template_version || null,
+          completed_at: current?.completed_at || null, created_at: current?.created_at || "",
+        }} attendees={[...new Set(people.split(/[\n,]+/).map(name => name.trim()).filter(Boolean))].map((name, index) => ({
+          id: `preview-${index}`, name, signed_at: attendees.find(person => person.record_id === selected && person.name.toLowerCase() === name.toLowerCase())?.signed_at || null,
+        }))} attachments={attachments.filter(file => file.record_id === selected)} />}
+        </div>
       </TabsContent>
       <TabsContent value="templates" className="space-y-3"><p className="text-sm text-muted-foreground">SWMS/TA templates carry the work method into a new draft. Add the current job, site, date and attendees each time.</p>{swmsTemplates.map(t => <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><strong>{t.title}</strong><div className="text-xs text-muted-foreground">SWMS/TA · version {t.version}</div>{canManage && <div className="text-xs text-muted-foreground">{audit.filter(a => a.entity_id === t.id).map(a => `v${a.snapshot.version} ${niceDate(a.at)}`).join(" · ")}</div>}</div>{canManage && <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => editTemplate(t)}>Edit</Button><Button size="sm" onClick={() => applyTemplate(t)}>Use template</Button></div>}</div>)}{swmsTemplates.length === 0 && <p className="text-sm text-muted-foreground">No SWMS/TA templates yet. Save a completed SWMS/TA as a template, or use the template action while drafting.</p>}</TabsContent>
       <TabsContent value="training" className="space-y-4">
