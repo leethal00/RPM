@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { GalleryPhoto, SiteGallery, siteGallery } from '../../lib/api';
 import { useInstallerSession } from '../../lib/session';
 import { Button, Card, ErrorText, Loading, Page, SectionLabel, Title, colors, styles } from '../../lib/ui';
@@ -54,6 +54,11 @@ export default function SitePhotos() {
   if (!allowed) return <Redirect href="/login" />;
   return <Page>
     <Title detail={gallery ? `${gallery.site.client_name} · ${gallery.site.address || 'No address saved'}` : 'Photos shared to this site in RPM'}>{gallery?.site.name || 'Site photos'}</Title>
+    <Card>
+      <Text style={styles.heading}>Health & Safety</Text>
+      <Text style={[styles.muted, { marginBottom: 12 }]}>Read this site’s SWMS / TAs and toolbox meetings, or create a SWMS draft.</Text>
+      <Button onPress={() => router.push({ pathname: '/site-health-safety/[id]', params: { id } })}>Open site H&S →</Button>
+    </Card>
     {error ? <ErrorText message={error} /> : null}
     {loading && !gallery ? <Loading /> : null}
     {gallery ? <>

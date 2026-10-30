@@ -9,7 +9,10 @@ export default function RootLayout() {
     <Stack.Screen name="index" options={{ title: 'RPM Mobile' }} />
     <Stack.Screen name="login" options={{ title: 'RPM Mobile sign in' }} />
     <Stack.Screen name="sites" options={{ title: 'Sites' }} />
-    <Stack.Screen name="site/[id]" options={{ title: 'Site photos' }} />
+    <Stack.Screen name="site/[id]" options={{ title: 'Site details' }} />
+    <Stack.Screen name="site-health-safety/[id]" options={{ title: 'Site H&S' }} />
+    <Stack.Screen name="health-safety-record/[id]" options={{ title: 'H&S document' }} />
+    <Stack.Screen name="swms-editor" options={{ title: 'SWMS draft', gestureEnabled: false }} />
     <Stack.Screen name="job/[id]" options={{ title: 'Job detail' }} />
     <Stack.Screen name="admin-photos" options={{ title: 'Job photos' }} />
     <Stack.Screen name="admin-photo-job/[id]" options={{ title: 'Job photos' }} />

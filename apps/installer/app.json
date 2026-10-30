@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "nz.co.rpm.installer",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "Take installation photos for RPM jobs.",
         "NSPhotoLibraryUsageDescription": "Attach installation photos to RPM jobs.",
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "nz.co.rpm.installer",
-      "versionCode": 4,
+      "versionCode": 6,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",

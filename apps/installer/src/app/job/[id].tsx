@@ -168,7 +168,7 @@ export default function JobDetail() {
   const admin = role === 'mobile_admin' || role === 'rodier_admin' || role === 'super_admin';
   const categories: PhotoCategory[] = job.store_id ? ['Production', 'Installation', 'Site Survey', 'Delivery'] : ['Production', 'Delivery'];
   return <Page>
-    <Title detail={`${job.client_name || 'Client'}  ·  ${job.site_name || 'Manufacture only / No site'}`}>{job.title}</Title>
+    <Title detail={job.title}>{job.client_name || 'Client not set'}</Title>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -12, marginBottom: 19 }}>
       <StatusPill status={job.status} />
       <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>{job.job_number || 'JOB'}</Text>

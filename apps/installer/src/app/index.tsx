@@ -96,8 +96,9 @@ export default function Home() {
         <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>{job.job_number || 'JOB'}</Text>
         <StatusPill status={job.status} />
       </View>
-      <Text style={{ color: colors.navy, fontSize: 18, lineHeight: 24, fontWeight: '800', marginTop: 12 }}>{job.title}</Text>
-      <Text style={{ color: colors.ink, fontSize: 13, fontWeight: '700', marginTop: 9 }}>{job.client_name || 'Client'}  ·  {job.site_name || 'Manufacture only / No site'}</Text>
+      <Text style={{ color: colors.forest, fontSize: 20, lineHeight: 26, fontWeight: '800', marginTop: 12 }}>{job.client_name || 'Client not set'}</Text>
+      <Text style={{ color: colors.navy, fontSize: 16, lineHeight: 22, fontWeight: '700', marginTop: 5 }}>{job.title}</Text>
+      <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 18, marginTop: 9 }}>{job.site_name || 'Manufacture only / No site'}</Text>
       {job.address ? <Text numberOfLines={2} style={[styles.muted, { marginTop: 3 }]}>{job.address}</Text> : null}
       <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 15 }} />
       <Text style={{ color: colors.forest, fontWeight: '800', fontSize: 13 }}>Open job  →</Text>
