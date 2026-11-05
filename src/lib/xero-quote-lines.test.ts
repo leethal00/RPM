@@ -2,6 +2,28 @@ import { describe, expect, it } from "vitest"
 import { buildXeroQuoteLines, type QuoteItem } from "./xero-quote-lines"
 
 describe("Xero quote revisions", () => {
+    it.each(["build", "buy"])("uses Factory for manufacture and installation in %s mode", (mode) => {
+        const lines = buildXeroQuoteLines({ title: "Auckland Botanical Gardens Dog Hub" }, [
+            { id: "manufacture", name: "Manufacture signage", mode, qty: 2, unit_price: 300 },
+            { id: "installation", name: "Installation", mode, qty: 1, unit_price: 150 },
+        ], [])
+
+        expect(lines.slice(1).map((line) => line.AccountCode)).toEqual(["230", "230"])
+        expect(lines[0]).toEqual({ Description: "Auckland Botanical Gardens Dog Hub" })
+    })
+
+    it.each([
+        ["Travel", "250"],
+        ["Mileage", "250"],
+        ["MATERIALS", "240"],
+    ])("preserves the existing %s account mapping", (name, accountCode) => {
+        const lines = buildXeroQuoteLines({ title: "Test" }, [
+            { id: "item", name, mode: "buy", qty: 1, unit_price: 25 },
+        ], [])
+
+        expect(lines[1].AccountCode).toBe(accountCode)
+    })
+
     it("sends the same rounded default shown for a new BOM, while preserving manual prices", () => {
         const items: QuoteItem[] = [
             { id: "new", name: "New build", mode: "build", qty: 2, unit_price: 0, round_final_sell_to_five: true },
@@ -30,9 +52,9 @@ describe("Xero quote revisions", () => {
         expect(lines).toEqual([
             { Description: "Glass Projects - Acrylic logo" },
             { Description: "--" }, { Description: "1. REV1" },
-            { Description: "Acrylic text\nQty: 1", Quantity: 1, UnitAmount: 426.63, AccountCode: "200", TaxType: "OUTPUT2" },
+            { Description: "Acrylic text\nQty: 1", Quantity: 1, UnitAmount: 426.63, AccountCode: "230", TaxType: "OUTPUT2" },
             { Description: "--" }, { Description: "2. REV2" },
-            { Description: "Current logo\nQty: 1", Quantity: 1, UnitAmount: 927.84, AccountCode: "200", TaxType: "OUTPUT2" },
+            { Description: "Current logo\nQty: 1", Quantity: 1, UnitAmount: 927.84, AccountCode: "230", TaxType: "OUTPUT2" },
         ])
         expect(lines.reduce((total, line) => total + (line.Quantity ?? 0) * (line.UnitAmount ?? 0), 0)).toBe(1354.47)
     })

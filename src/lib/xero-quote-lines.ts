@@ -52,7 +52,8 @@ function accountCodeForItem(name: string) {
     const normal = name.toLowerCase().replace(/[^a-z0-9]+/g, " ")
     if (normal.includes("travel") || normal.includes("mileage")) return "250"
     if (normal.includes("material")) return "240"
-    return "200"
+    // RPM quote sales default to Factory, including manufacture and installation.
+    return "230"
 }
 
 export function buildXeroQuoteLines(job: { title: string; details?: string | null; contact_name?: string | null }, items: QuoteItem[], costingLines: QuoteCostLine[]): QuoteLine[] {
