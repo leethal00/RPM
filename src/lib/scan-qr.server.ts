@@ -19,7 +19,9 @@ export async function readScanQr(bytes: Uint8Array, mime: string): Promise<strin
   }
   if (mime === 'application/pdf') {
     const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'))
+    // A bundled module's import.meta.url can be a numeric webpack module id.
+    // Resolve external PDF resources from the application root in both runtimes.
+    const pdfRoot = path.dirname(createRequire(path.join(process.cwd(), 'package.json')).resolve('pdfjs-dist/package.json'))
     const task = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: true,
       wasmUrl: path.join(pdfRoot, 'wasm').replaceAll('\\', '/') + '/',
       standardFontDataUrl: path.join(pdfRoot, 'standard_fonts').replaceAll('\\', '/') + '/' })

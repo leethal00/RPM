@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import QRCode from 'qrcode'
 import { PDFDocument } from 'pdf-lib'
+import { readFileSync } from 'node:fs'
 import { readScanQr } from './scan-qr.server'
 
 const job = '83c3122f-ac29-40bd-a087-02e1782008a7'
@@ -16,6 +17,9 @@ async function cardPdf(ids: string[]) {
   return pdf.save()
 }
 describe('QR reading from job-card originals', () => {
+  it.runIf(!!process.env.RPM_SCAN_TEST_PDF && !!process.env.RPM_SCAN_TEST_JOB)('reads the supplied original PDF without storing it in the repository', async () => {
+    expect(await readScanQr(new Uint8Array(readFileSync(process.env.RPM_SCAN_TEST_PDF!)), 'application/pdf')).toBe(process.env.RPM_SCAN_TEST_JOB)
+  }, 30000)
   it('reads a small header QR from a PDF and from an image', async () => {
     expect(await readScanQr(await cardPdf([job]), 'application/pdf')).toBe(job)
     const png = await QRCode.toBuffer(`https://rpm.example/quoting/${job}/job-card`, { width: 300 })
