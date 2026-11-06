@@ -4,13 +4,13 @@ import GoogleStoreMap from '../google-store-map'
 import type { Store } from '@/types/database'
 
 vi.mock('@/lib/google-maps', () => ({ loadGoogleMaps: vi.fn().mockResolvedValue(undefined) }))
-const pan = vi.fn(), markers: Record<string, unknown>[] = [], details = vi.fn()
+const pan = vi.fn(), setZoom = vi.fn(), markers: Record<string, unknown>[] = [], details = vi.fn()
 beforeEach(() => {
     markers.length = 0
     details.mockResolvedValue(undefined)
     class Map {
         panTo = pan
-        setZoom = vi.fn()
+        setZoom = setZoom
     }
     class InfoWindow { close() {} }
     class Place {
@@ -51,5 +51,19 @@ it('keeps legacy pins visible and explains an unavailable Google location', asyn
     ] as Store[]
     render(<GoogleStoreMap stores={stores} />)
     expect(await screen.findByRole('status')).toHaveTextContent('Some map pins could not be loaded')
+    expect(markers).toHaveLength(1)
+})
+
+it('zooms before centering a selected Google site from the NZ overview', async () => {
+    const stores = [{ id: 'google', name: 'Sylvia Park', lat: null, lng: null,
+        address_details: { place_id: 'sylvia-park' } }] as Store[]
+    const { rerender } = render(<GoogleStoreMap stores={stores} zoom={5.5} />)
+    await waitFor(() => expect(markers).toHaveLength(1))
+    pan.mockClear()
+    setZoom.mockClear()
+    rerender(<GoogleStoreMap stores={stores} selectedStoreId="google" zoom={14} />)
+    await waitFor(() => expect(pan).toHaveBeenLastCalledWith({ lat: -36.915, lng: 174.842 }))
+    expect(setZoom).toHaveBeenLastCalledWith(14)
+    expect(setZoom.mock.invocationCallOrder[0]).toBeLessThan(pan.mock.invocationCallOrder[0])
     expect(markers).toHaveLength(1)
 })

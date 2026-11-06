@@ -119,8 +119,9 @@ export default function GoogleStoreMap({ stores, center, zoom = 5.5, selectedSto
     useEffect(() => {
         if (!map) return
         const selectedLocation = locations.find(location => location.store.id === selectedStoreId)
-        map.panTo(selectedLocation?.position || { lat, lng })
         map.setZoom(zoom)
+        // Zoom before panning so NZ bounds do not clamp the destination at the old zoom.
+        map.panTo(selectedLocation?.position || { lat, lng })
     }, [map, locations, selectedStoreId, lat, lng, zoom])
 
     return <div className="h-full w-full rounded-lg overflow-hidden border shadow-inner relative">

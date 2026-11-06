@@ -68,17 +68,26 @@ setup for mobile-swms-form.test.ts; it cannot resolve expo/tsconfig.base from a
 root-only dependency install. This is unrelated to the site-search changes.
 Final validation: 544 tests passed, 1 skipped across 76 suites with that installer
 suite excluded. The 19 focused address/form/map tests passed. TypeScript and the
-production build passed. Changed files pass ESLint with zero warnings; whole-repo
+production build passed. A final map regression test also passed (20 focused tests
+in total). Changed files pass ESLint with zero warnings; whole-repo
 lint still reports 9 pre-existing errors and 7 warnings in unrelated files.
 
-Live acceptance test still required with a restricted Google key:
-- Search TimeZone Sylvia Park, select the correct Auckland result, check its street
-  address and save in staging. Reopen the site and check the pin and sidebar pan.
-- Search a normal Auckland street address and an address elsewhere in NZ.
-- Enter an unlisted premise manually and verify it is saved without a false pin.
-- Edit an unrelated field on an existing site and verify its address/pin persist.
-- Exercise API rejection/quota failure and small-screen modal layout.
-No claim is made that live Google coverage or billing was verified without a key.
+Live local acceptance, 6 November 2026 (restricted key, rpm-dev only):
+- Enabled Places API (New) in the Google project, in addition to allowing it on
+  the key. Added user-approved http://localhost:3000/* for local testing.
+- Google business results: Timezone Newmarket and Sylvia Park Shopping Centre.
+- Auckland and Wellington street-address searches returned NZ results.
+- Created a disposable QA site manually, saved and reopened it, then selected the
+  Sylvia Park result through the UI. Verified structured address and place ID.
+- The Sites map resolved fresh Google coordinates; sidebar selection centred the
+  pin at Sylvia Park. Fixed zoom-before-pan ordering under NZ map bounds.
+- Removed the disposable QA record after testing.
+- The exact TimeZone Sylvia Park search returned no selectable NZ listing. Its
+  official venue page currently says coming soon. Search Sylvia Park or the
+  street address, or use manual entry, until Google lists the business.
+- The hosted preview still needs Lee's two branch-scoped Google settings and a
+  rebuild. Provider rejection/manual fallback is covered by component tests.
+- No production changes. Hosted-preview acceptance remains outstanding.
 
 References
 https://developers.google.com/maps/documentation/javascript/place-search
