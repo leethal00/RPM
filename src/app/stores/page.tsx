@@ -120,7 +120,7 @@ export default function StoresListPage() {
             }
 
             if (filterUnverified) {
-                query = query.is("lat", null)
+                query = query.is("lat", null).is("address_details->>place_id", null)
             }
 
             if (filterApproximate) {
@@ -433,7 +433,7 @@ export default function StoresListPage() {
                                         <TableCell className="text-sm hidden md:table-cell py-3">
                                             <div className="flex flex-col gap-0.5">
                                                 <span className="truncate max-w-[240px] text-muted-foreground">{store.address || "\u2014"}</span>
-                                                {store.lat && store.lng && (
+                                                {(store.address_details?.place_id || (store.lat != null && store.lng != null)) && (
                                                     store.location_approximate ? (
                                                         <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                                                             <div className="size-1.5 rounded-full bg-amber-500" />

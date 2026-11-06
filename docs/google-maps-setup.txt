@@ -1,0 +1,83 @@
+RPM: business-name and street-address search
+
+Local implementation only. No production deployment or hosted database change
+has been performed. Production rollout requires explicit approval.
+Base: origin/stu-dev at d189dc4 (the branch containing Create client site).
+Working branch: feat/google-site-search.
+
+Configuration before a staging test
+1. Use a Google Cloud project with billing enabled, Maps JavaScript API and
+   Places API (New) enabled. Set quotas/budget alerts as appropriate.
+2. Create a browser API key restricted to the intended HTTP referrers (including
+   localhost for local testing) and only those two APIs. Do not use a server or
+   unrestricted key. NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is deliberately public.
+3. Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID before
+   building. Use a JavaScript map ID for production; DEMO_MAP_ID is the local
+   fallback. See .env.example. Existing Supabase configuration is also required.
+4. Apply the additive add_store_address_details migration to a disposable/local
+   or approved staging database, using the normal migration process. It adds one
+   nullable JSONB column, with no backfill, UPDATE, trigger, scheduled job or RLS
+   change. Do not apply it to production without approval.
+5. Review RPM's public terms/privacy disclosures for Google Maps/Places use.
+
+Behavior
+- Site Address accepts a business/site name or street address. Search (or Enter)
+  explicitly submits the query; there is no background per-keystroke billing.
+- Results show business name, formatted street address and locality. Auckland is
+  the ranking bias; returned addresses must have an NZ country component.
+- Selecting a result captures structured address fields and a Google place ID.
+  Save confirms the address as site data. An unselected search query cannot be
+  saved as a street address.
+- Google-linked sites persist the place ID rather than a permanent coordinate
+  cache. The Google map retrieves coordinates when displaying the site. This is
+  an intentional adjustment to the request to save coordinates: map pins survive
+  reopening without storing Google's coordinates indefinitely.
+- Existing lat/lng values are preserved for legacy/manual sites. Opening the
+  modal, changing search mode or viewing the map does not write site records.
+  Only an explicit save inserts a site or updates the selected site's ID.
+- Editing address text clears the previous location. Manual mode permits an
+  unlisted premise's full address; it has no pin until a matching location is
+  selected. Switching mode alone preserves an unchanged existing address/pin.
+- With a Google key configured, Sites uses a Google map, retaining status colors,
+  current client brands, health traffic lights, public primary/recent photo,
+  site link, NZ bounds and reset control. Internal-only photos remain excluded.
+  The missing-pin filter and location badges recognize Google place IDs.
+  Without a key, the legacy map
+  remains for pre-existing locations; Google-derived sites are excluded from it.
+- Search errors/empty results keep manual entry available. Editing/unmounting
+  invalidates late search responses.
+
+Verification
+Automated component tests cover search, selection, manual fallback, invalid/NZ
+filtering, stale responses, insert/update payloads, existing pins and map reopen.
+Run: npm ci; npm test; npx tsc --noEmit; npm run build.
+The additive migration was exercised twice against disposable PostgreSQL (PGlite),
+checking unchanged legacy rows/RLS and structured-address round-trip.
+The repository-wide test run requires the separate apps/installer Expo dependency
+setup for mobile-swms-form.test.ts; it cannot resolve expo/tsconfig.base from a
+root-only dependency install. This is unrelated to the site-search changes.
+Final validation: 544 tests passed, 1 skipped across 76 suites with that installer
+suite excluded. The 19 focused address/form/map tests passed. TypeScript and the
+production build passed. Changed files pass ESLint with zero warnings; whole-repo
+lint still reports 9 pre-existing errors and 7 warnings in unrelated files.
+
+Live acceptance test still required with a restricted Google key:
+- Search TimeZone Sylvia Park, select the correct Auckland result, check its street
+  address and save in staging. Reopen the site and check the pin and sidebar pan.
+- Search a normal Auckland street address and an address elsewhere in NZ.
+- Enter an unlisted premise manually and verify it is saved without a false pin.
+- Edit an unrelated field on an existing site and verify its address/pin persist.
+- Exercise API rejection/quota failure and small-screen modal layout.
+No claim is made that live Google coverage or billing was verified without a key.
+
+References
+https://developers.google.com/maps/documentation/javascript/place-search
+https://developers.google.com/maps/documentation/places/web-service/policies
+https://cloud.google.com/maps-platform/terms/maps-service-terms
+
+Rollout/rollback
+Review and test in staging first. Deploy only after explicit approval, with the
+new nullable column present before enabling new writes. A code rollback does not
+require dropping the column or altering existing records. The previous Leaflet
+map cannot display Google-linked sites; retain the Google map until those sites
+are deliberately handled. Do not bulk-rewrite existing addresses or coordinates.

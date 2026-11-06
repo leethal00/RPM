@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
 import { Loader2, Check } from "lucide-react"
+import { SiteAddressSearch } from "@/components/site-address-search"
+import { siteLocationForSave } from "@/lib/site-address"
 import {
     Select,
     SelectContent,
@@ -20,12 +21,6 @@ import { siteSchema, getValidationErrors } from "@/lib/validations"
 import { BrandChip, brandsFromStore } from "@/components/brand-chip"
 import { nameForCustomerSite, normalizedSiteName } from "@/lib/site-name"
 import { DAYS_OF_WEEK, isClosedDay, parseHours, type DayHours } from "@/lib/hours"
-
-interface GeocodeSuggestion {
-    display_name: string
-    lat: string
-    lon: string
-}
 
 interface SiteFormProps {
     site?: Store
@@ -61,45 +56,11 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
         status: site?.status || "active",
         site_category: site?.site_category || "Stand alone",
         has_drive_thru: site?.has_drive_thru || false,
-        lat: site?.lat || null,
-        lng: site?.lng || null,
+        lat: site?.lat ?? null,
+        lng: site?.lng ?? null,
+        address_details: site?.address_details,
         location_approximate: site?.location_approximate || false,
     })
-
-    // Geocoding State
-    const [searching, setSearching] = useState(false)
-    const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
-
-    const lookupAddress = async () => {
-        if (!formData.address || formData.address.length < 5) {
-            toast.error("Please enter a more specific address to search")
-            return
-        }
-
-        setSearching(true)
-        try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.address)}&limit=5&countrycodes=nz`)
-            const data = await response.json()
-            setSuggestions(data)
-            if (data.length === 0) toast.error("No locations found. Try adding more detail.")
-        } catch {
-            toast.error("Error connecting to geocoding service")
-        } finally {
-            setSearching(false)
-        }
-    }
-
-    const selectAddress = (suggestion: GeocodeSuggestion) => {
-        setFormData({
-            ...formData,
-            address: suggestion.display_name,
-            lat: parseFloat(suggestion.lat),
-            lng: parseFloat(suggestion.lon),
-            location_approximate: false,
-        })
-        setSuggestions([])
-        toast.success("Location verified & coordinates captured!")
-    }
 
     // State for structured hours
     const initialHours = parseHours(site?.hours_of_operation)
@@ -217,6 +178,7 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
 
         const validationPayload = {
             ...formData,
+            address: formData.address.trim(),
             client_id: clientId,
             brand_ids: Array.from(selectedBrandIds),
         }
@@ -237,6 +199,7 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
 
         const payload = {
             ...formData,
+            ...siteLocationForSave(formData),
             name: nameForCustomerSite(formData.name, customers.find((customer) => customer.id === clientId)?.name || initialClientName || ""),
             client_id: clientId,
             hours_of_operation: JSON.stringify(hoursData),
@@ -433,63 +396,18 @@ export function SiteForm({ site, initialClientId, initialClientName, initialSite
                     </button>
                 </div>
 
-                <div className="grid gap-2">
-                    <div className="flex items-center justify-between">
-                        <Label htmlFor="address" className="text-xs font-medium text-muted-foreground">
-                            Site Address <span className="text-red-500">*</span>
-                        </Label>
-                        {formData.lat && formData.lng && (
-                            formData.location_approximate ? (
-                                <Badge variant="outline" className="h-4 text-[8px] bg-amber-50 text-amber-700 border-amber-200">APPROXIMATE — REVIEW</Badge>
-                            ) : (
-                                <Badge variant="outline" className="h-4 text-[8px] bg-green-50 text-green-700 border-green-200">LOCATION VERIFIED</Badge>
-                            )
-                        )}
-                    </div>
-                    <div className="flex gap-2">
-                        <div className="relative flex-1">
-                            <Input
-                                id="address"
-                                placeholder="Start typing address..."
-                                value={formData.address}
-                                onChange={(e) => setFormData({ ...formData, address: e.target.value, lat: null, lng: null })}
-                                className={formData.lat ? 'border-green-200 bg-green-50/20' : ''}
-                                required
-                            />
-                            {searching && <Loader2 className="absolute right-3 top-2.5 size-4 animate-spin text-muted-foreground" />}
-                        </div>
-                        <Button type="button" size="sm" onClick={lookupAddress} disabled={searching} className="h-10">
-                            Lookup
-                        </Button>
-                    </div>
-
-                    {suggestions.length > 0 && (
-                        <div className="mt-1 border rounded-lg bg-white shadow-xl max-h-40 overflow-y-auto z-50 divide-y">
-                            {suggestions.map((s, i) => (
-                                <button
-                                    key={i}
-                                    type="button"
-                                    className="w-full text-left p-2 hover:bg-muted text-xs transition-colors"
-                                    onClick={() => selectAddress(s)}
-                                >
-                                    {s.display_name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {formData.lat && formData.lng && (
-                        <label className="flex items-center gap-2 mt-1 text-xs text-muted-foreground cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                checked={formData.location_approximate}
-                                onChange={(e) => setFormData({ ...formData, location_approximate: e.target.checked })}
-                                className="size-3.5 accent-amber-500"
-                            />
-                            <span>Mark location as <span className="font-semibold text-amber-700">approximate</span> — flag for later review</span>
-                        </label>
-                    )}
-                </div>
+                <SiteAddressSearch
+                    value={formData}
+                    approximate={formData.location_approximate}
+                    onChange={location => setFormData(previous => ({ ...previous, ...location, location_approximate: false }))}
+                />
+                {(formData.address_details?.place_id || (formData.lat != null && formData.lng != null)) && (
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <input type="checkbox" checked={formData.location_approximate}
+                            onChange={e => setFormData(previous => ({ ...previous, location_approximate: e.target.checked }))} />
+                        <span>Mark location as <span className="font-semibold text-amber-700">approximate</span> — flag for later review</span>
+                    </label>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">

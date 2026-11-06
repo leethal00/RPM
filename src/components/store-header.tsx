@@ -60,7 +60,7 @@ export function StoreHeader({ store, assets, jobs }: StoreHeaderProps) {
                     <MapPin className="size-4 mt-0.5 shrink-0" />
                     <div className="flex items-center gap-2 flex-wrap">
                         <span>{store.address}{store.region ? `, ${store.region}` : ""}</span>
-                        {store.lat && store.lng && (
+                        {(store.address_details?.place_id || (store.lat != null && store.lng != null)) && (
                             store.location_approximate ? (
                                 <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
                                     <span className="size-1.5 rounded-full bg-amber-500" />
