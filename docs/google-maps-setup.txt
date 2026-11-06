@@ -1,9 +1,19 @@
 RPM: business-name and street-address search
 
-Local implementation only. No production deployment or hosted database change
-has been performed. Production rollout requires explicit approval.
+Development implementation on stu-dev. Production rollout requires explicit approval.
 Base: origin/stu-dev at d189dc4 (the branch containing Create client site).
-Working branch: feat/google-site-search.
+Working branch: stu-dev.
+
+Development rollout, 6 November 2026:
+- Source pushed through GitHub; Vercel reported the automatic preview deployment succeeded.
+- Migration 20261106034322 applied to rpm-dev (jtotzntmndxanhjijqcz) only.
+  The repository filename matches the version recorded by Supabase.
+- All 281 pre-existing sites retained the same data fingerprint; stores RLS and
+  its 8 policies remained unchanged.
+- JavaScript vector map ID: 3bf9c3d2a8a9f08432c81c00.
+- Local development configuration is stored only in ignored settings.
+- The hosting owner still needs to add the two Google variables to Preview for
+  stu-dev and rebuild. Production variables and database remain unchanged.
 
 Configuration before a staging test
 1. Use a Google Cloud project with billing enabled, Maps JavaScript API and

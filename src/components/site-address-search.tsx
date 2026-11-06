@@ -40,7 +40,8 @@ export function SiteAddressSearch({ value, onChange, approximate = false }: Prop
             if (id !== request.current) return
             setResults(found)
             if (!found.length) setMessage('No NZ locations found. Add a suburb or enter the street address manually.')
-        } catch {
+        } catch (error) {
+            if (process.env.NODE_ENV === 'development') console.warn('RPM place search failed', error instanceof Error ? error.message : 'Unknown search error')
             if (id === request.current) setMessage('Google search is unavailable. Please retry or enter the street address manually.')
         } finally {
             if (id === request.current) setSearching(false)
