@@ -46,6 +46,7 @@ vi.mock("@/lib/xero", () => ({
                 { id: "build", name: "Plinth", mode: "build", qty: 1, build_qty: 2, unit_price: 0,
                     size: "800x2500mm", details: "Plinth: Fabricated sign", delivery: "Deliver to site" },
                 { id: "buy", name: "Travel", mode: "buy", qty: 3, unit_price: 15 },
+                { id: "installation", name: "Installation", mode: "buy", qty: 1, unit_price: 150 },
                 { id: "note", name: "Installation excluded", sign_code: "__RPM_NOTE__" },
             ], error: null }) }) }) }
             if (table === "costing_lines") return { select: () => ({ eq: async () => ({ data: [
@@ -106,13 +107,16 @@ describe.each([
             expect(quote.QuoteID).toBe(quoteId)
             expect(quote.QuoteNumber).toBe("QU-001")
             expect(quote).not.toHaveProperty("Status")
+        } else {
+            expect(quote.Status).toBe("DRAFT")
         }
         expect(quote.LineItems.slice(1)).toEqual([
             { Description: "--" },
             { Description: "1. SIGNAGE" },
             { Description: "Plinth\nQty: 2\nSize: 800x2500mm\nDetails: Fabricated sign\nDeliver to site",
-                Quantity: 1, UnitAmount: 325, AccountCode: "200", TaxType: "OUTPUT2" },
+                Quantity: 1, UnitAmount: 325, AccountCode: "230", TaxType: "OUTPUT2" },
             { Description: "Travel\nQty: 3", Quantity: 3, UnitAmount: 15, AccountCode: "250", TaxType: "OUTPUT2" },
+            { Description: "Installation\nQty: 1", Quantity: 1, UnitAmount: 150, AccountCode: "230", TaxType: "OUTPUT2" },
             { Description: "Installation excluded" },
         ])
         return quote.LineItems[0]
