@@ -23,6 +23,7 @@ import { JobPhotos } from "@/components/costing/job-photos"
 import { CostingActuals } from "@/components/costing/costing-actuals"
 import { EstVsActual } from "@/components/costing/est-vs-actual"
 import { TimeEntries } from "@/components/costing/time-entries"
+import { CancelJobAction } from "@/components/costing/cancel-job-action"
 import { JobXeroInvoice } from "@/components/costing/job-xero-invoice"
 import { InstallerActivity } from "@/components/costing/installer-activity"
 import { JobHealthSafety } from "@/components/costing/job-health-safety"
@@ -192,12 +193,13 @@ export default function ActiveJobDetailPage() {
             <Pencil className="size-3.5"/> Edit
           </Button>
           {canManageXero && job.status === "in_progress" && <Button size="sm" className="h-8" onClick={() => void changeJobStatus("complete")} disabled={changingStatus}>{changingStatus ? "Completing…" : "Mark complete"}</Button>}
+          <CancelJobAction job={job} canCancel={canManageXero} onCancelled={() => mutate()} />
           {canManageXero && job.status === "complete" && <Button variant="outline" size="sm" className="h-8" onClick={() => void changeJobStatus("in_progress")} disabled={changingStatus}>{changingStatus ? "Reopening…" : "Reopen job"}</Button>}
           <Button asChild variant="outline" size="sm" className="gap-1.5 h-8"><Link href={`/quoting/${id}/job-pack`}><FileText className="size-3.5"/> Job pack</Link></Button>
           {canManageXero && <JobXeroInvoice job={job} onChanged={() => mutate()} />}
-          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
+          {job.status !== "cancelled" && <Button variant="outline" size="sm" className="gap-1.5 h-8 text-destructive hover:text-destructive" onClick={deleteJob} disabled={deletingJob}>
             <Trash2 className="size-3.5"/> {deletingJob ? "Deleting…" : "Delete Job"}
-          </Button>
+          </Button>}
         </>}
       />
 
@@ -205,13 +207,18 @@ export default function ActiveJobDetailPage() {
         {job.xero_quote_number && <span>Xero quote: <strong className="text-foreground">{job.xero_quote_number}</strong></span>}
         {job.xero_invoice_number && <span>Xero invoice: <strong className="text-foreground">{job.xero_invoice_number}</strong></span>}
         <span>Job no: <strong className="text-foreground">{job.job_number || job.xero_invoice_number || "—"}</strong></span>
-        <span>Status: <strong className="text-foreground">{job.status === "complete" ? "Complete" : job.status === "in_progress" ? "In progress" : job.status}</strong></span>
+        <span>Status: <strong className="text-foreground">{job.status === "cancelled" ? "Cancelled" : job.status === "complete" ? "Complete" : job.status === "in_progress" ? "In progress" : job.status}</strong></span>
         <span>Quoted by: <strong className="text-foreground">{job.quoted_by_name || "—"}</strong></span>
         <span>Job lead: <strong className="text-foreground">{job.job_lead_name || "Unassigned"}</strong></span>
         {editingDate ? <span className="inline-flex items-center gap-1.5"><span>Complete by:</span><Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="h-7 w-36 text-xs"/><Button size="xs" onClick={saveCompletionDate}>Save</Button><Button size="xs" variant="ghost" onClick={() => setEditingDate(false)}>Cancel</Button></span> : <button className="hover:underline" onClick={() => { setDateValue(job.completion_date || ""); setEditingDate(true) }}>Complete by: <strong className="text-foreground">{formatDate(job.completion_date)}</strong> <Pencil className="ml-1 inline size-3"/></button>}
         {jobContact && <span><span className="font-medium text-foreground">Contact:</span> {jobContact}</span>}
         {job.reference && <span><span className="font-medium text-foreground">Ref:</span> {job.reference}</span>}
       </div>
+      {job.status === "cancelled" && <div role="status" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+        <strong>Cancelled</strong>{job.cancelled_at && <span> on {new Date(job.cancelled_at).toLocaleString("en-NZ")}</span>}
+        {job.cancellation_reason && <p className="whitespace-pre-wrap">{job.cancellation_reason}</p>}
+        <p>Job and BOM history retained. Xero invoice unchanged; review any invoice adjustment separately in Xero.</p>
+      </div>}
       {jobDetails && <div className="rounded-md bg-muted/25 px-2.5 py-1.5 text-xs leading-4 text-muted-foreground whitespace-pre-wrap">{jobDetails}</div>}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
