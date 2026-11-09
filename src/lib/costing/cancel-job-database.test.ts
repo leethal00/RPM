@@ -24,7 +24,7 @@ beforeAll(async () => {
     INSERT INTO bom VALUES ('job', 'original BOM');
   `)
   // Execute the exact deliverable migration in an isolated PostgreSQL engine.
-  await db.exec(readFileSync("supabase/migrations/20261109230712_cancel_costing_job.sql", "utf8"))
+  await db.exec(readFileSync("supabase/migrations/20261109234342_cancel_costing_job.sql", "utf8"))
 }, 30000)
 beforeEach(async () => { await db.exec(`BEGIN; SELECT set_config('test.uid', '${admin}', false);`) })
 afterEach(async () => { await db.exec("ROLLBACK") })

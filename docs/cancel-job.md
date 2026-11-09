@@ -27,7 +27,7 @@ race before cancellation, cancellation returns a conflict for review.
 
 - Based on `stu-dev`, which contains the current Xero/BOM job model. `main` and
   `dev` have older application code.
-- Apply `20261109230712_cancel_costing_job.sql` to `rpm-dev` before deploying
+- Apply `20261109234342_cancel_costing_job.sql` to `rpm-dev` before deploying
   the application change to `stu-dev`. Its costing schema and cancelled status
   have been verified. Keep production and Xero changes separate.
 - Tests execute the exact migration in disposable PGlite PostgreSQL, with
@@ -37,4 +37,3 @@ race before cancellation, cancellation returns a conflict for review.
   synthetic active job; verify its preserved BOM, invoice identity, reason and
   actor; verify separate list/report views; replay a PAID event for that invoice.
 - Do not cancel INV-7657 or change production/Xero as part of this change.
-
