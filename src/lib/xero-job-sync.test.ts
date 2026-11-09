@@ -156,6 +156,18 @@ describe("explicit quote invoice selection for repeat orders", () => {
 })
 
 describe("conservative Xero quote matching", () => {
+  it.each(["PO1P24622", "PO 1P24622", "PO12345", "PO#1P24622", "PO: 1P24622", "PO No. 1P24622", "- PO1P24622", "| PO 1P24622"])("accepts appended purchase order %s", (suffix) => {
+    const reference = "New World Te Kauwhata - Grocery Arms"
+    expect(invoiceMatchesQuote({ ...invoice, Reference: `${reference} ${suffix}` }, { ...quote, Reference: reference })).toBe(true)
+  })
+  it.each(["PO", "PO#", "Port", "poster123", "PO123 replacement", "replacement PO123"])("rejects unrelated or incomplete suffix %s", (suffix) => {
+    expect(invoiceMatchesQuote({ ...invoice, Reference: `${job.title} ${suffix}` }, quote)).toBe(false)
+  })
+  it("still requires matching customer and sales details with a compact PO", () => {
+    const compact = { ...invoice, Reference: `${job.title} PO1P24622` }
+    expect(invoiceMatchesQuote({ ...compact, Contact: { ContactID: "another" } }, quote)).toBe(false)
+    expect(invoiceMatchesQuote({ ...compact, LineItems: [], Total: 1 }, quote)).toBe(false)
+  })
   it.each(["DRAFT", "SENT", "ACCEPTED", "INVOICED"])("matches the Ray White draft invoice while the quote is %s", (status) => {
     expect(invoiceMatchesQuote(invoice, { ...quote, Status: status })).toBe(true)
   })
@@ -190,6 +202,17 @@ describe("conservative Xero quote matching", () => {
 })
 
 describe("manual Check Xero and webhook linkback", () => {
+  it.each(["manual", "webhook"])("links an invoice with a compact PO through %s sync", async (path) => {
+    const reference = "New World Te Kauwhata - Grocery Arms"
+    const poQuote = { ...quote, QuoteNumber: "QU-3549", Reference: reference }
+    const poInvoice = { ...invoice, InvoiceNumber: "INV-7657", Reference: `${reference} PO1P24622` }
+    mockXero([poQuote], [[poInvoice]])
+    const result = path === "manual" ? [await syncLinkedQuoteToJob({ ...job })] : await syncOpenQuotesForInvoices([poInvoice])
+    expect(result).toMatchObject([{ ok: true, changedToJob: true, invoiceNumber: "INV-7657" }])
+    expect(state.writes).toHaveLength(1)
+    expect(state.writes[0]).toMatchObject({ xero_quote_number: "QU-3549", xero_invoice_number: "INV-7657", job_number: "INV-7657", status: "in_progress" })
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true)
+  })
   it("links QU-3499 to INV-7599 and saves both identifiers without changing sales values", async () => {
     expect(await syncLinkedQuoteToJob({ ...job })).toMatchObject({ ok: true, changedToJob: true, invoiceNumber: "INV-7599" })
     expect(state.writes).toHaveLength(1)
