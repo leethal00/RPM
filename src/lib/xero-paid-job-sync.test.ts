@@ -25,6 +25,7 @@ beforeEach(() => {
     { id: "linked", xero_invoice_id: "paid-invoice", status: "in_progress" },
     { id: "already-complete", xero_invoice_id: "paid-invoice", status: "complete" },
     { id: "other-invoice", xero_invoice_id: "different-invoice", status: "in_progress" },
+    { id: "cancelled", xero_invoice_id: "paid-invoice", status: "cancelled" },
   ]
   state.updates = 0; state.fail = false
 })
@@ -37,7 +38,7 @@ describe("Xero paid invoice job completion", () => {
       { InvoiceID: "different-invoice", Type: "ACCREC", Status: "AUTHORISED" },
       { InvoiceID: "different-invoice", Type: "ACCPAY", Status: "PAID" },
     ])).toEqual(["linked"])
-    expect(state.jobs.map((job) => job.status)).toEqual(["complete", "complete", "in_progress"])
+    expect(state.jobs.map((job) => job.status)).toEqual(["complete", "complete", "in_progress", "cancelled"])
     expect(state.updates).toBe(1)
     expect(await completePaidLinkedJobs([{ InvoiceID: "paid-invoice", Type: "ACCREC", Status: "PAID" }])).toEqual([])
     expect(state.updates).toBe(1)

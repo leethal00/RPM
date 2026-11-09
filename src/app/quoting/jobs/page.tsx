@@ -38,7 +38,8 @@ type JobRow = CostingJob & {
 
 type SortKey = "job" | "client" | "job_number" | "job_lead" | "completion_date" | "status"
 type SortDirection = "asc" | "desc"
-type JobView = "active" | "completed"
+type JobView = "active" | "completed" | "cancelled"
+const VIEW_LABEL = { active: "Active Jobs", completed: "Completed Jobs", cancelled: "Cancelled Jobs" }
 type DateFilter = "all" | "overdue" | "today" | "next7" | "none"
 type ImportPreview = {
     invoiceId: string | null
@@ -184,7 +185,7 @@ function JobsPrintReport({ jobs, view, printedAt, filters, sortLabel }: {
                     #rpm-jobs-print-report .muted { color: #555; font-size: 9pt; }
                 }
             `}</style>
-            <h1>{view === "active" ? "Active Jobs" : "Completed Jobs"} report</h1>
+            <h1>{VIEW_LABEL[view]} report</h1>
             <p className="report-meta">
                 {jobs.length} {jobs.length === 1 ? "job" : "jobs"} · {printedAt.toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "short" })}
                 {filters.length > 0 && <> · Filters: {filters.join("; ")}</>} · Sorted by {sortLabel}
@@ -265,7 +266,7 @@ export default function ActiveJobsPage() {
     const [completionDate, setCompletionDate] = useState("")
     const [reportDate, setReportDate] = useState<Date | null>(null)
 
-    const statuses = view === "active" ? ["in_progress"] : ["complete", "invoiced", "cancelled"]
+    const statuses = view === "active" ? ["in_progress"] : view === "cancelled" ? ["cancelled"] : ["complete", "invoiced"]
     const key = `costing-jobs-all-${view}-${clientId ?? "all"}`
 
     const { data: allJobs = [], isLoading, mutate } = useSupabaseQuery<JobRow[]>(key, async () => {
@@ -593,13 +594,14 @@ export default function ActiveJobsPage() {
                     <TabsList>
                         <TabsTrigger value="active">Active Jobs</TabsTrigger>
                         <TabsTrigger value="completed">Completed Jobs</TabsTrigger>
+                        <TabsTrigger value="cancelled">Cancelled Jobs</TabsTrigger>
                     </TabsList>
                 </Tabs>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="relative min-w-[260px] flex-1 max-w-md">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <Input placeholder={view === "active" ? "Search active jobs…" : "Search completed jobs…"} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} className="pl-8 h-8" />
+                        <Input placeholder={`Search ${VIEW_LABEL[view].toLowerCase()}…`} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} className="pl-8 h-8" />
                     </div>
                     <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setSiteFilter("all"); setPage(1) }} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
                         <option value="all">All customers</option>
@@ -625,7 +627,6 @@ export default function ActiveJobsPage() {
                             <option value="all">All statuses</option>
                             <option value="complete">Complete</option>
                             <option value="invoiced">Invoiced</option>
-                            <option value="cancelled">Cancelled</option>
                         </select>
                     )}
                     <Button size="sm" className="h-8 gap-1.5" onClick={() => setNewJobOpen(true)}><Plus className="size-3.5"/> New job</Button>
@@ -676,7 +677,7 @@ export default function ActiveJobsPage() {
                     </>
                 ) : (
                     <div className="py-12 text-center border border-dashed border-border/60 rounded-lg text-sm text-muted-foreground">
-                        {view === "active" ? "No active jobs match the selected filters." : "No completed jobs match the selected filters."}
+                        {`No ${VIEW_LABEL[view].toLowerCase()} match the selected filters.`}
                     </div>
                 )}
 

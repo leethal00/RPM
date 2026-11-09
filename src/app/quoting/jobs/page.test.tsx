@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
 vi.mock("@/lib/customer-filter", () => ({ useCustomerFilter: () => ({ clientId: null }) }))
 vi.mock("@/lib/hooks/use-supabase-query", () => ({
     useSupabaseQuery: (key: string) => ({
-        data: key.includes("-completed-") ? [{ id: "done", title: "Finished job", job_number: "INV-8", status: "complete" }] : Array.from({ length: mockState.rowCount }, (_, index) => ({
+        data: key.includes("-cancelled-") ? [{ id: "cancelled", title: "Cancelled test job", job_number: "INV-test", status: "cancelled" }] : key.includes("-completed-") ? [{ id: "done", title: "Finished job", job_number: "INV-8", status: "complete" }] : Array.from({ length: mockState.rowCount }, (_, index) => ({
             id: String(index),
             title: `Job ${index}`,
             job_number: `INV-${index === 0 ? 9 : index === 1 ? 100 : index === 2 ? 10 : 100 + index}`,
@@ -230,6 +230,22 @@ describe("Xero import site selection", () => {
 
 describe("Active Jobs list", () => {
     beforeEach(() => { mockState.rowCount = 20 })
+
+    it("shows cancelled jobs in their own view and report instead of Completed Jobs", () => {
+        const print = vi.spyOn(window, "print").mockImplementation(() => {})
+        render(<ActiveJobsPage />)
+        expect(screen.queryByText("Cancelled test job")).toBeNull()
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Cancelled Jobs" }), { button: 0 })
+        expect(screen.getByText("Cancelled test job")).toBeInTheDocument()
+        expect(screen.getByText("Cancelled", { selector: "[data-slot=badge]" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Print report" }))
+        expect(document.getElementById("rpm-jobs-print-report")).toHaveTextContent("Cancelled Jobs report")
+        act(() => window.dispatchEvent(new Event("afterprint")))
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Completed Jobs" }), { button: 0 })
+        expect(screen.queryByText("Cancelled test job")).toBeNull()
+        expect(screen.getByText("Finished job")).toBeInTheDocument()
+        print.mockRestore()
+    })
 
     it("starts with numeric Job # order and keeps a sticky header over 20 scrolling rows", () => {
         render(<ActiveJobsPage />)

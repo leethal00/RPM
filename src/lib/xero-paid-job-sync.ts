@@ -3,6 +3,7 @@ import type { XeroRow } from "@/lib/xero-job-sync"
 
 // The invoice ID is the durable link. A number alone could refer to a different
 // invoice after edits in Xero, so only jobs with the exact ID are completed.
+// Keep the status filter on the UPDATE: a concurrent cancellation must stay cancelled.
 export async function completePaidLinkedJobs(invoices: XeroRow[]) {
   const paid = [...new Map(invoices.filter((invoice) =>
     String(invoice.Type).toUpperCase() === "ACCREC"
