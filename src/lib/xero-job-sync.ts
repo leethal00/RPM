@@ -72,10 +72,14 @@ function referenceMatches(invoice: unknown, quote: unknown) {
   const invoiceRef = normaliseText(invoice)
   const quoteRef = normaliseText(quote)
   if (!quoteRef) return false
+  if (invoiceRef === quoteRef) return true
+  if (!invoiceRef.startsWith(quoteRef)) return false
   // Xero users commonly append a purchase order to the copied quote reference.
-  // Only recognise a delimited PO suffix, never a general title substring.
-  return invoiceRef === quoteRef
-    || invoiceRef.replace(/\s+(?:[-–|]\s*)?po\s*(?:#|:|no\.?\s).*$/, "").trim() === quoteRef
+  // Match the entire suffix. Compact POs must start with a digit so words such
+  // as "Port" or "poster123" cannot turn a different job title into a match.
+  const suffix = invoiceRef.slice(quoteRef.length)
+  return /^\s+(?:[-–|]\s*)?po\s*(?:#|:|no\.?\s+)\s*\S.*$/.test(suffix)
+    || /^\s+(?:[-–|]\s*)?po(?:\d[a-z0-9._/-]*|\s+(?=[a-z0-9._/-]*\d)[a-z0-9][a-z0-9._/-]*)$/.test(suffix)
 }
 
 export function invoiceMatchesQuote(invoice: XeroRow, quote: XeroRow) {
