@@ -1,4 +1,5 @@
 import { loadGoogleMaps } from './google-maps'
+import { searchOpenStreetMapPlaces } from './openstreetmap-address'
 
 /** Address fields confirmed by the user when saving a site. */
 export interface SiteAddressDetails {
@@ -51,6 +52,7 @@ export function normalizePlace(place: google.maps.places.Place): PlaceResult | n
 }
 
 export async function searchSitePlaces(query: string): Promise<PlaceResult[]> {
+    if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()) return searchOpenStreetMapPlaces(query)
     await loadGoogleMaps()
     const { Place } = await google.maps.importLibrary('places') as google.maps.PlacesLibrary
     const { places } = await Place.searchByText({

@@ -1,5 +1,23 @@
 RPM: business-name and street-address search
 
+Hosted address-search fallback, 11 November 2026:
+- When NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is absent or blank, Search uses Photon
+  (OpenStreetMap data) with NZ filtering and an Auckland ranking bias.
+- This replaces the unavailable Google-only search in unconfigured builds.
+  Configured builds retain Google Places and Google attribution. Google runtime
+  failures do not silently send the query to another provider.
+- Lookup runs only on Search/Enter, never on typing. Requests are serialized
+  and spaced in the browser, with a bounded session cache. Photon is a public
+  fair-use service, not a guaranteed geocoding SLA; see
+  https://github.com/komoot/photon#demo-server.
+- OpenStreetMap results show attribution and retain their coordinates on save
+  so the existing Leaflet map can display them. They have no Google place ID.
+  Overseas/invalid coordinates are discarded; street-only results cannot be
+  selected as complete addresses. Manual entry remains available.
+- No hosting settings, API keys, database migrations or existing-site edits
+  are required for this fallback. Google business coverage still requires the
+  Google configuration described below.
+
 Development implementation on stu-dev. Production rollout requires explicit approval.
 Base: origin/stu-dev at d189dc4 (the branch containing Create client site).
 Working branch: stu-dev.
