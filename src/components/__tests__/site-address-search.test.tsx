@@ -23,6 +23,17 @@ const saved = () => JSON.parse(screen.getByLabelText('Saved location').textConte
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('site address search', () => {
+    it('selects a fallback address with its pin and OpenStreetMap attribution', async () => {
+        search.mockResolvedValue([{ ...result, id: 'osm:N:123', address_details: { ...result.address_details!, place_id: null } }])
+        render(<Form />)
+        fireEvent.change(query(), { target: { value: '286 Mount Wellington Highway' } })
+        expect(search).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.click(await screen.findByRole('button', { name: /TimeZone Sylvia Park/ }))
+        expect(saved()).toMatchObject({ lat: result.lat, lng: result.lng, address_details: { place_id: null } })
+        expect(screen.getByRole('link', { name: /OpenStreetMap contributors/ })).toBeInTheDocument()
+        expect(screen.queryByAltText('Powered by Google')).not.toBeInTheDocument()
+    })
     it('searches on Enter, displays business/address/locality and selects structured location', async () => {
         search.mockResolvedValue([result]); render(<Form />)
         fireEvent.change(query(), { target: { value: 'Timezone Sylvia Park' } })
@@ -48,7 +59,7 @@ describe('site address search', () => {
         render(<Form />)
         fireEvent.change(query(), { target: { value: '123 Unlisted Road, Auckland' } })
         fireEvent.click(screen.getByRole('button', { name: 'Search' }))
-        await waitFor(() => expect(screen.getByText(kind === 'empty' ? /No NZ locations/ : /Google search is unavailable/)).toBeInTheDocument())
+        await waitFor(() => expect(screen.getByText(kind === 'empty' ? /No NZ locations/ : /Address search is unavailable/)).toBeInTheDocument())
         fireEvent.click(screen.getByRole('button', { name: /Enter address manually/ }))
         expect(saved()).toMatchObject({ address: '123 Unlisted Road, Auckland', lat: null, lng: null })
         fireEvent.change(query(), { target: { value: '125 Unlisted Road, Auckland' } })

@@ -16,7 +16,7 @@ function place(country = 'NZ', street = 'Mount Wellington Highway') {
     } as unknown as google.maps.places.Place
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('site place search', () => {
     it('normalizes a business to a street address and coordinates with locality', () => {
@@ -39,6 +39,7 @@ describe('site place search', () => {
         expect(normalizePlace(address)?.name).toBe(address.formattedAddress)
     })
     it('uses Auckland bias, filters NZ explicitly, and requests address components', async () => {
+        vi.stubEnv('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', 'configured-test-key')
         const search = vi.fn().mockResolvedValue({ places: [place(), place('AU')] })
         vi.stubGlobal('google', { maps: { importLibrary: vi.fn().mockResolvedValue({ Place: { searchByText: search } }) } })
         expect(await searchSitePlaces('Timezone Sylvia Park')).toHaveLength(1)

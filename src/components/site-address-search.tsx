@@ -42,7 +42,7 @@ export function SiteAddressSearch({ value, onChange, approximate = false }: Prop
             if (!found.length) setMessage('No NZ locations found. Add a suburb or enter the street address manually.')
         } catch (error) {
             if (process.env.NODE_ENV === 'development') console.warn('RPM place search failed', error instanceof Error ? error.message : 'Unknown search error')
-            if (id === request.current) setMessage('Google search is unavailable. Please retry or enter the street address manually.')
+            if (id === request.current) setMessage('Address search is unavailable. Please retry or enter the street address manually.')
         } finally {
             if (id === request.current) setSearching(false)
         }
@@ -91,7 +91,9 @@ export function SiteAddressSearch({ value, onChange, approximate = false }: Prop
                 </button>
             </li>)}
         </ul>}
-        {(results.length > 0 || value.address_details?.place_id) && <Image src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" width={120} height={14} unoptimized className="bg-white" />}
+        {(results.some(result => result.address_details?.place_id) || value.address_details?.place_id) && <Image src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" width={120} height={14} unoptimized className="bg-white" />}
+        {(results.some(result => !result.address_details?.place_id) || (hasCoordinates(value) && !value.address_details?.place_id)) &&
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline">Address data © OpenStreetMap contributors</a>}
         <Button type="button" variant="link" className="justify-self-start h-auto p-0 text-xs" onClick={() => {
             invalidate()
             setManual(!manual)
