@@ -9,6 +9,7 @@ import { computeTrafficLight } from '@/lib/health-score'
 import type { StoreMapProps } from './store-map'
 import type { Store } from '@/types/database'
 import { loadGoogleMaps } from '@/lib/google-maps'
+import { googleMapsMapId } from '@/lib/google-maps-config'
 import { hasCoordinates } from '@/lib/site-address'
 
 const NZ_CENTER = { lat: -40.9006, lng: 174.8860 }
@@ -53,7 +54,7 @@ export default function GoogleStoreMap({ stores, center, zoom = 5.5, selectedSto
             const { Map } = await google.maps.importLibrary('maps') as google.maps.MapsLibrary
             if (!cancelled && container.current) setMap(new Map(container.current, {
                 center: NZ_CENTER, zoom: 5.5,
-                mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID',
+                mapId: googleMapsMapId(),
                 minZoom: 5, restriction: { latLngBounds: { south: -48, west: 165, north: -33.5, east: 180 }, strictBounds: false },
                 mapTypeControl: false, streetViewControl: false,
             }))

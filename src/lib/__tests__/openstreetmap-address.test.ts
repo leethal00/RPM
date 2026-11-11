@@ -4,6 +4,7 @@ import { searchSitePlaces, siteLocationForSave } from '../site-address'
 import { normalizeOpenStreetMapPlace } from '../openstreetmap-address'
 
 vi.mock('../google-maps', () => ({ loadGoogleMaps: vi.fn() }))
+vi.mock('../google-maps-config', () => ({ getGoogleMapsConfig: vi.fn().mockResolvedValue(null) }))
 
 const feature = {
     properties: { countrycode: 'NZ', name: '5 Scotia Place', street: 'Scotia Place', housenumber: '5', city: 'Auckland', postcode: '1010', osm_type: 'N', osm_id: 123 },

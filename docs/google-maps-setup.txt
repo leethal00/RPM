@@ -1,5 +1,23 @@
 RPM: business-name and street-address search
 
+Runtime Google configuration, 11 November 2026:
+- Signed-in RPM clients can load the existing restricted Google browser key
+  and map ID from /api/maps/config. Build-time Google environment variables
+  still take precedence when present; Vercel access is no longer required to
+  supply development browser settings.
+- The server-only google_maps_browser_config singleton has RLS enabled and
+  grants no table privileges to anon or authenticated. The API verifies the
+  user's session and returns only the intended public browser key and map ID,
+  with private/no-store caching. It never exposes a server credential.
+- The runtime configuration is installed only in rpm-dev. The migration adds
+  the empty, locked-down table; the browser key is configured separately and
+  is not committed to GitHub. It remains restricted in Google Cloud to RPM's
+  existing permitted HTTP referrers and Maps JavaScript / Places API (New).
+- Search and Sites use the same runtime configuration. Google selections keep
+  their place IDs and reopen on the Google map. No existing sites are changed.
+- If no Google settings exist, the explicit OpenStreetMap fallback below stays
+  available. Google failures do not silently switch search providers.
+
 Hosted address-search fallback, 11 November 2026:
 - When NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is absent or blank, Search uses Photon
   (OpenStreetMap data) with NZ filtering and an Auckland ranking bias.
