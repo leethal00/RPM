@@ -20,8 +20,22 @@ export async function GET(request: Request) {
   if (profileError) return NextResponse.json({ error: "Could not check access" }, { status: 500 })
   if (!isStaffAdmin(profile?.role)) return NextResponse.json({ error: "Not authorised" }, { status: 403 })
 
-  const { data, error } = await admin.from("xero_client_contacts")
-    .select("store_id").eq("client_id", clientId).not("store_id", "is", null)
-  if (error) return NextResponse.json({ error: "Could not load linked sites" }, { status: 500 })
-  return NextResponse.json({ siteIds: Array.from(new Set((data || []).map((row) => row.store_id).filter(Boolean))) })
+  try {
+    // Operational site links are independent of Xero billing contacts. All
+    // staff customer filters (map, site list and quote form) use this endpoint.
+    const sources = await Promise.all(["xero_client_contacts", "customer_site_links"].map(async (table) => {
+      const siteIds: string[] = []
+      for (let from = 0; ; from += 500) {
+        const { data, error } = await admin.from(table).select("store_id")
+          .eq("client_id", clientId).not("store_id", "is", null)
+          .order("store_id").range(from, from + 499)
+        if (error) throw error
+        siteIds.push(...(data || []).map((row) => row.store_id))
+        if ((data || []).length < 500) return siteIds
+      }
+    }))
+    return NextResponse.json({ siteIds: Array.from(new Set(sources.flat())) })
+  } catch {
+    return NextResponse.json({ error: "Could not load linked sites" }, { status: 500 })
+  }
 }
