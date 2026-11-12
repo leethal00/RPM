@@ -119,6 +119,7 @@ export default function StoreDetailPage({ params }: { params: Promise<{ id: stri
         return <DashboardLayout><div className="flex flex-col gap-6 py-6">
             <Button variant="ghost" size="sm" asChild className="self-start"><Link href="/stores">← Back to sites</Link></Button>
             <StoreHeader store={store} assets={assets ?? null} />
+            <SiteCostingJobs storeId={id} />
             <SitePhotoGallery storeId={id} />
         </div></DashboardLayout>
     }
