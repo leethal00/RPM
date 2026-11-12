@@ -6,9 +6,9 @@ import type { CostingJob } from "@/types/database"
 const coates = "680debed-2440-43de-b646-2fd604ab5d91"
 const mcdonalds = "df380ff7-6726-4b5b-a0e4-b24a4dc8c433"
 const linwood = "927ee6c2-dadd-4644-b437-66df6f40bf90"
-const state = vi.hoisted(() => ({ admin: true, writes: [] as { table: string; body: Record<string, unknown> }[], offsets: [] as string[], paginate: false, failSites: false }))
+const state = vi.hoisted(() => ({ admin: true, writes: [] as { table: string; body: Record<string, unknown> }[], offsets: [] as string[], paginate: false, failSites: false, linkedSites: [] as string[] }))
 vi.mock("@/lib/customer-filter", () => ({ useCustomerFilter: () => ({ isAdmin: state.admin }) }))
-vi.mock("@/lib/linked-customer-sites", () => ({ linkedCustomerSiteIds: async () => [] }))
+vi.mock("@/lib/linked-customer-sites", () => ({ linkedCustomerSiteIds: async () => state.linkedSites }))
 vi.mock("@/components/site-form", () => ({ SiteForm: () => <div>Create site form</div> }))
 vi.mock("@/lib/supabase/client", async () => {
     const { createClient } = await import("@supabase/supabase-js")
@@ -47,6 +47,7 @@ beforeEach(() => {
     state.offsets = []
     state.paginate = false
     state.failSites = false
+    state.linkedSites = []
     Element.prototype.scrollIntoView = vi.fn()
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.releasePointerCapture = vi.fn()
@@ -54,6 +55,14 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("jobs at another customer's existing site", () => {
+    it("offers the linked McDonalds fleet under Coates without enabling all existing sites", async () => {
+        state.linkedSites = [linwood, "another-mcdonalds-site"]
+        render(<CostingJobForm onSuccess={vi.fn()} onCancel={vi.fn()} />)
+        await choose("Client (optional)", "Coates Signco")
+        await choose("Job location", "Site job")
+        await choose("Site (required)", "McDonalds Linwood · McDonalds Linwood")
+        expect(screen.getByLabelText("All existing sites")).not.toBeChecked()
+    })
     it("saves Coates as customer and the original Linwood site, with a visible client summary", async () => {
         const onSuccess = vi.fn()
         render(<CostingJobForm createAsJob onSuccess={onSuccess} onCancel={vi.fn()} />)
