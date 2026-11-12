@@ -19,6 +19,7 @@ import type { Client, Store, CostingJob } from "@/types/database"
 import { costingJobSchema, getValidationErrors } from "@/lib/validations"
 import { siteDisplayName, sortSitesByDisplayName } from "@/lib/site-name"
 import { linkedCustomerSiteIds } from "@/lib/linked-customer-sites"
+import { useCustomerFilter } from "@/lib/customer-filter"
 import { SiteForm } from "@/components/site-form"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -31,6 +32,7 @@ interface CostingJobFormProps {
 
 export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }: CostingJobFormProps) {
     const supabase = createClient()
+    const { isAdmin } = useCustomerFilter()
     const [loading, setLoading] = useState(false)
 
     const [formData, setFormData] = useState({
@@ -49,6 +51,9 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     const [clientSearch, setClientSearch] = useState("")
     const [stores, setStores] = useState<Pick<Store, "id" | "name" | "client_id">[]>([])
     const [linkedStoreIds, setLinkedStoreIds] = useState<string[]>([])
+    const [allSites, setAllSites] = useState(false)
+    const [siteSearch, setSiteSearch] = useState("")
+    const [siteLoadError, setSiteLoadError] = useState(false)
     const [teamMembers, setTeamMembers] = useState<string[]>([])
     const [fetching, setFetching] = useState(true)
     const [addingClient, setAddingClient] = useState(false)
@@ -82,14 +87,27 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
     useEffect(() => {
         async function fetchRefs() {
             setFetching(true)
-            const [{ data: c }, { data: s }, { data: team }, { data: auth }] = await Promise.all([
+            // A customer can commission work at another customer's physical site.
+            // Load every accessible site, not just the first PostgREST page.
+            async function loadStores() {
+                const sites: typeof stores = []
+                for (let from = 0; ; from += 500) {
+                    const { data, error } = await supabase.from("stores").select("id, name, client_id")
+                        .order("name").order("id").range(from, from + 499)
+                    if (error) return { data: null, error }
+                    sites.push(...(data || []))
+                    if ((data || []).length < 500) return { data: sites, error: null }
+                }
+            }
+            const [{ data: c }, { data: s, error: storesError }, { data: team }, { data: auth }] = await Promise.all([
                 supabase.from("clients").select("id, name").order("name"),
-                supabase.from("stores").select("id, name, client_id").order("name"),
+                loadStores(),
                 supabase.from("users").select("id, name, email").order("name"),
                 supabase.auth.getUser(),
             ])
             setClients(c || [])
             setStores(s || [])
+            setSiteLoadError(!!storesError)
             const teamRows = (team || []) as Array<{ id: string; name: string | null; email: string | null }>
             const names = Array.from(new Set(teamRows.map((member) => member.name?.trim() || member.email?.split("@")[0]).filter(Boolean) as string[]))
             setTeamMembers(names)
@@ -110,13 +128,13 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         void linkedCustomerSiteIds(clientId).then((siteIds) => {
             if (!active) return
             setLinkedStoreIds((current) => Array.from(new Set([...siteIds, ...current])))
-            if (!job && jobLocation === "site" && siteIds.length === 1) {
+            if (!job && !allSites && jobLocation === "site" && siteIds.length === 1) {
                 setFormData((current) => current.client_id === clientId && current.store_id === "none"
                     ? { ...current, store_id: siteIds[0] } : current)
             }
         })
         return () => { active = false }
-    }, [formData.client_id, job, jobLocation])
+    }, [formData.client_id, job, jobLocation, allSites])
 
     const hasClient = formData.client_id !== "none"
     const selectedClientName = clients.find((client) => client.id === formData.client_id)?.name || ""
@@ -124,12 +142,16 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
         client.id === formData.client_id || client.name.toLocaleLowerCase().includes(clientSearch.trim().toLocaleLowerCase())
     )
     const clientStores = hasClient
-        ? sortSitesByDisplayName(stores.filter((s) => s.client_id === formData.client_id || linkedStoreIds.includes(s.id)), selectedClientName)
+        ? sortSitesByDisplayName(stores.filter((s) => (isAdmin && allSites) || s.id === formData.store_id || s.client_id === formData.client_id || linkedStoreIds.includes(s.id)), selectedClientName)
         : []
+    const matchingStores = clientStores.filter((site) => site.id === formData.store_id ||
+        `${site.name} ${clients.find((client) => client.id === site.client_id)?.name || ""}`.toLocaleLowerCase().includes(siteSearch.trim().toLocaleLowerCase()))
+    const selectedStore = stores.find((site) => site.id === formData.store_id)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (createAsJob && formData.client_id === "none") return toast.error("Select a customer for this job")
+        if (jobLocation === "site" && (fetching || siteLoadError)) return toast.error("Sites could not be loaded. Reopen this form and try again.")
         if (jobLocation === "site" && formData.store_id === "none") return toast.error("Select or create a client site for site work")
         setLoading(true)
 
@@ -294,9 +316,10 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                     if (v === "__new__") { setAddingClient(true); return }
                                     setLinkedStoreIds([])
                                     setClientSearch("")
+                                    setSiteSearch("")
                                     setFormData((f) => {
                                         const keep = v === f.client_id
-                                        return { ...f, client_id: v, store_id: keep ? f.store_id : "none" }
+                                        return { ...f, client_id: v, store_id: keep || (isAdmin && allSites && v !== "none") ? f.store_id : "none" }
                                     })
                                 }}
                                 disabled={fetching}
@@ -318,10 +341,17 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                     </div>
                     <div className="grid gap-2">
                         <Label htmlFor="store_id" className="text-xs font-medium text-muted-foreground">Site {jobLocation === "site" ? "(required)" : "(not needed)"}</Label>
+                        {isAdmin && hasClient && jobLocation === "site" && <>
+                            <label className="flex items-center gap-2 text-xs">
+                                <input type="checkbox" checked={allSites} onChange={(event) => { setAllSites(event.target.checked); setSiteSearch("") }} />
+                                All existing sites
+                            </label>
+                            <Input aria-label="Search sites" placeholder="Search site or site customer…" value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} disabled={fetching || siteLoadError} />
+                        </>}
                             <Select
                                 value={formData.store_id}
                                 onValueChange={(v) => v === "__new__" ? setAddingStore(true) : setFormData({ ...formData, store_id: v })}
-                                disabled={fetching || !hasClient || jobLocation === "manufacture"}
+                                disabled={fetching || siteLoadError || !hasClient || jobLocation === "manufacture"}
                             >
                                 <SelectTrigger id="store_id">
                                     <SelectValue placeholder={fetching ? "Loading…" : !hasClient ? "Pick a client first" : "Select site"} />
@@ -329,15 +359,17 @@ export function CostingJobForm({ onSuccess, onCancel, job, createAsJob = false }
                                 <SelectContent>
                                     <SelectItem value="none">{jobLocation === "manufacture" ? "Manufacture only / No site" : "Select a site"}</SelectItem>
                                     <SelectItem value="__new__" className="text-primary">+ New site…</SelectItem>
-                                    {clientStores.length === 0 ? (
-                                        <div className="px-2 py-1.5 text-xs text-muted-foreground">No sites for this client yet.</div>
+                                    {matchingStores.length === 0 ? (
+                                        <div className="px-2 py-1.5 text-xs text-muted-foreground">{siteSearch ? "No matching sites." : allSites ? "No existing sites found." : isAdmin ? "No sites for this client yet. Choose All existing sites to use another customer's site." : "No sites for this client yet."}</div>
                                     ) : (
-                                        clientStores.map((s) => (
+                                        matchingStores.map((s) => (
                                             <SelectItem key={s.id} value={s.id}>{siteDisplayName(s.name, selectedClientName)}{s.client_id !== formData.client_id ? ` · ${clients.find((client) => client.id === s.client_id)?.name || "Linked site"}` : ""}</SelectItem>
                                         ))
                                     )}
                                 </SelectContent>
                             </Select>
+                        {siteLoadError && <p role="alert" className="text-xs text-destructive">Could not load sites. Reopen this form to try again.</p>}
+                        {selectedStore && selectedStore.client_id !== formData.client_id && jobLocation === "site" && <p className="text-xs text-muted-foreground">Uses the existing {selectedStore.name} site. {selectedClientName} remains the customer for this {createAsJob ? "job" : "quote"}.</p>}
                     </div>
                 </div>
 
