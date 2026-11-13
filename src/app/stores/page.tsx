@@ -81,7 +81,7 @@ export default function StoresListPage() {
 
     const storesKey = `stores-${page}-${search}-${filterRegion}-${filterUnverified}-${filterApproximate}-${sortConfig.key}-${sortConfig.direction}-${clientId ?? 'all'}-${isAdmin}`
 
-    const { data: storesResult, isLoading: loading, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number }>(
+    const { data: storesResult, isLoading: loading, error: storesError, mutate: mutateStores } = useSupabaseQuery<{ items: StoreRow[], count: number, detailsUnavailable?: boolean }>(
         storesKey,
         async () => {
             const linkedSiteIds = clientId && isAdmin ? await linkedCustomerSiteIds(clientId) : []
@@ -143,9 +143,17 @@ export default function StoresListPage() {
                     .range(from, to)
 
                 if (clientId) fallback = fallback.or(customerSiteFilter(clientId, linkedSiteIds))
+                if (search.trim()) {
+                    const term = `%${search.trim()}%`
+                    fallback = fallback.or(`name.ilike.${term},address.ilike.${term},manager_name.ilike.${term}`)
+                }
+                if (filterRegion !== "all") fallback = fallback.eq("region", filterRegion)
+                if (filterUnverified) fallback = fallback.is("lat", null).is("address_details->>place_id", null)
+                if (filterApproximate) fallback = fallback.eq("location_approximate", true)
 
-                const { data: simpleData, count: simpleCount } = await fallback
-                return { data: { items: simpleData || [], count: simpleCount ?? 0 }, error: null }
+                const { data: simpleData, count: simpleCount, error: fallbackError } = await fallback
+                if (fallbackError) return { data: null, error: fallbackError }
+                return { data: { items: simpleData || [], count: simpleCount ?? 0, detailsUnavailable: true }, error: null }
             }
 
             return { data: { items: storesData || [], count: count ?? 0 }, error: null }
@@ -281,6 +289,8 @@ export default function StoresListPage() {
                     }
                 />
 
+                {storesError && <div role="alert" className="rounded-md border p-3 text-sm">Sites could not load. <button className="underline" onClick={() => void mutateStores()}>Try again</button></div>}
+                {storesResult?.detailsUnavailable && <p role="status" className="text-sm text-muted-foreground">Site records loaded, but brands and maintenance details are unavailable.</p>}
                 <div className="flex flex-col gap-3">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
