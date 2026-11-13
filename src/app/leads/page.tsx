@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ClipboardList, Loader2, Plus, Trash2, X } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
+import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import { useCurrentMember } from "@/lib/hooks/use-current-member"
 import { useColumnLayout } from "@/lib/costing/use-column-layout"
 import {
     Dialog,
@@ -111,12 +113,25 @@ export default function LeadsPage() {
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [editingItem, setEditingItem] = useState<WorkItem | null>(null)
-    const [customers, setCustomers] = useState<CustomerOption[]>([])
-    const [sites, setSites] = useState<SiteOption[]>([])
-    const [users, setUsers] = useState<UserOption[]>([])
-    const [items, setItems] = useState<WorkItem[]>([])
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-    const [loadingOptions, setLoadingOptions] = useState(true)
+    const { data: member } = useCurrentMember()
+    const currentUserId = member?.user?.id ?? null
+    const { data: customers = [], error: customersError, isLoading: loadingCustomers, mutate: refreshCustomers } = useSupabaseQuery<CustomerOption[]>("leads-customers", async () =>
+        await supabase.from("clients").select("id, name").eq("active", true).order("name"))
+    const { data: sites = [], error: sitesError, isLoading: loadingSites, mutate: refreshSites } = useSupabaseQuery<SiteOption[]>("leads-sites", async () =>
+        await supabase.from("stores").select("id, name, client_id").order("name"))
+    const { data: staff = [], error: usersError, isLoading: loadingUsers, mutate: refreshUsers } = useSupabaseQuery<UserOption[]>("leads-staff", async () =>
+        await supabase.from("users").select("id, name, email, role").order("name"))
+    const { data: items = [], error: itemsError, isLoading: loadingItems, mutate: refreshItems } = useSupabaseQuery<WorkItem[]>("internal-work-items", async () =>
+        await supabase.from("internal_work_items").select(WORK_ITEM_SELECT).order("created_at", { ascending: false }))
+    const users = useMemo(() => staff.filter(user => !["client_hq", "client_store"].includes(user.role ?? "")), [staff])
+    const loadingOptions = loadingCustomers || loadingSites || loadingUsers
+    const optionsError = customersError || sitesError || usersError
+    function setCustomers(update: (current: CustomerOption[]) => CustomerOption[]) {
+        void refreshCustomers(current => update(current ?? []), { revalidate: false })
+    }
+    function setItems(update: (current: WorkItem[]) => WorkItem[]) {
+        void refreshItems(current => update(current ?? []), { revalidate: false })
+    }
     const [saving, setSaving] = useState(false)
     const [converting, setConverting] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<WorkItem | null>(null)
@@ -138,28 +153,6 @@ export default function LeadsPage() {
     const [statusFilter, setStatusFilter] = useState("all")
     const [sortMode, setSortMode] = useState<SortMode>("newest")
     const { order, widths, move, setWidth } = useColumnLayout("leads-columns-v1", LEAD_LAYOUT)
-
-    const loadData = useCallback(async () => {
-        const [customersResult, sitesResult, usersResult, itemsResult, authResult] = await Promise.all([
-            supabase.from("clients").select("id, name").eq("active", true).order("name"),
-            supabase.from("stores").select("id, name, client_id").order("name"),
-            supabase.from("users").select("id, name, email, role").order("name"),
-            supabase.from("internal_work_items").select(WORK_ITEM_SELECT).order("created_at", { ascending: false }),
-            supabase.auth.getUser(),
-        ])
-        if (!customersResult.error) setCustomers((customersResult.data ?? []) as CustomerOption[])
-        if (!sitesResult.error) setSites((sitesResult.data ?? []) as SiteOption[])
-        if (!usersResult.error) {
-            setUsers(((usersResult.data ?? []) as UserOption[]).filter((user) => !["client_hq", "client_store"].includes(user.role ?? "")))
-        }
-        if (!itemsResult.error) setItems((itemsResult.data ?? []) as WorkItem[])
-        if (!authResult.error && authResult.data.user) setCurrentUserId(authResult.data.user.id)
-        setLoadingOptions(false)
-    }, [supabase])
-
-    // loadData applies its results only after the Supabase requests resolve.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    useEffect(() => { void loadData() }, [loadData])
 
     const filteredSites = customerId && customerId !== "__new__" ? sites.filter((site) => site.client_id === customerId) : []
     const visibleItems = useMemo(() => {
@@ -341,7 +334,12 @@ export default function LeadsPage() {
                     </Dialog>
                 </div>
 
-                {items.length === 0 ? (
+                {optionsError && <div role="status" className="rounded-md border p-3 text-sm">Some customer, site, or staff details could not load. Leads are shown with the details available. <Button variant="link" onClick={() => { void refreshCustomers(); void refreshSites(); void refreshUsers() }}>Retry details</Button></div>}
+                {itemsError ? (
+                    <div role="alert" className="rounded-md border p-4 text-sm">Leads and to-do items could not load. <Button variant="link" onClick={() => void refreshItems()}>Try again</Button></div>
+                ) : loadingItems ? (
+                    <div role="status" className="rounded-lg border p-8 text-center text-sm text-muted-foreground">Loading leads and to-do items…</div>
+                ) : items.length === 0 ? (
                     <div className="rounded-lg border bg-card p-8 text-center"><ClipboardList className="mx-auto mb-3 size-9 text-muted-foreground" /><h2 className="text-base font-semibold">No leads or tasks yet</h2><p className="mt-1 text-xs text-muted-foreground">Your incoming leads and to-do items will appear here.</p></div>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border bg-card">
