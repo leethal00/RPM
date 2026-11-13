@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Map, ClipboardList, BarChart3, Settings, PlusCircle, Building2, Calendar, Briefcase, Hammer, MapPin, Layers, Users, UserCog, Lightbulb, HelpCircle, Calculator, Package2, LogIn, Wrench, Clock, Truck, ShieldCheck } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -8,8 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import type { User } from "@supabase/supabase-js"
-import type { UserProfile } from "@/types/database"
+import { useCurrentMember } from "@/lib/hooks/use-current-member"
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle"
 
 const navItems = [
@@ -41,10 +39,8 @@ export function AppSidebar({ activeQuotingItem, sidebarWidth, onSidebarResize, o
     onSidebarResizeEnd: (width: number) => void
 }) {
     const supabase = createClient(), router = useRouter(), pathname = usePathname()
-    const [user, setUser] = React.useState<User | null>(null)
-    const [profile, setProfile] = React.useState<UserProfile | null>(null)
-    const [loading, setLoading] = React.useState(true)
-    React.useEffect(() => { async function fetchData() { const { data: { user } } = await supabase.auth.getUser(); setUser(user); if (user) { const { data } = await supabase.from("users").select("*").eq("id", user.id).single(); setProfile(data) }; setLoading(false) }; fetchData() }, [supabase])
+    const { data: member, isLoading: loading } = useCurrentMember()
+    const user = member?.user ?? null, profile = member?.profile ?? null
     const handleSignOut = async () => { await supabase.auth.signOut(); router.push("/login"); router.refresh() }
     const handleSwitchAccount = async () => { await supabase.auth.signOut(); router.push("/login?switch=1"); router.refresh() }
     const userName = profile?.name || user?.email?.split("@")[0] || "User", userEmail = user?.email || "user@example.com", userInitials = userName.substring(0, 2).toUpperCase()

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import DashboardLayout from "@/components/dashboard-layout"
 import { createClient } from "@/lib/supabase/client"
 import { useSupabaseQuery } from "@/lib/hooks/use-supabase-query"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,6 +23,7 @@ import { toast } from "sonner"
 import type { CostingJob } from "@/types/database"
 
 const PAGE_SIZE = 20
+const QUOTE_LIST_COLUMNS = "id,title,status,client_id,store_id,reference,details,contact_name,qty,quoted_by_name,xero_quote_id,xero_quote_number,clients!costing_jobs_client_id_fkey(name),stores!costing_jobs_store_id_fkey(name)"
 type QuoteRow = CostingJob & { clients?: { name: string } | null; stores?: { name: string } | null }
 type QuoteView = "active" | "approved" | "declined"
 const QUOTE_VIEWS: Record<QuoteView, { label: string; statuses: string[]; empty: string }> = {
@@ -55,7 +57,7 @@ const STATUS: Record<string, { label: string; className: string }> = {
 export default function QuotesPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
-    const { clientId, customers, isAdmin } = useCustomerFilter()
+    const { clientId, customers, isAdmin, initialised } = useCustomerFilter()
     const [filters, setFilters] = useState(EMPTY_FILTERS)
     const [previousClientId, setPreviousClientId] = useState(clientId)
     const [page, setPage] = useState(1)
@@ -66,13 +68,14 @@ export default function QuotesPage() {
         setPage(1)
     }
     const [search, setSearch] = useState("")
+    const settledSearch = useDebouncedValue(search)
     const [view, setView] = useState<QuoteView>("active")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [copyingId, setCopyingId] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<QuoteRow | null>(null)
     const [deleting, setDeleting] = useState(false)
     const statuses = QUOTE_VIEWS[view].statuses
-    const key = JSON.stringify(["quotes", view, page, clientId, search, filters])
+    const key = initialised === false ? null : JSON.stringify(["quotes", view, page, clientId, isAdmin, settledSearch, filters])
     const hasFilters = search.trim() !== "" || Object.values(filters).some(value => value !== "all")
 
     function updateFilter(name: keyof typeof filters, value: string) {
@@ -87,10 +90,10 @@ export default function QuotesPage() {
     }
 
     // Load choices across every page, independently of the selected column values.
-    const { data: filterRows, error: optionsError, isLoading: optionsLoading, mutate: refreshOptions } = useSupabaseQuery<FilterRow[]>(JSON.stringify(["quote-filter-options", view, clientId, filters.client]), async () => {
+    const { data: filterRows, error: optionsError, isLoading: optionsLoading, mutate: refreshOptions } = useSupabaseQuery<FilterRow[]>(initialised === false ? null : JSON.stringify(["quote-filter-options", view, clientId, isAdmin, filters.client]), async () => {
         const rows: FilterRow[] = []
         for (let from = 0; ; from += 500) {
-            let query = supabase.from("costing_jobs").select("store_id, stores ( name ), quoted_by_name, xero_quote_number").eq("is_template", false).in("status", statuses)
+            let query = supabase.from("costing_jobs").select("store_id, stores!costing_jobs_store_id_fkey(name), quoted_by_name, xero_quote_number").eq("is_template", false).in("status", statuses)
             if (clientId) query = query.eq("client_id", clientId)
             else if (isAdmin && filters.client === "adhoc") query = query.is("client_id", null)
             else if (isAdmin && filters.client !== "all") query = query.eq("client_id", filters.client)
@@ -122,8 +125,8 @@ export default function QuotesPage() {
         setPage(1)
     }
 
-    const { data: result, error, isLoading, mutate } = useSupabaseQuery<{ items: QuoteRow[]; count: number }>(key, async () => {
-        let query = supabase.from("costing_jobs").select(`*, clients ( name ), stores ( name )`, { count: "exact" }).eq("is_template", false).in("status", statuses)
+    const { data: result, error, isLoading: queryLoading, mutate } = useSupabaseQuery<{ items: QuoteRow[]; count: number }>(key, async () => {
+        let query = supabase.from("costing_jobs").select(QUOTE_LIST_COLUMNS, { count: "exact" }).eq("is_template", false).in("status", statuses)
         if (clientId) query = query.eq("client_id", clientId)
         else if (isAdmin && filters.client === "adhoc") query = query.is("client_id", null)
         else if (isAdmin && filters.client !== "all") query = query.eq("client_id", filters.client)
@@ -133,8 +136,8 @@ export default function QuotesPage() {
             query = value === null ? query.is(column, null) : query.eq(column, value)
         }
         if (filters.status !== "all") query = query.eq("status", filters.status)
-        if (search.trim()) {
-            const term = search.trim().replace(/[,()*%]/g, "")
+        if (settledSearch.trim()) {
+            const term = settledSearch.trim().replace(/[,()*%]/g, "")
             query = query.or(`title.ilike.%${term}%,reference.ilike.%${term}%,xero_quote_number.ilike.%${term}%,quoted_by_name.ilike.%${term}%`)
         }
         query = query.order("created_at", { ascending: false })
@@ -144,6 +147,7 @@ export default function QuotesPage() {
         if (error) throw error
         return { data: { items: (data as QuoteRow[]) || [], count: count ?? 0 }, error: null }
     }, { keepPreviousData: false })
+    const isLoading = initialised === false || queryLoading
 
     async function copyQuote(source: QuoteRow) {
         if (copyingId) return

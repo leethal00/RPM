@@ -216,7 +216,7 @@ function JobsPrintReport({ jobs, view, printedAt, filters, sortLabel }: {
 export default function ActiveJobsPage() {
     const supabase = useMemo(() => createClient(), [])
     const router = useRouter()
-    const { clientId } = useCustomerFilter()
+    const { clientId, initialised } = useCustomerFilter()
     const [view, setView] = useState<JobView>("active")
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
@@ -267,12 +267,12 @@ export default function ActiveJobsPage() {
     const [reportDate, setReportDate] = useState<Date | null>(null)
 
     const statuses = view === "active" ? ["in_progress"] : view === "cancelled" ? ["cancelled"] : ["complete", "invoiced"]
-    const key = `costing-jobs-all-${view}-${clientId ?? "all"}`
+    const key = initialised === false ? null : `costing-jobs-all-${view}-${clientId ?? "all"}`
 
-    const { data: allJobs = [], isLoading, mutate } = useSupabaseQuery<JobRow[]>(key, async () => {
+    const { data: allJobs = [], isLoading: queryLoading, error: jobsError, mutate } = useSupabaseQuery<JobRow[]>(key, async () => {
         let query = supabase
             .from("costing_jobs")
-            .select(`*, clients ( name ), stores ( name ), costing_job_sites ( store_id, sort, stores ( id, name, address ) )`)
+            .select(`id,title,production_title,reference,job_number,xero_invoice_number,client_id,store_id,job_lead_name,quoted_by_name,completion_date,status,clients!costing_jobs_client_id_fkey(name),stores!costing_jobs_store_id_fkey(name),costing_job_sites(store_id,sort,stores(id,name,address))`)
             .eq("is_template", false)
             .in("status", statuses)
             .order("created_at", { ascending: false })
@@ -283,6 +283,7 @@ export default function ActiveJobsPage() {
         if (error) throw error
         return { data: (data as JobRow[]) || [], error: null }
     })
+    const isLoading = initialised === false || queryLoading
 
     const filterClients = useMemo(() => {
         const map = new Map<string, string>()
@@ -637,7 +638,9 @@ export default function ActiveJobsPage() {
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-xs text-muted-foreground" onClick={reset} title="Reset column order and widths"><RotateCcw className="size-3.5" /> Reset columns</Button>
                 </div>
 
-                {isLoading ? (
+                {jobsError ? (
+                    <div role="alert" className="rounded-lg border p-4 text-sm">Jobs could not load. <Button variant="link" onClick={() => void mutate()}>Try again</Button></div>
+                ) : isLoading ? (
                     <div className="space-y-1">{[1,2,3,4].map((i) => <div key={i} className="h-10 rounded-lg bg-muted/40 animate-pulse" />)}</div>
                 ) : jobs.length ? (
                     <>

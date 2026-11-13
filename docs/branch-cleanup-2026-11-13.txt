@@ -1,0 +1,18 @@
+RPM GitHub branch cleanup, 13 November 2026
+
+Preserved: main, dev, stu-dev, and the current loading-fix work branch.
+
+Deleted only after checking the remote tip and confirming equivalent changes
+were merged into stu-dev. All five deletions used exact expected-tip leases
+and an atomic push, so concurrent branch updates would reject the deletion.
+
+Branch                                      Merged PR   Last commit
+codex/fix-map-zero-sites                     72          e871412878e9c4cd95865bc53416127fc8c36a2c
+feature/quote-existing-customer-sites        70          56b6656ba2d885c7fbfcdaeaa647d2300cb26496
+fix/address-lookup-fallback                  68          ea5e075f0dc9bf07ae66aa2b55b33b7113203470
+fix/coates-mcdonalds-site-links               71          d9c8ca8a017233863d548048e7f1a32458a75192
+fix/google-maps-runtime-config               69          9cd9ac15699a7241df9d23635b96a5ac65189ade
+
+The feature branch's combined patch ID matches squash commit b36d028.
+The other three fix branches are patch-equivalent to their squash merges.
+The map branch is an ancestor of stu-dev via merge 2473f20.
