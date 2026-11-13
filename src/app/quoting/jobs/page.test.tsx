@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 
-const mockState = vi.hoisted(() => ({ rowCount: 20 }))
+const mockState = vi.hoisted(() => ({ rowCount: 20, loadError: false }))
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("@/components/dashboard-layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
@@ -25,13 +25,21 @@ vi.mock("@/lib/hooks/use-supabase-query", () => ({
             status: "in_progress",
         })),
         isLoading: false,
+        error: mockState.loadError ? new Error("Unavailable") : null,
         mutate: vi.fn(),
     }),
 }))
 
 import ActiveJobsPage from "./page"
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+afterEach(() => { mockState.loadError = false; vi.unstubAllGlobals(); vi.useRealTimers() })
+
+it("reports a failed job query with a retry instead of an empty list", async () => {
+    mockState.loadError = true
+    render(<ActiveJobsPage />)
+    expect(screen.getByRole("alert")).toHaveTextContent("Jobs could not load")
+    expect(screen.getByRole("button", { name: "Try again" })).toBeVisible()
+})
 
 describe("Xero import site selection", () => {
     async function openInvoice(contactName = "Coates Signco", linkedStoreId?: string) {

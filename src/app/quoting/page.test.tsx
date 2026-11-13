@@ -11,10 +11,11 @@ const state = vi.hoisted(() => ({
     push: vi.fn(),
     fail: false,
     manyOptions: false,
+    initialised: true,
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }))
 vi.mock("@/lib/customer-filter", () => ({ useCustomerFilter: () => ({
-    clientId: state.clientId, isAdmin: true,
+    clientId: state.clientId, isAdmin: true, initialised: state.initialised,
     customers: [{ id: "client-a", name: "Alpha" }, { id: "client-b", name: "Beta" }],
 }) }))
 vi.mock("@/components/dashboard-layout", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
@@ -28,7 +29,7 @@ vi.mock("@/lib/supabase/client", async () => {
             const url = new URL(String(input))
             state.requests.push(url)
             if (state.fail) return new Response(JSON.stringify({ message: "Unavailable" }), { status: 400 })
-            if (!url.searchParams.get("select")?.startsWith("*")) {
+            if (!url.searchParams.get("select")?.includes("title")) {
                 const option = { store_id: "wellington", stores: { name: "Wellington" }, quoted_by_name: "Jo", xero_quote_number: "QU-2" }
                 const rows = state.manyOptions && url.searchParams.get("offset") === "0" ? Array.from({ length: 500 }, () => option) : [option, { store_id: "missing", stores: { name: "Missing" }, quoted_by_name: null, xero_quote_number: null }, { store_id: null, stores: null, quoted_by_name: "Sam", xero_quote_number: "QU-100" }]
                 return new Response(JSON.stringify(rows), { status: 200, headers: { "Content-Type": "application/json" } })
@@ -46,7 +47,7 @@ vi.mock("@/lib/supabase/client", async () => {
 function page() {
     return <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}><QuotesPage /></SWRConfig>
 }
-function lastQuery() { return state.requests.filter(url => url.searchParams.get("select")?.startsWith("*")).at(-1)!.searchParams }
+function lastQuery() { return state.requests.filter(url => url.searchParams.get("select")?.includes("title")).at(-1)!.searchParams }
 async function choose(label: string, option: string) {
     await waitFor(() => expect(screen.getByRole("combobox", { name: label })).not.toBeDisabled())
     fireEvent.click(screen.getByRole("combobox", { name: label }))
@@ -58,6 +59,7 @@ beforeEach(() => {
     state.requests = []
     state.fail = false
     state.manyOptions = false
+    state.initialised = true
     state.push.mockClear()
     Element.prototype.scrollIntoView = vi.fn()
     Element.prototype.hasPointerCapture = vi.fn(() => false)
@@ -66,6 +68,19 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("Quotes column filters", () => {
+    it("waits for customer scope and sends one request for a burst of search typing", async () => {
+        state.initialised = false
+        const { rerender } = render(page())
+        expect(state.requests).toHaveLength(0)
+        state.initialised = true
+        rerender(page())
+        await screen.findByText("Shop signs")
+        const input = screen.getByPlaceholderText("Search quote, reference or Xero quote #…")
+        for (const value of ["s", "si", "sig", "sign"]) fireEvent.change(input, { target: { value } })
+        await waitFor(() => expect(lastQuery().get("or")).toContain("title.ilike.%sign%"))
+        expect(state.requests.filter(url => url.searchParams.has("or"))).toHaveLength(1)
+        expect(lastQuery().get("select")).not.toContain("*")
+    })
     it("combines client, site, person, Xero, status and search in the paginated server query", async () => {
         render(page())
         await screen.findByText("Shop signs")
@@ -81,7 +96,7 @@ describe("Quotes column filters", () => {
         expect(lastQuery().get("store_id")).toBe("eq.wellington")
         expect(lastQuery().get("quoted_by_name")).toBe("eq.Jo")
         expect(lastQuery().get("xero_quote_number")).toBe("eq.QU-2")
-        expect(lastQuery().get("or")).toContain("title.ilike.%sign%")
+        await waitFor(() => expect(lastQuery().get("or")).toContain("title.ilike.%sign%"))
         expect(lastQuery().get("is_template")).toBe("eq.false")
     })
 
@@ -130,12 +145,12 @@ describe("Quotes column filters", () => {
         await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(cancelled)"]))
         expect(lastQuery().get("offset")).toBe("0")
         expect(lastQuery().get("client_id")).toBe("eq.client-b")
-        expect(lastQuery().get("or")).toContain("title.ilike.%sign%")
+        await waitFor(() => expect(lastQuery().get("or")).toContain("title.ilike.%sign%"))
         await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument())
         expect(screen.queryByTitle("Delete quote")).not.toBeInTheDocument()
         fireEvent.click(screen.getByText("Shop signs"))
         expect(state.push).toHaveBeenCalledWith("/quoting/jobs/quote-1")
-        expect(state.requests.filter(url => !url.searchParams.get("select")?.startsWith("*")).at(-1)!.searchParams.get("status")).toBe("in.(cancelled)")
+        expect(state.requests.filter(url => !url.searchParams.get("select")?.includes("title")).at(-1)!.searchParams.get("status")).toBe("in.(cancelled)")
         await userEvent.click(screen.getByRole("tab", { name: "Active" }))
         await waitFor(() => expect(lastQuery().getAll("status")).toEqual(["in.(quote,quoted)"]))
     })

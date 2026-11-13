@@ -11,6 +11,7 @@ import {
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import type { Client, UserRole } from "@/types/database"
+import { useCurrentMember } from "@/lib/hooks/use-current-member"
 
 interface CustomerFilterState {
     /** The active client_id filter, or null for "All Customers". */
@@ -41,6 +42,7 @@ export function CustomerFilterProvider({
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const { data: member, isLoading: memberLoading } = useCurrentMember()
 
     const [clientId, setClientIdState] = useState<string | null>(null)
     const [customers, setCustomers] = useState<Client[]>([])
@@ -51,21 +53,17 @@ export function CustomerFilterProvider({
         role !== null && ADMIN_ROLES.includes(role)
 
     useEffect(() => {
+        if (memberLoading) return
+        let cancelled = false
         async function init() {
-            const {
-                data: { user },
-            } = await supabase.auth.getUser()
-
-            if (!user) {
+            if (!member?.user || !member.profile) {
+                setRole(null)
+                setCustomers([])
+                setClientIdState(null)
                 setInitialised(true)
                 return
             }
-
-            const { data: profile } = await supabase
-                .from("users")
-                .select("role, client_id, store_ids")
-                .eq("id", user.id)
-                .single()
+            const profile = member.profile
 
             const userRole =
                 (profile?.role ?? null) as UserRole | null
@@ -87,6 +85,8 @@ export function CustomerFilterProvider({
                     .from("clients")
                     .select("*")
                     .order("name")
+
+                if (cancelled) return
 
                 setCustomers((clientsData ?? []) as Client[])
 
@@ -120,11 +120,12 @@ export function CustomerFilterProvider({
             setInitialised(true)
         }
 
-        init()
+        void init().catch(() => { if (!cancelled) setInitialised(true) })
+        return () => { cancelled = true }
 
         // Initialise once for the signed-in session.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [member, memberLoading, supabase])
 
     const setClientId = useCallback(
         (id: string | null) => {
