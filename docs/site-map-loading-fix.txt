@@ -1,0 +1,37 @@
+Site map and portfolio loading fix (13 November 2026)
+
+Confirmed causes
+- Map requests return HTTP 300: the unqualified stores -> clients embed is
+  ambiguous after customer_site_links added a second relationship between them.
+  Select clients!stores_client_id_fkey for the billing customer explicitly.
+- Site portfolio requests timed out in Postgres while evaluating session-only
+  RLS helpers repeatedly. Its fallback also dropped the user's search/filter.
+- Browser auth-lock errors and a Vercel middleware timeout were observed too.
+  These observations do not establish a separate auth library root cause.
+
+Applied to the existing rpm-dev database
+- Migration 20261113000356_optimize_site_read_policy_checks caches the existing
+  role/client helpers per statement. No grants, policy roles, or permissiveness
+  were changed, and no SECURITY DEFINER function was introduced.
+- Compared full visible-row fingerprints for all nine existing users across
+  users, stores, clients, assets, jobs, site_photos, store_brands, client_brands:
+  72 user/table comparisons, zero differences (tested in a rolled-back transaction).
+- Representative authenticated site query: execution 609 ms before, 119 ms after.
+- Verified in the existing deployment: portfolio search for palmerston returns
+  three McDonald's sites, including brands, addresses and maintenance scores.
+
+Application changes (require deployment)
+- Load plain site/location records independently of optional relationships.
+- Explicit billing-customer FK; align customer field with Store.clients.
+- Fetch optional details in batches of 50 IDs to bound request URL length.
+- Search site/customer/brand/address/region, ignoring apostrophe differences.
+- Report query failures with retry instead of silently displaying zero sites.
+- Preserve search, customer, region, unverified and approximate filters when
+  portfolio related-data loading fails; surface fallback failure.
+
+Validation
+- 9 focused regression tests pass (map loading/retry/customer search, portfolio
+  fallback/search/errors, Google-map marker behavior).
+- Changed-file ESLint and production build pass.
+- Live map remains dependent on deploying the application change; database
+  optimization alone cannot repair the ambiguous relationship in its query.
