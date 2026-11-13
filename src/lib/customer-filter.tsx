@@ -81,15 +81,6 @@ export function CustomerFilterProvider({
 
             // Rodier admins / super admins can work across all customers.
             if (userRole && ADMIN_ROLES.includes(userRole)) {
-                const { data: clientsData } = await supabase
-                    .from("clients")
-                    .select("*")
-                    .order("name")
-
-                if (cancelled) return
-
-                setCustomers((clientsData ?? []) as Client[])
-
                 // If a customer is explicitly supplied in the URL,
                 // use it. Otherwise start admin users at All Customers.
                 const urlClient = searchParams.get("client")
@@ -114,6 +105,13 @@ export function CustomerFilterProvider({
                 }
 
                 setInitialised(true)
+                // The scope is known from the verified profile and URL. Do not
+                // hold page data behind loading the optional dropdown choices.
+                const { data: clientsData } = await supabase
+                    .from("clients")
+                    .select("*")
+                    .order("name")
+                if (!cancelled) setCustomers((clientsData ?? []) as Client[])
                 return
             }
 
