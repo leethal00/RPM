@@ -4,6 +4,8 @@ type DepartmentLine = {
   description?: string | null
 }
 
+const CNC_WORK = /\bcnc\b|router|routing|milling|lathe|\blaser[\s-]+cut(?:s|ters?|ting)?\b/
+
 export function inferDepartments(title: string, details: string, lines: DepartmentLine[]) {
   const result = new Set<string>()
 
@@ -13,7 +15,7 @@ export function inferDepartments(title: string, details: string, lines: Departme
     .join(" ")
     .toLowerCase()
 
-  if (/\bcnc\b|router|routing|milling|lathe/.test(sectionText)) result.add("CNC")
+  if (CNC_WORK.test(sectionText)) result.add("CNC")
   if (/metal|steel|aluminium|aluminum|weld|fabricat|bracket|shs|rhs/.test(sectionText)) result.add("Metal")
   if (/\bfab\b|fabrication|assembly|assemble|fold|press|guillotine/.test(sectionText)) result.add("Fab")
   if (/electrical|illumin|\bled\b|wiring|power|transformer/.test(sectionText)) result.add("Electrical")
@@ -31,7 +33,7 @@ export function inferDepartments(title: string, details: string, lines: Departme
     .replace(/not required[^.\n]*/g, "")
     .replace(/\bnon[-\s]?illuminat\w*\b|\bnot illuminated\b/g, "")
 
-  if (/\bcnc\b|router|routing|milling|lathe/.test(descriptiveText)) result.add("CNC")
+  if (CNC_WORK.test(descriptiveText)) result.add("CNC")
   if (/steel|aluminium|aluminum|weld|metal|bracket|shs|rhs/.test(descriptiveText)) result.add("Metal")
   if (/illumin|electrical|\bled\b|wiring|power|transformer/.test(descriptiveText)) result.add("Electrical")
   if (/vinyl|graphic|print|laminat/.test(descriptiveText)) result.add("Vinyl")
