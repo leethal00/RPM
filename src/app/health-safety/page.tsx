@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
-import { hasWorkDate, isWorkDateTbc } from "@/lib/hs-work-date"
+import { getPreparedDate, hasWorkDate, isWorkDateTbc, nzCalendarDate } from "@/lib/hs-work-date"
 import { IncidentRegister } from "@/components/health-safety/incident-register"
 import { ExpandingTextarea } from "@/components/health-safety/expanding-textarea"
 import { SwmsLivePreview } from "@/components/health-safety/swms-live-preview"
@@ -23,8 +23,8 @@ type Kind = "toolbox" | "swms"
 type WorkStep = { task: string; hazard: string; risk: string; control: string; responsible: string }
 type Body = { scope: string; hazards: string; controls: string; emergency: string; actions: string; notes: string;
   run_by: string; previous_actions: string; safety_topics: string; operations: string;
-  principal: string; client: string; responsible: string; duration: string; notification: string; permits: string; ppe: string; plant: string; signage: string; approvals: string; checks: string; qualifications: string; steps: WorkStep[]; date_tbc?: boolean }
-type TextField = Exclude<keyof Body, "steps" | "date_tbc">
+  principal: string; client: string; responsible: string; duration: string; notification: string; permits: string; ppe: string; plant: string; signage: string; approvals: string; checks: string; qualifications: string; steps: WorkStep[]; date_tbc?: boolean; prepared_date?: string }
+type TextField = Exclude<keyof Body, "steps" | "date_tbc" | "prepared_date">
 type Template = { id: string; kind: Kind; title: string; body: Body; version: number; active: boolean; updated_at: string }
 type RecordRow = { id: string; kind: Kind; title: string; status: "draft" | "completed"; job_id: string | null; job_reference: string | null; site: string | null; work_date: string; body: Body; template_id: string | null; template_version: number | null; revision_of: string | null; revision: number; completed_at: string | null; created_at: string }
 type Attendee = { id: string; record_id: string; name: string; user_id: string | null; signed_at: string | null }
@@ -36,11 +36,11 @@ type Job = { id: string; title: string; job_number: string | null; xero_invoice_
 type UserRow = { id: string; name: string | null; email: string | null; role: string }
 const blank: Body = { scope: "", hazards: "", controls: "", emergency: "", actions: "", notes: "", run_by: "", previous_actions: "", safety_topics: "", operations: "", principal: "", client: "", responsible: "", duration: "", notification: "", permits: "", ppe: "", plant: "", signage: "", approvals: "", checks: "", qualifications: "", steps: [] }
 function reusableBody(kind: Kind, source: Body): Body {
-  const body = { ...blank, ...source, steps: source.steps || [], date_tbc: false }
+  const body = { ...blank, ...source, steps: source.steps || [], date_tbc: false, prepared_date: undefined }
   if (kind === "swms") return { ...body, principal: "", client: "", responsible: "", duration: "", notification: "", permits: "", approvals: "", emergency: "", actions: "", notes: "" }
   return { ...body, run_by: "", previous_actions: "", actions: "", notes: "" }
 }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => nzCalendarDate()
 const niceDate = (date: string | null) => date ? new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString("en-NZ") : "—"
 
 export default function HealthSafetyPage() {
@@ -72,6 +72,7 @@ export default function HealthSafetyPage() {
   const [title, setTitle] = useState("")
   const [site, setSite] = useState("")
   const [date, setDate] = useState(today())
+  const [preparedDate, setPreparedDate] = useState(today)
   const [jobId, setJobId] = useState(jobFromUrl)
   const [body, setBody] = useState<Body>(blank)
   const [templateId, setTemplateId] = useState("")
@@ -156,12 +157,14 @@ export default function HealthSafetyPage() {
 
   function newRecord(newKind: Kind) {
     setSelected(null); setKind(newKind); setTitle(""); setSite(""); setDate(today()); setJobId(jobFromUrl)
+    setPreparedDate(today())
     setBody(blank); setTemplateId(""); setTemplateEditId(""); setPeople(""); setRevisionSource(null); setTab("form")
   }
   const openRecord = useCallback((row: RecordRow) => {
     setRevisionSource(null)
     setSelected(row.id); setKind(row.kind); setTitle(row.title); setSite(row.site || ""); setDate(row.work_date)
     setJobId(row.job_id || ""); setBody({ ...blank, ...row.body }); setTemplateId(row.template_id || "")
+    setPreparedDate(getPreparedDate(row) || today())
     setTemplateEditId("")
     setPeople(attendees.filter(a => a.record_id === row.id).map(a => a.name).join("\n")); setTab("form")
   }, [attendees])
@@ -187,11 +190,24 @@ export default function HealthSafetyPage() {
   function setStep(index: number, key: keyof WorkStep, value: string) {
     setBody(old => ({ ...old, steps: old.steps.map((step, i) => i === index ? { ...step, [key]: value } : step) }))
   }
+  function insertStep(index: number) {
+    setBody(old => ({ ...old, steps: [...old.steps.slice(0, index), { task: "", hazard: "", risk: "", control: "", responsible: "" }, ...old.steps.slice(index)] }))
+  }
+  function moveStep(index: number, direction: -1 | 1) {
+    setBody(old => {
+      const target = index + direction
+      if (target < 0 || target >= old.steps.length) return old
+      const steps = [...old.steps]
+      ;[steps[index], steps[target]] = [steps[target], steps[index]]
+      return { ...old, steps }
+    })
+  }
   async function saveRecord(complete = false) {
     if (!canManage || !title.trim()) return toast.error("Add a title")
     if (complete && kind === "swms" && !site.trim()) return toast.error("Enter the work site before completing the SWMS/TA")
     const dateTbc = kind === "swms" && body.date_tbc === true
     if (!hasWorkDate(date, dateTbc)) return toast.error("Enter a valid date or select TBC for the SWMS/TA")
+    if (kind === "swms" && !hasWorkDate(preparedDate, false)) return toast.error("Enter a valid prepared date")
     setBusy(true)
     try {
       const template = templates.find(t => t.id === templateId)
@@ -199,7 +215,7 @@ export default function HealthSafetyPage() {
       const values = { kind, title: title.trim(), site: site.trim() || null, work_date: dateTbc ? (hasWorkDate(date, false) ? date : today()) : date, job_id: jobId || null,
         job_reference: job ? `${job.job_number || ""} ${job.title}`.trim() : null,
         // work_date remains an internal sorting date when the job date is TBC.
-        body: { ...body, date_tbc: dateTbc }, template_id: templateId || null, template_version: template?.version || null }
+        body: { ...body, date_tbc: dateTbc, ...(kind === "swms" ? { prepared_date: preparedDate } : {}) }, template_id: templateId || null, template_version: template?.version || null }
       let id = selected
       if (current?.status === "completed") throw new Error("Create a revision to correct a completed record")
       if (id) {
@@ -322,7 +338,7 @@ export default function HealthSafetyPage() {
         <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center gap-2"><h2 className="mr-auto text-xl font-semibold">{current?.status === "completed" ? "Completed record" : selected ? "Edit draft" : "New record"}</h2>{current?.kind === "swms" && <Button variant="outline" asChild><Link href={"/health-safety/print?id=" + current.id} target="_blank" rel="noopener noreferrer">Print SWMS/TA</Link></Button>}{current?.status === "completed" && canManage && <><Button variant="outline" onClick={makeRevision}>Create correction revision</Button>{current.kind === "swms" && <Button variant="outline" onClick={() => void saveTemplate(current)}>Save as template</Button>}</>}</div>
         {current?.status === "completed" && <p className="rounded-md bg-muted p-3 text-sm">Locked on {new Date(current.completed_at!).toLocaleString("en-NZ")}. Corrections create a linked revision; this version stays in history.</p>}
-        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div><div className="space-y-1"><Label htmlFor="hs-date">Date</Label><div className="flex items-center gap-3"><Input id="hs-date" type="date" value={kind === "swms" && body.date_tbc ? "" : date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage || (kind === "swms" && body.date_tbc === true)}/>{kind === "swms" && <Label htmlFor="hs-date-tbc" className="flex shrink-0 items-center gap-2"><input id="hs-date-tbc" type="checkbox" checked={body.date_tbc === true} onChange={e => setBody({ ...body, date_tbc: e.target.checked })} disabled={current?.status === "completed" || !canManage}/>TBC</Label>}</div></div></div>
+        <div className={kind === "swms" ? "grid gap-4 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-2"}><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div>{kind === "swms" && <div className="space-y-1"><Label htmlFor="hs-prepared-date">Prepared date</Label><Input id="hs-prepared-date" type="date" value={preparedDate} onChange={e => setPreparedDate(e.target.value)} disabled={current?.status === "completed" || !canManage}/></div>}<div className="space-y-1"><Label htmlFor="hs-date">{kind === "swms" ? "Planned work date" : "Date"}</Label><div className="flex items-center gap-3"><Input id="hs-date" type="date" value={kind === "swms" && body.date_tbc ? "" : date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage || (kind === "swms" && body.date_tbc === true)}/>{kind === "swms" && <Label htmlFor="hs-date-tbc" className="flex shrink-0 items-center gap-2"><input id="hs-date-tbc" type="checkbox" checked={body.date_tbc === true} onChange={e => setBody({ ...body, date_tbc: e.target.checked })} disabled={current?.status === "completed" || !canManage}/>TBC</Label>}</div></div></div>
         <div className="space-y-1"><Label htmlFor="hs-title">Title</Label><Input id="hs-title" value={title} onChange={e => setTitle(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="e.g. Pylon sign installation" /></div>
         <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label htmlFor="hs-job">RPM job (if applicable)</Label><select id="hs-job" className="h-9 w-full rounded-md border bg-background px-2" value={jobId} onChange={e => setJobId(e.target.value)} disabled={current?.status === "completed" || !canManage}><option value="">No job linked</option>{jobs.map(j => <option key={j.id} value={j.id}>{[j.clients?.name || "No client", j.title, j.job_number && j.job_number !== j.xero_invoice_number ? `Job ${j.job_number}` : null, j.xero_invoice_number || "No invoice"].filter(Boolean).join(" · ")}</option>)}</select></div><div className="space-y-1"><Label htmlFor="hs-site">Work site {kind === "swms" && "(required to complete)"}</Label><Input id="hs-site" value={site} onChange={e => setSite(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="Site address or location" /></div></div>
         {kind === "toolbox" ? <>
@@ -340,8 +356,13 @@ export default function HealthSafetyPage() {
           <div className="grid gap-3 sm:grid-cols-2">{field("permits", "Work permits and approvals")}{field("ppe", "PPE required")}{field("plant", "Plant and equipment")}{field("signage", "Barriers and H&S signage")}{field("approvals", "Engineering certificates / approvals")}{field("checks", "Equipment and maintenance checks")}</div>
           {field("hazards", "Overall site hazards and risks")}{field("controls", "Overall controls")}
           <div className="space-y-3"><h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 2 · Safe work steps</h3>
-            {(body.steps || []).map((step, index) => <div key={index} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2"><div className="sm:col-span-2 font-medium">Step {index + 1}</div>{([['task','Procedure / job step'],['hazard','Potential hazards'],['risk','Risk level 1–5'],['control','Hazard controls'],['responsible','Person responsible']] as [keyof WorkStep, string][]).map(([key, label]) => <div key={key} className={`space-y-1 ${key !== "risk" && key !== "responsible" ? "sm:col-span-2" : ""}`}><Label htmlFor={`hs-step-${index}-${key}`}>{label}</Label>{key === "risk" ? <Input id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} /> : <ExpandingTextarea id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} />}</div>)}{canManage && current?.status !== "completed" && <Button size="sm" variant="ghost" className="text-destructive sm:col-span-2 sm:justify-self-end" onClick={() => setBody({ ...body, steps: body.steps.filter((_, i) => i !== index) })}>Remove step</Button>}</div>)}
-            {canManage && current?.status !== "completed" && <div className="flex justify-end"><Button size="sm" variant="outline" onClick={() => setBody({ ...body, steps: [...(body.steps || []), { task: "", hazard: "", risk: "", control: "", responsible: "" }] })}>Add step</Button></div>}
+            {(body.steps || []).map((step, index) => <div key={index} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2"><div className="flex flex-wrap items-center gap-2 sm:col-span-2"><span className="mr-auto font-medium">Step {index + 1}</span>{canManage && current?.status !== "completed" && <>
+              <Button type="button" size="sm" variant="outline" aria-label={`Insert step above step ${index + 1}`} onClick={() => insertStep(index)}>Insert step above</Button>
+              <Button type="button" size="sm" variant="outline" aria-label={`Insert step below step ${index + 1}`} onClick={() => insertStep(index + 1)}>Insert step below</Button>
+              <Button type="button" size="sm" variant="outline" aria-label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => moveStep(index, -1)}>Move up</Button>
+              <Button type="button" size="sm" variant="outline" aria-label={`Move step ${index + 1} down`} disabled={index === body.steps.length - 1} onClick={() => moveStep(index, 1)}>Move down</Button>
+            </>}</div>{([['task','Procedure / job step'],['hazard','Potential hazards'],['risk','Risk level 1–5'],['control','Hazard controls'],['responsible','Person responsible']] as [keyof WorkStep, string][]).map(([key, label]) => <div key={key} className={`space-y-1 ${key !== "risk" && key !== "responsible" ? "sm:col-span-2" : ""}`}><Label htmlFor={`hs-step-${index}-${key}`}>{label}</Label>{key === "risk" ? <Input id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} /> : <ExpandingTextarea id={`hs-step-${index}-${key}`} value={step[key]} onChange={e => setStep(index, key, e.target.value)} disabled={!canManage || current?.status === "completed"} />}</div>)}{canManage && current?.status !== "completed" && <Button size="sm" variant="ghost" className="text-destructive sm:col-span-2 sm:justify-self-end" onClick={() => setBody({ ...body, steps: body.steps.filter((_, i) => i !== index) })}>Remove step</Button>}</div>)}
+            {canManage && current?.status !== "completed" && <div className="flex justify-end"><Button size="sm" variant="outline" onClick={() => insertStep(body.steps.length)}>Add step</Button></div>}
           </div>
           <h3 className="rounded-md bg-muted px-3 py-2 font-semibold">Part 3 · Qualifications and team sign-off</h3>
           {field("qualifications", "Qualifications, training and duties required")}
@@ -355,7 +376,7 @@ export default function HealthSafetyPage() {
         {current?.revision_of && <button className="text-sm text-primary underline" onClick={() => { const prior = records.find(r => r.id === current.revision_of); if (prior) openRecord(prior) }}>View previous revision</button>}
         </div>
         {kind === "swms" && <SwmsLivePreview record={{
-          id: current?.id || "unsaved", title, status: current?.status || "draft", site, work_date: date, body,
+          id: current?.id || "unsaved", title, status: current?.status || "draft", site, work_date: date, body: { ...body, prepared_date: preparedDate },
           job_reference: previewJob ? `${previewJob.job_number || ""} ${previewJob.title}`.trim() : current?.job_id === jobId ? current.job_reference : null,
           revision: current?.revision || (revisionSource ? revisionSource.revision + 1 : 1),
           template_version: templates.find(template => template.id === templateId)?.version || current?.template_version || null,

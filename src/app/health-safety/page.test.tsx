@@ -32,6 +32,53 @@ async function startDraft() {
 }
 
 describe("SWMS TBC workflow", () => {
+  it("inserts and moves complete steps without losing their fields, and saves their new order", async () => {
+    await startDraft()
+    const first = { task: "Set up", hazard: "Vehicles", risk: "2", control: "Barrier", responsible: "Lead" }
+    const second = { task: "Lift", hazard: "Load", risk: "3", control: "Lift plan", responsible: "Operator" }
+    const fields = ["Procedure / job step", "Potential hazards", "Risk level 1–5", "Hazard controls", "Person responsible"]
+    for (const [index, step] of [first, second].entries()) {
+      fireEvent.click(screen.getByRole("button", { name: "Add step" }))
+      fields.forEach((label, field) => fireEvent.change(screen.getAllByLabelText(label)[index], { target: { value: Object.values(step)[field] } }))
+    }
+    expect(screen.getByRole("button", { name: "Move step 1 up" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Move step 2 down" })).toBeDisabled()
+    fireEvent.click(screen.getByRole("button", { name: "Insert step above step 1" }))
+    fireEvent.change(screen.getAllByLabelText("Procedure / job step")[0], { target: { value: "Briefing" } })
+    fireEvent.click(screen.getByRole("button", { name: "Insert step below step 2" }))
+    fireEvent.change(screen.getAllByLabelText("Procedure / job step")[2], { target: { value: "Inspection" } })
+    fireEvent.click(screen.getByRole("button", { name: "Move step 4 up" }))
+    fireEvent.click(screen.getByRole("button", { name: "Move step 1 down" }))
+    expect(screen.getAllByLabelText("Procedure / job step").map(input => (input as HTMLTextAreaElement).value)).toEqual(["Set up", "Briefing", "Lift", "Inspection"])
+    const frame = screen.getByTitle("SWMS/TA document preview") as HTMLIFrameElement
+    fireEvent.load(frame)
+    expect(within(frame.contentDocument!.body).getAllByRole("row").slice(1, 5).map(row => within(row).getAllByRole("cell")[0].textContent)).toEqual(["Set up", "Briefing", "Lift", "Inspection"])
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+    await waitFor(() => expect(state.writes).toHaveLength(1))
+    expect(state.writes[0].body).toMatchObject({ steps: [first, { task: "Briefing" }, second, { task: "Inspection" }] })
+  })
+
+  it("keeps preparation and planned dates separate when saving and reopening a draft", async () => {
+    state.records = [{ id: "record", kind: "swms", title: "Dated installation", status: "draft", work_date: "2026-12-02", created_at: "2026-11-24T23:00:00Z", body: {}, revision: 1 }]
+    render(<HealthSafetyPage />)
+    fireEvent.click(await screen.findByRole("button", { name: /Dated installation.*SWMS\/TA/ }))
+    expect(screen.getByLabelText("Prepared date")).toHaveValue("2026-11-25")
+    expect(screen.getByLabelText("Planned work date")).toHaveValue("2026-12-02")
+    fireEvent.change(screen.getByLabelText("Prepared date"), { target: { value: "2026-11-23" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+    await waitFor(() => expect(state.writes).toHaveLength(1))
+    expect(state.writes[0]).toMatchObject({ work_date: "2026-12-02", body: { prepared_date: "2026-11-23" } })
+  })
+
+  it("requires a prepared date even when the planned work date is TBC", async () => {
+    await startDraft()
+    fireEvent.click(screen.getByLabelText("TBC"))
+    fireEvent.change(screen.getByLabelText("Prepared date"), { target: { value: "" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+    expect(state.writes).toHaveLength(0)
+    expect(screen.getByLabelText("Prepared date")).not.toBeDisabled()
+  })
+
   it("opens a linked draft directly and does not reset unsaved edits after a refresh", async () => {
     state.params = "job=job-1&record=record"
     state.records = [{ id: "record", kind: "swms", title: "Linked installation", job_id: "job-1", site: "Wanaka", status: "draft", work_date: "2026-11-02", body: { controls: "Existing controls" }, revision: 1 }]
@@ -90,6 +137,8 @@ describe("SWMS TBC workflow", () => {
     expect(screen.getByLabelText("Potential hazards")).toBeDisabled()
     expect(screen.getByLabelText("Hazard controls")).toHaveValue("Existing long control")
     expect(screen.getByLabelText("Hazard controls")).toBeDisabled()
+    expect(screen.getByLabelText("Prepared date")).toBeDisabled()
+    expect(screen.queryByRole("button", { name: /Insert step|Move step/ })).not.toBeInTheDocument()
     const frame = screen.getByTitle("SWMS/TA document preview") as HTMLIFrameElement
     fireEvent.load(frame)
     expect(within(frame.contentDocument!.body).getByRole("cell", { name: "Existing long control" })).toBeInTheDocument()
@@ -103,9 +152,9 @@ describe("SWMS TBC workflow", () => {
   })
   it("saves an undated draft with TBC and a valid internal sorting date", async () => {
     await startDraft()
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "" } })
+    fireEvent.change(screen.getByLabelText("Planned work date"), { target: { value: "" } })
     fireEvent.click(screen.getByLabelText("TBC"))
-    expect(screen.getByLabelText("Date")).toBeDisabled()
+    expect(screen.getByLabelText("Planned work date")).toBeDisabled()
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
     await waitFor(() => expect(state.writes).toHaveLength(1))
     expect(state.writes[0].body).toMatchObject({ date_tbc: true })
@@ -113,7 +162,7 @@ describe("SWMS TBC workflow", () => {
   })
   it("rejects an empty date when TBC is unchecked", async () => {
     await startDraft()
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "" } })
+    fireEvent.change(screen.getByLabelText("Planned work date"), { target: { value: "" } })
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
     expect(state.writes).toHaveLength(0)
   })
@@ -136,7 +185,7 @@ describe("SWMS TBC workflow", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Survey.*SWMS\/TA/ }))
     expect(screen.getByLabelText("TBC")).toBeChecked()
     fireEvent.click(screen.getByLabelText("TBC"))
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-12" } })
+    fireEvent.change(screen.getByLabelText("Planned work date"), { target: { value: "2026-10-12" } })
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
     await waitFor(() => expect(state.writes).toHaveLength(1))
     expect(state.writes[0].work_date).toBe("2026-10-12")

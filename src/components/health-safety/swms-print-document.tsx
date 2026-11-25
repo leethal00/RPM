@@ -1,12 +1,12 @@
 import Image from "next/image"
-import { isWorkDateTbc } from "@/lib/hs-work-date"
+import { getPreparedDate, isWorkDateTbc } from "@/lib/hs-work-date"
 
 type WorkStep = { task?: string; hazard?: string; risk?: string; control?: string; responsible?: string }
 type Body = {
   scope?: string; hazards?: string; controls?: string; emergency?: string; actions?: string; notes?: string
   principal?: string; client?: string; responsible?: string; duration?: string; notification?: string
   permits?: string; ppe?: string; plant?: string; signage?: string; approvals?: string
-  checks?: string; qualifications?: string; steps?: WorkStep[]; date_tbc?: boolean
+  checks?: string; qualifications?: string; steps?: WorkStep[]; date_tbc?: boolean; prepared_date?: string
 }
 export type RecordRow = {
   id: string; title: string; status: "draft" | "completed"; job_reference: string | null
@@ -158,13 +158,14 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
           <div className="print-kicker">Health &amp; Safety · SWMS / Task Analysis</div>
           <h1>{record.title}</h1>
           <div className="print-meta"><span className={"print-status " + record.status}>{record.status}</span> &nbsp; Revision {record.revision} {record.template_version ? "· Template version " + record.template_version : ""} · Created {nzDate(record.created_at, true)} {record.completed_at ? "· Completed " + nzDate(record.completed_at, true) : ""}</div>
-          <div className="print-meta">Project number: {projectReference || "\u2014"} &middot; Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div>
+          <div className="print-meta">Project number: {projectReference || "\u2014"} &middot; Prepared date: {nzDate(getPreparedDate(record))} · Planned work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div>
           </div>
         </header>
         <p className="print-copy"><strong>Live document:</strong> This SWMS is a live document and is subject to change on site.</p>
         <h2 className="print-part">Part 1 · Company and job details</h2>
         <div className="print-grid">
-          <Field label="Work date" value={isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)} />
+          <Field label="Prepared date" value={nzDate(getPreparedDate(record))} />
+          <Field label="Planned work date" value={isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)} />
           <Field label="Project number" value={projectReference} />
           <Field label="Site / location" value={record.site} />
           <Field label="Principal contractor" value={body.principal} />
@@ -220,7 +221,7 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
           </div>
         </section>
         <section className="print-on-site" aria-label="Additional on-site work steps">
-          <header className="print-head"><Image src="/rodier-logo.png" alt="Rodier logo" width={96} height={96} loading="eager" unoptimized className="print-logo" /><div className="print-heading"><div className="print-kicker">SWMS / Task Analysis · Additional on-site steps</div><h1>{record.title}</h1><div className="print-meta">Project number: {projectReference || "\u2014"} · Revision {record.revision} · Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div></div></header>
+          <header className="print-head"><Image src="/rodier-logo.png" alt="Rodier logo" width={96} height={96} loading="eager" unoptimized className="print-logo" /><div className="print-heading"><div className="print-kicker">SWMS / Task Analysis · Additional on-site steps</div><h1>{record.title}</h1><div className="print-meta">Project number: {projectReference || "\u2014"} · Revision {record.revision} · Prepared date: {nzDate(getPreparedDate(record))} · Planned work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div></div></header>
           <h2 className="print-part">Part 2 · Additional steps — fill out on site as required</h2>
           <p className="print-copy">Site: {record.site || "________________"} · Date of additions: ________________ · Reviewed / briefed by: ________________________</p>
           <table className="print-table print-steps"><StepColumns /><StepHead /><tbody>{Array.from({ length: 7 }, (_, index) => <tr className="print-blank-row" key={index}>{Array.from({ length: 5 }, (_, column) => <td key={column}>&nbsp;</td>)}</tr>)}</tbody></table>

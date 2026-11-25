@@ -1,20 +1,21 @@
 import { render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { SwmsPrintDocument, type RecordRow } from "./swms-print-document"
-import { hasWorkDate, isWorkDateTbc } from "@/lib/hs-work-date"
+import { getPreparedDate, hasWorkDate, isWorkDateTbc, nzCalendarDate } from "@/lib/hs-work-date"
 
 const record: RecordRow = {
   id: "test", title: "External signage survey", status: "draft", job_reference: "INV-7606 EVENT Cinemas Albany",
   site: "Albany", work_date: "2026-10-04", revision: 1, template_version: null, completed_at: null,
-  created_at: "2026-10-04T18:00:00Z", body: { date_tbc: true, scope: "Survey wall signs",
+  created_at: "2026-10-04T18:00:00Z", body: { prepared_date: "2026-10-03", date_tbc: true, scope: "Survey wall signs",
     steps: [{ task: "Pre-start checks", hazard: "Boom truck faults", risk: "3", control: "Check current certification", responsible: "Boom truck operator" }] },
 }
 
 describe("SWMS print document", () => {
   it("shows TBC on both pages and preserves the recorded steps", () => {
-    const { container } = render(<SwmsPrintDocument record={record} attendees={[]} attachments={[]} />)
-    expect(container.querySelector('.print-field .print-value')).toHaveTextContent("TBC")
-    expect(screen.getAllByText(/Work date: TBC/)).toHaveLength(2)
+    render(<SwmsPrintDocument record={record} attendees={[]} attachments={[]} />)
+    expect(within(screen.getByText("Prepared date").closest(".print-field") as HTMLElement).getByText("3 Oct 2026")).toBeInTheDocument()
+    expect(within(screen.getByText("Planned work date").closest(".print-field") as HTMLElement).getByText("TBC")).toBeInTheDocument()
+    expect(screen.getAllByText(/Planned work date: TBC/)).toHaveLength(2)
     expect(screen.getByText("Boom truck operator")).toBeInTheDocument()
     expect(screen.getAllByAltText("Rodier logo")).toHaveLength(2)
   })
@@ -32,8 +33,8 @@ describe("SWMS print document", () => {
     expect(screen.queryByText("RPM job")).not.toBeInTheDocument()
   })
   it("keeps existing dated records displaying their work date", () => {
-    const { container } = render(<SwmsPrintDocument record={{ ...record, body: { ...record.body, date_tbc: false } }} attendees={[]} attachments={[]} />)
-    expect(container.querySelector('.print-field .print-value')).toHaveTextContent("4 Oct 2026")
+    render(<SwmsPrintDocument record={{ ...record, body: { ...record.body, date_tbc: false } }} attendees={[]} attachments={[]} />)
+    expect(within(screen.getByText("Planned work date").closest(".print-field") as HTMLElement).getByText("4 Oct 2026")).toBeInTheDocument()
   })
   it("matches the template risk matrix and includes all five action levels", () => {
     render(<SwmsPrintDocument record={record} attendees={[]} attachments={[]} />)
@@ -55,6 +56,12 @@ describe("SWMS print document", () => {
 })
 
 describe("work date validation", () => {
+  it("uses an explicit prepared date or the original creation date in New Zealand", () => {
+    expect(getPreparedDate(record)).toBe("2026-10-03")
+    expect(getPreparedDate({ created_at: "2026-11-24T23:30:00Z" })).toBe("2026-11-25")
+    expect(getPreparedDate({})).toBe("")
+    expect(nzCalendarDate("2026-06-01T11:30:00Z")).toBe("2026-06-01")
+  })
   it("allows unknown dates for SWMS while preserving normal date validation", () => {
     expect(hasWorkDate("", true)).toBe(true)
     expect(hasWorkDate("", false)).toBe(false)
