@@ -64,7 +64,7 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
   const steps = (body.steps || []).filter(step => Object.values(step).some(value => value?.trim()))
   return <main className="print-root">
     <style>{`
-      @page { size: A4 landscape; margin: 44mm 12mm 12mm; }
+      @page { size: A4 landscape; margin: 12mm; }
       .print-root { min-height: 100vh; background: #f1f4f7; color: #172b46; font-family: var(--font-geist-sans), Arial, sans-serif; line-height: 1.4; -webkit-font-smoothing: antialiased; }
       .print-actions { max-width: 1120px; margin: 0 auto; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
       .print-actions a { color: #225a91; text-decoration: underline; }
@@ -130,9 +130,9 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
         .print-sheet { max-width: none; margin: 0; padding: 0; box-shadow: none; }
         .print-head { padding-bottom: 12px; margin-bottom: 14px; }
         .print-head h1 { font-size: 22px; margin: 4px 0 6px; }
-        /* Fixed print elements repeat on every page. Reserve the top page margin
-           for the header so continuation tables never overlap it. */
-        .print-document-head { position: fixed; top: -32mm; left: 0; right: 0; margin: 0; background: white; }
+        /* Keep the logo and title in the page flow. Negative fixed offsets can
+           move the header to the foot of the page in Chromium print output. */
+        .print-document-head { position: static; }
         .print-grid { gap: 6px 16px; margin: 8px 0 10px; }
         .print-field { padding: 4px 8px; }
         .print-section .print-copy { padding: 5px 8px; }
@@ -146,7 +146,6 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
         .print-part-page { break-before: page; }
         .print-risk-section { break-inside: avoid; }
         .print-on-site { break-before: page; break-inside: avoid; margin-top: 0; border-top: 0; padding-top: 0; }
-        .print-on-site .print-head { display: none; }
         .print-on-site .print-part { margin-top: 12px; }
         .print-on-site .print-steps tbody tr td { background: white; }
       }
@@ -162,6 +161,7 @@ export function SwmsPrintDocument({ record, attendees, attachments }: { record: 
           <div className="print-meta">Project number: {projectReference || "\u2014"} &middot; Work date: {isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)}</div>
           </div>
         </header>
+        <p className="print-copy"><strong>Live document:</strong> This SWMS is a live document and is subject to change on site.</p>
         <h2 className="print-part">Part 1 · Company and job details</h2>
         <div className="print-grid">
           <Field label="Work date" value={isWorkDateTbc(record) ? "TBC" : nzDate(record.work_date)} />
