@@ -32,7 +32,7 @@ type Attachment = { id: string; record_id: string; file_name: string; storage_pa
 type Training = { id: string; staff_name: string; user_id: string | null; training: string; competency: string | null; reference: string | null; completed_on: string | null; expires_on: string | null; notes: string | null; evidence_path: string | null }
 type Policy = { id: string; title: string; version: string; effective_on: string | null; review_due_on: string | null; file_name: string; storage_path: string; created_at: string }
 type Audit = { id: number; entity: string; entity_id: string; action: string; at: string; snapshot: { version?: number; title?: string } }
-type Job = { id: string; title: string; job_number: string | null; store_id: string | null }
+type Job = { id: string; title: string; job_number: string | null; xero_invoice_number: string | null; store_id: string | null; clients: { name: string } | null }
 type UserRow = { id: string; name: string | null; email: string | null; role: string }
 const blank: Body = { scope: "", hazards: "", controls: "", emergency: "", actions: "", notes: "", run_by: "", previous_actions: "", safety_topics: "", operations: "", principal: "", client: "", responsible: "", duration: "", notification: "", permits: "", ppe: "", plant: "", signage: "", approvals: "", checks: "", qualifications: "", steps: [] }
 function reusableBody(kind: Kind, source: Body): Body {
@@ -105,7 +105,7 @@ export default function HealthSafetyPage() {
       db.from("hs_attachments").select("*").order("created_at"),
       db.from("hs_training").select("*").order("staff_name"),
       db.from("hs_policies").select("*").order("created_at", { ascending: false }),
-      db.from("costing_jobs").select("id,title,job_number,store_id").eq("is_template", false).order("created_at", { ascending: false }).limit(500),
+      db.from("costing_jobs").select("id,title,job_number,xero_invoice_number,store_id,clients(name)").eq("is_template", false).order("created_at", { ascending: false }).limit(500),
       db.from("users").select("id,name,email,role").order("name"),
       db.from("hs_audit").select("id,entity,entity_id,action,at,snapshot").eq("entity", "hs_templates").order("at", { ascending: false }),
     ])
@@ -118,7 +118,7 @@ export default function HealthSafetyPage() {
     setAttachments((results[3].data || []) as Attachment[])
     setTraining((results[4].data || []) as Training[])
     setPolicies((results[5].data || []) as Policy[])
-    setJobs((results[6].data || []) as Job[])
+    setJobs((results[6].data || []) as unknown as Job[])
     setUsers((results[7].data || []) as UserRow[])
     setAudit((results[8].data || []) as Audit[])
   }, [db])
@@ -324,7 +324,7 @@ export default function HealthSafetyPage() {
         {current?.status === "completed" && <p className="rounded-md bg-muted p-3 text-sm">Locked on {new Date(current.completed_at!).toLocaleString("en-NZ")}. Corrections create a linked revision; this version stays in history.</p>}
         <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label>Type</Label><select className="h-9 w-full rounded-md border bg-background px-2" value={kind} onChange={e => setKind(e.target.value as Kind)} disabled={!!current || !canManage}><option value="swms">SWMS / Task Analysis</option><option value="toolbox">Toolbox meeting</option></select></div><div className="space-y-1"><Label htmlFor="hs-date">Date</Label><div className="flex items-center gap-3"><Input id="hs-date" type="date" value={kind === "swms" && body.date_tbc ? "" : date} onChange={e => setDate(e.target.value)} disabled={current?.status === "completed" || !canManage || (kind === "swms" && body.date_tbc === true)}/>{kind === "swms" && <Label htmlFor="hs-date-tbc" className="flex shrink-0 items-center gap-2"><input id="hs-date-tbc" type="checkbox" checked={body.date_tbc === true} onChange={e => setBody({ ...body, date_tbc: e.target.checked })} disabled={current?.status === "completed" || !canManage}/>TBC</Label>}</div></div></div>
         <div className="space-y-1"><Label htmlFor="hs-title">Title</Label><Input id="hs-title" value={title} onChange={e => setTitle(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="e.g. Pylon sign installation" /></div>
-        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label htmlFor="hs-job">RPM job (if applicable)</Label><select id="hs-job" className="h-9 w-full rounded-md border bg-background px-2" value={jobId} onChange={e => setJobId(e.target.value)} disabled={current?.status === "completed" || !canManage}><option value="">No job linked</option>{jobs.map(j => <option key={j.id} value={j.id}>{j.job_number ? `${j.job_number} · ` : ""}{j.title}</option>)}</select></div><div className="space-y-1"><Label htmlFor="hs-site">Work site {kind === "swms" && "(required to complete)"}</Label><Input id="hs-site" value={site} onChange={e => setSite(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="Site address or location" /></div></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1"><Label htmlFor="hs-job">RPM job (if applicable)</Label><select id="hs-job" className="h-9 w-full rounded-md border bg-background px-2" value={jobId} onChange={e => setJobId(e.target.value)} disabled={current?.status === "completed" || !canManage}><option value="">No job linked</option>{jobs.map(j => <option key={j.id} value={j.id}>{[j.clients?.name || "No client", j.title, j.job_number && j.job_number !== j.xero_invoice_number ? `Job ${j.job_number}` : null, j.xero_invoice_number || "No invoice"].filter(Boolean).join(" · ")}</option>)}</select></div><div className="space-y-1"><Label htmlFor="hs-site">Work site {kind === "swms" && "(required to complete)"}</Label><Input id="hs-site" value={site} onChange={e => setSite(e.target.value)} disabled={current?.status === "completed" || !canManage} placeholder="Site address or location" /></div></div>
         {kind === "toolbox" ? <>
           {field("run_by", "Meeting run by")}{field("previous_actions", "Previous meeting updates and follow-ups")}
           {field("safety_topics", "Health and safety topics, incidents and safe practices")}
